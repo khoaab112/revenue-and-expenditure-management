@@ -33,6 +33,7 @@ fun DashboardScreen(
     onNavigateToWallets: () -> Unit,
     onNavigateToHistory: () -> Unit,
     onNavigateToStats: () -> Unit,
+    onNavigateToBudget: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val wallets by viewModel.allWallets.collectAsState()
@@ -276,6 +277,57 @@ fun DashboardScreen(
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = "View details",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // --- Budget Goals Shortcut ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onNavigateToBudget() }
+                .testTag("dashboard_budget_shortcut_card"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Savings,
+                        contentDescription = "Budget",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Hạn mức chi tiêu",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Đặt giới hạn chi tiêu và theo dõi mức chi dùng hàng tháng.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Detail",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
