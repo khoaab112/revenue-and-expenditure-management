@@ -1,0 +1,6 @@
+{
+  "name": "Quản Lý Tài Chính",
+  "description": "Ứng dụng quản lý tài chính cá nhân hiện đại sử dụng Kotlin, Jetpack Compose và Room Database.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
