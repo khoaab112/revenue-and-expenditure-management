@@ -4,7 +4,8 @@ data class FinanceCategory(
     val name: String,
     val iconName: String,
     val colorHex: String,
-    val type: String // INCOME, EXPENSE, BOTH
+    val type: String, // INCOME, EXPENSE, BOTH
+    val parentName: String? = null // For subcategories
 )
 
 object Categories {

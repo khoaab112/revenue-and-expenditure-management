@@ -5,6 +5,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -50,12 +51,31 @@ fun HistoryScreen(
     modifier: Modifier = Modifier
 ) {
     val filteredTransactions by viewModel.filteredTransactions.collectAsState()
+    val dailyTransactions by viewModel.dailyTransactions.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedTypeFilter by viewModel.selectedTypeFilter.collectAsState()
     val selectedCategoryFilter by viewModel.selectedCategoryFilter.collectAsState()
     val categoriesList by viewModel.categoriesList.collectAsState()
     val walletsList by viewModel.allWallets.collectAsState()
     var editingTransaction by remember { mutableStateOf<Transaction?>(null) }
+
+    // --- DISPLAY MODE STATES ---
+    var displayMode by remember { mutableStateOf("LIST") } // LIST, CALENDAR
+    var selectedCalendarDay by remember { 
+        mutableStateOf<CalendarDay?>(
+            Calendar.getInstance().let {
+                CalendarDay(
+                    year = it.get(Calendar.YEAR),
+                    month = it.get(Calendar.MONTH),
+                    dayOfMonth = it.get(Calendar.DAY_OF_MONTH),
+                    isCurrentMonth = true
+                )
+            }
+        ) 
+    }
+    var showDayDetailDialog by remember { mutableStateOf<CalendarDay?>(null) }
+    var showQuickActionMenuByDay by remember { mutableStateOf<CalendarDay?>(null) }
+    var showQuickAddDialogByDay by remember { mutableStateOf<CalendarDay?>(null) }
 
     var showFilterSheet by remember { mutableStateOf(false) }
 
@@ -67,6 +87,14 @@ fun HistoryScreen(
     var selectedCustomYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
     var selectedRangeStart by remember { mutableStateOf<Calendar?>(null) }
     var selectedRangeEnd by remember { mutableStateOf<Calendar?>(null) }
+
+    LaunchedEffect(displayMode) {
+        if (displayMode == "CALENDAR") {
+            if (activeTimeFilterMode != "MONTH") {
+                activeTimeFilterMode = "MONTH"
+            }
+        }
+    }
 
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -439,6 +467,14 @@ fun HistoryScreen(
         filteredTransactions.groupBy { FormatHelper.formatDate(it.timestamp) }
     }
 
+    // Grouping transactions by calendar date key for instant calendar day lookup
+    val transactionsByDayKey = remember(filteredTransactions) {
+        filteredTransactions.groupBy { tx ->
+            val cal = Calendar.getInstance().apply { timeInMillis = tx.timestamp }
+            "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH)}-${cal.get(Calendar.DAY_OF_MONTH)}"
+        }
+    }
+
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
 
     Column(
@@ -447,345 +483,437 @@ fun HistoryScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Search Input Bar
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { viewModel.setSearchQuery(it) },
-            placeholder = { Text("Tìm kiếm ghi chú, danh mục, ví...") },
-            leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search Log") },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Clear")
-                    }
-                }
-            },
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth().testTag("history_search_input"),
-            singleLine = true
-        )
-
-        // Type Filter Pills
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            listOf(
-                "ALL" to "Tất cả",
-                "EXPENSE" to "Khoản Chi",
-                "INCOME" to "Khoản Thu"
-            ).forEach { (typeVal, name) ->
-                val isSelected = selectedTypeFilter == typeVal
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { viewModel.setTypeFilter(typeVal) },
-                    label = { Text(name, fontSize = 12.sp) },
-                    modifier = Modifier.testTag("filter_type_$typeVal")
-                )
-            }
-        }
-
-        // Time Filters Row (Gọn hơn, scrollable)
+        // Mode Switcher (Danh sách / Lịch)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            val isAll = activeTimeFilterMode == "ALL"
-            FilterChip(
-                selected = isAll,
-                onClick = { activeTimeFilterMode = "ALL" },
-                label = { Text("Mọi lúc", fontSize = 12.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.DateRange,
-                        contentDescription = "All time",
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.testTag("time_filter_ALL")
-            )
-
-            val isWeek = activeTimeFilterMode == "WEEK"
-            FilterChip(
-                selected = isWeek,
-                onClick = { activeTimeFilterMode = "WEEK" },
-                label = { Text("1 Tuần", fontSize = 12.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.DateRange,
-                        contentDescription = "Last week",
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.testTag("time_filter_WEEK")
-            )
-
-            val isDay = activeTimeFilterMode == "DAY"
-            val dayLabel = if (selectedCustomDate != null) {
-                SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(selectedCustomDate!!.time)
-            } else {
-                "Theo ngày"
-            }
-            FilterChip(
-                selected = isDay,
-                onClick = { showDatePicker() },
-                label = { Text(dayLabel, fontSize = 12.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.CalendarMonth,
-                        contentDescription = "Specific day",
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.testTag("time_filter_DAY")
-            )
-
-            val isMonth = activeTimeFilterMode == "MONTH"
-            val monthLabel = "Thg ${selectedCustomMonth + 1}/$selectedCustomMonthYear"
-            FilterChip(
-                selected = isMonth,
-                onClick = { showMonthDialog = true },
-                label = { Text(if (isMonth) monthLabel else "Theo tháng", fontSize = 12.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.CalendarMonth,
-                        contentDescription = "Specific month",
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.testTag("time_filter_MONTH")
-            )
-
-            val isYear = activeTimeFilterMode == "YEAR"
-            val yearLabel = "Năm $selectedCustomYear"
-            FilterChip(
-                selected = isYear,
-                onClick = { showYearDialog = true },
-                label = { Text(if (isYear) yearLabel else "Theo năm", fontSize = 12.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.CalendarMonth,
-                        contentDescription = "Specific year",
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.testTag("time_filter_YEAR")
-            )
-
-            val isRange = activeTimeFilterMode == "RANGE"
-            val rangeLabel = if (selectedRangeStart != null && selectedRangeEnd != null) {
-                val startStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeStart!!.time)
-                val endStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeEnd!!.time)
-                "$startStr - $endStr"
-            } else {
-                "Khoảng ngày"
-            }
-            FilterChip(
-                selected = isRange,
-                onClick = { showRangeDialog = true },
-                label = { Text(rangeLabel, fontSize = 12.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.DateRange,
-                        contentDescription = "Date range",
-                        modifier = Modifier.size(14.dp)
-                    )
-                },
-                modifier = Modifier.testTag("time_filter_RANGE")
-            )
-        }
-
-        // Hàng mọi danh mục & Dropdown Selector (Chỉ cần 1 nút 'Mọi danh mục' và 1 nút 'Select' gọn gàng)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val isAllCategory = selectedCategoryFilter == "ALL"
-            FilterChip(
-                selected = isAllCategory,
-                onClick = { viewModel.setCategoryFilter("ALL") },
-                label = { Text("Mọi danh mục", fontSize = 12.sp) },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("filter_category_ALL")
-            )
-
-            Box(
-                modifier = Modifier.weight(1.2f)
-            ) {
-                val selectedCatObj = categoriesList.find { it.name == selectedCategoryFilter }
-                FilterChip(
-                    selected = !isAllCategory,
-                    onClick = { categoryDropdownExpanded = true },
-                    label = {
-                        Text(
-                            text = if (isAllCategory) "Chọn danh mục..." else selectedCategoryFilter,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = "Select Category key",
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    leadingIcon = selectedCatObj?.let { cat ->
-                        {
-                            Icon(
-                                imageVector = IconMapper.getIconByName(cat.iconName),
-                                contentDescription = cat.name,
-                                tint = if (!isAllCategory) Color.Unspecified else FormatHelper.parseColor(cat.colorHex),
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    },
+            listOf("LIST" to "Danh sách", "CALENDAR" to "Lịch").forEach { (mode, label) ->
+                val isSelected = displayMode == mode
+                val bgColors = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                val textColors = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("filter_category_select_selector")
-                )
-
-                DropdownMenu(
-                    expanded = categoryDropdownExpanded,
-                    onDismissRequest = { categoryDropdownExpanded = false },
-                    modifier = Modifier.fillMaxWidth(0.55f)
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(bgColors)
+                        .clickable { displayMode = mode }
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    categoriesList.forEach { cat ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = IconMapper.getIconByName(cat.iconName),
-                                        contentDescription = cat.name,
-                                        tint = FormatHelper.parseColor(cat.colorHex),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(cat.name, fontSize = 13.sp)
-                                }
-                            },
-                            onClick = {
-                                viewModel.setCategoryFilter(cat.name)
-                                categoryDropdownExpanded = false
-                            }
-                        )
-                    }
+                    Icon(
+                        imageVector = if (mode == "LIST") Icons.Default.List else Icons.Default.CalendarToday,
+                        contentDescription = label,
+                        tint = textColors,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = label,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textColors
+                    )
                 }
             }
         }
 
-        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (displayMode == "LIST") {
+            // Search Input Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.setSearchQuery(it) },
+                placeholder = { Text("Tìm kiếm ghi chú, danh mục, ví...") },
+                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search Log") },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Clear")
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().testTag("history_search_input"),
+                singleLine = true
+            )
+    
+            // Type Filter Pills
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    "ALL" to "Tất cả",
+                    "EXPENSE" to "Khoản Chi",
+                    "INCOME" to "Khoản Thu"
+                ).forEach { (typeVal, name) ->
+                    val isSelected = selectedTypeFilter == typeVal
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setTypeFilter(typeVal) },
+                        label = { Text(name, fontSize = 12.sp) },
+                        modifier = Modifier.testTag("filter_type_$typeVal")
+                    )
+                }
+            }
+    
+            // Hàng mọi danh mục & Dropdown Selector (Chỉ cần 1 nút 'Mọi danh mục' và 1 nút 'Select' gọn gàng)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val isAllCategory = selectedCategoryFilter == "ALL"
+                FilterChip(
+                    selected = isAllCategory,
+                    onClick = { viewModel.setCategoryFilter("ALL") },
+                    label = { Text("Mọi danh mục", fontSize = 12.sp) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("filter_category_ALL")
+                )
+    
+                Box(
+                    modifier = Modifier.weight(1.2f)
+                ) {
+                    val selectedCatObj = categoriesList.find { it.name == selectedCategoryFilter }
+                    FilterChip(
+                        selected = !isAllCategory,
+                        onClick = { categoryDropdownExpanded = true },
+                        label = {
+                            Text(
+                                text = if (isAllCategory) "Chọn danh mục..." else selectedCategoryFilter,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Select Category key",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        leadingIcon = selectedCatObj?.let { cat ->
+                            {
+                                Icon(
+                                    imageVector = IconMapper.getIconByName(cat.iconName),
+                                    contentDescription = cat.name,
+                                    tint = if (!isAllCategory) Color.Unspecified else FormatHelper.parseColor(cat.colorHex),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("filter_category_select_selector")
+                    )
+    
+                    DropdownMenu(
+                        expanded = categoryDropdownExpanded,
+                        onDismissRequest = { categoryDropdownExpanded = false },
+                        modifier = Modifier.fillMaxWidth(0.55f)
+                    ) {
+                        categoriesList.forEach { cat ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = IconMapper.getIconByName(cat.iconName),
+                                            contentDescription = cat.name,
+                                            tint = FormatHelper.parseColor(cat.colorHex),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(cat.name, fontSize = 13.sp)
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.setCategoryFilter(cat.name)
+                                    categoryDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
 
-        // Transaction Timeline List with daily summaries
-        if (groupedTransactions.isEmpty()) {
-            Box(
+            // Time Filters Row (Gọn hơn, scrollable)
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Inbox,
-                        contentDescription = "No trans found",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Không tìm thấy giao dịch phù hợp!",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Thử thay đổi bộ lọc tìm kiếm",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
+                val isAll = activeTimeFilterMode == "ALL"
+                FilterChip(
+                    selected = isAll,
+                    onClick = { activeTimeFilterMode = "ALL" },
+                    label = { Text("Mọi lúc", fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "All time",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_ALL")
+                )
+
+                val isWeek = activeTimeFilterMode == "WEEK"
+                FilterChip(
+                    selected = isWeek,
+                    onClick = { activeTimeFilterMode = "WEEK" },
+                    label = { Text("1 Tuần", fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "Last week",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_WEEK")
+                )
+
+                val isDay = activeTimeFilterMode == "DAY"
+                val dayLabel = if (selectedCustomDate != null) {
+                    SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(selectedCustomDate!!.time)
+                } else {
+                    "Theo ngày"
+                }
+                FilterChip(
+                    selected = isDay,
+                    onClick = { showDatePicker() },
+                    label = { Text(dayLabel, fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Specific day",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_DAY")
+                )
+
+                val isMonth = activeTimeFilterMode == "MONTH"
+                val monthLabel = "Thg ${selectedCustomMonth + 1}/$selectedCustomMonthYear"
+                FilterChip(
+                    selected = isMonth,
+                    onClick = { showMonthDialog = true },
+                    label = { Text(if (isMonth) monthLabel else "Theo tháng", fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Specific month",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_MONTH")
+                )
+
+                val isYear = activeTimeFilterMode == "YEAR"
+                val yearLabel = "Năm $selectedCustomYear"
+                FilterChip(
+                    selected = isYear,
+                    onClick = { showYearDialog = true },
+                    label = { Text(if (isYear) yearLabel else "Theo năm", fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Specific year",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_YEAR")
+                )
+
+                val isRange = activeTimeFilterMode == "RANGE"
+                val rangeLabel = if (selectedRangeStart != null && selectedRangeEnd != null) {
+                    val startStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeStart!!.time)
+                    val endStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeEnd!!.time)
+                    "$startStr - $endStr"
+                } else {
+                    "Khoảng ngày"
+                }
+                FilterChip(
+                    selected = isRange,
+                    onClick = { showRangeDialog = true },
+                    label = { Text(rangeLabel, fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "Date range",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_RANGE")
+                )
+            }
+
+            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // Transaction Timeline List with daily summaries
+            if (groupedTransactions.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Inbox,
+                            contentDescription = "No trans found",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Không tìm thấy giao dịch phù hợp!",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Thử thay đổi bộ lọc tìm kiếm",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .testTag("history_transactions_lazy_column"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    groupedTransactions.forEach { (dateStr, txList) ->
+                        stickyHeader {
+                            val totalIncome = txList.filter { it.type == "INCOME" }.sumOf { it.amount }
+                            val totalExpense = txList.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = dateStr,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                }
+
+                                Column(
+                                    horizontalAlignment = Alignment.End,
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    if (totalExpense > 0.0) {
+                                        Text(
+                                            text = "-${FormatHelper.formatVND(totalExpense)}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFFF44336)
+                                        )
+                                    }
+                                    if (totalIncome > 0.0) {
+                                        Text(
+                                            text = "+${FormatHelper.formatVND(totalIncome)}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF4CAF50)
+                                        )
+                                    }
+                                }
+                            }
+                            Divider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            )
+                        }
+
+                        items(txList, key = { it.id }) { tx ->
+                            RemovableTransactionItem(
+                                tx = tx,
+                                onDelete = { viewModel.deleteTransaction(tx) },
+                                onEdit = { editingTransaction = tx }
+                            )
+                        }
+                    }
                 }
             }
         } else {
-            LazyColumn(
+            // --- CALENDAR MODE CONTENT ---
+            // 1. Sleek Forest Green Navigation Header
+            CalendarHeaderRow(
+                selectedMonth = selectedCustomMonth,
+                selectedYear = selectedCustomMonthYear,
+                onMonthChange = { selectedCustomMonth = it },
+                onYearChange = { selectedCustomMonthYear = it }
+            )
+
+            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // 2. 7-Column Grid View and Day Transactions Scrollable
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .testTag("history_transactions_lazy_column"),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
-                groupedTransactions.forEach { (dateStr, txList) ->
-                    stickyHeader {
-                        val totalIncome = txList.filter { it.type == "INCOME" }.sumOf { it.amount }
-                        val totalExpense = txList.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                CalendarGrid(
+                    selectedMonth = selectedCustomMonth,
+                    selectedYear = selectedCustomMonthYear,
+                    transactionsByDayKey = transactionsByDayKey,
+                    selectedCalendarDay = selectedCalendarDay,
+                    onDayClick = { day ->
+                        selectedCalendarDay = day
+                    },
+                    onDayLongPress = { day ->
+                        selectedCalendarDay = day
+                        showQuickActionMenuByDay = day
+                    }
+                )
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.background)
-                                .padding(vertical = 6.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = dateStr,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
-                            }
-
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (totalIncome > 0.0) {
-                                    Text(
-                                        text = "+${FormatHelper.formatVND(totalIncome)}",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF4CAF50)
-                                    )
-                                }
-                                if (totalExpense > 0.0) {
-                                    Text(
-                                        text = "-${FormatHelper.formatVND(totalExpense)}",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFF44336)
-                                    )
-                                }
-                            }
+                if (selectedCalendarDay != null) {
+                    val dayVal = selectedCalendarDay!!
+                    val dayKey = "${dayVal.year}-${dayVal.month}-${dayVal.dayOfMonth}"
+                    val dayTxs = transactionsByDayKey[dayKey] ?: emptyList()
+                    DayTransactionsInline(
+                        day = dayVal,
+                        transactions = dayTxs,
+                        onEditTransaction = { tx ->
+                            editingTransaction = tx
+                        },
+                        onDeleteTransaction = { tx ->
+                            viewModel.deleteTransaction(tx)
                         }
-                        Divider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                    }
-
-                    items(txList, key = { it.id }) { tx ->
-                        RemovableTransactionItem(
-                            tx = tx,
-                            onDelete = { viewModel.deleteTransaction(tx) },
-                            onEdit = { editingTransaction = tx }
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -800,6 +928,48 @@ fun HistoryScreen(
             onSave = { updatedTx ->
                 viewModel.updateTransaction(updatedTx)
                 editingTransaction = null
+            }
+        )
+    }
+
+    if (showQuickActionMenuByDay != null) {
+        val dayVal = showQuickActionMenuByDay!!
+        val dayKey = "${dayVal.year}-${dayVal.month}-${dayVal.dayOfMonth}"
+        val dayTxs = transactionsByDayKey[dayKey] ?: emptyList()
+        DayQuickActionsDialog(
+            day = dayVal,
+            hasTransactions = dayTxs.isNotEmpty(),
+            onDismiss = { showQuickActionMenuByDay = null },
+            onQuickAdd = {
+                showQuickAddDialogByDay = dayVal
+                showQuickActionMenuByDay = null
+            },
+            onManageDay = {
+                showQuickActionMenuByDay = null
+            }
+        )
+    }
+
+    if (showQuickAddDialogByDay != null) {
+        val dayVal = showQuickAddDialogByDay!!
+        val cal = Calendar.getInstance().apply {
+            set(dayVal.year, dayVal.month, dayVal.dayOfMonth)
+        }
+        QuickAddTransactionDialog(
+            initialTimestamp = cal.timeInMillis,
+            categoriesList = categoriesList,
+            walletsList = walletsList,
+            onDismiss = { showQuickAddDialogByDay = null },
+            onSave = { walletId, type, amount, categoryName, categoryIcon, categoryColor, note, timestamp ->
+                viewModel.addTransaction(
+                    walletId = walletId,
+                    type = type,
+                    amount = amount,
+                    categoryName = categoryName,
+                    note = note,
+                    timestamp = timestamp
+                )
+                showQuickAddDialogByDay = null
             }
         )
     }
@@ -1378,5 +1548,959 @@ fun EditTransactionDialog(
                 }
             }
         }
+    }
+}
+
+data class CalendarDay(
+    val year: Int,
+    val month: Int, // 0-based
+    val dayOfMonth: Int,
+    val isCurrentMonth: Boolean
+)
+
+private fun getCalendarGridDays(year: Int, monthIdx: Int): List<CalendarDay> {
+    val days = mutableListOf<CalendarDay>()
+    
+    // Calendar for first day of current month
+    val cal = Calendar.getInstance().apply {
+        set(Calendar.YEAR, year)
+        set(Calendar.MONTH, monthIdx)
+        set(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    
+    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // 1=SUNDAY, 2=MONDAY, ...
+    val offset = if (firstDayOfWeek == Calendar.SUNDAY) 6 else firstDayOfWeek - 2
+    
+    // Backfill previous month days
+    val prevMonthCal = cal.clone() as Calendar
+    prevMonthCal.add(Calendar.MONTH, -1)
+    val maxDaysInPrevMonth = prevMonthCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val prevMonthYear = prevMonthCal.get(Calendar.YEAR)
+    val prevMonthIdx = prevMonthCal.get(Calendar.MONTH)
+    
+    for (i in offset - 1 downTo 0) {
+        val dayNo = maxDaysInPrevMonth - i
+        days.add(CalendarDay(prevMonthYear, prevMonthIdx, dayNo, isCurrentMonth = false))
+    }
+    
+    // Current month days
+    val maxDaysInCurrentMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+    for (dayNo in 1..maxDaysInCurrentMonth) {
+        days.add(CalendarDay(year, monthIdx, dayNo, isCurrentMonth = true))
+    }
+    
+    // Next month days to fill up to a multiple of 7
+    val totalCells = if (days.size <= 35) 35 else 42
+    val nextMonthCal = cal.clone() as Calendar
+    nextMonthCal.add(Calendar.MONTH, 1)
+    val nextMonthYear = nextMonthCal.get(Calendar.YEAR)
+    val nextMonthIdx = nextMonthCal.get(Calendar.MONTH)
+    
+    var nextMonthDayNo = 1
+    while (days.size < totalCells) {
+        days.add(CalendarDay(nextMonthYear, nextMonthIdx, nextMonthDayNo, isCurrentMonth = false))
+        nextMonthDayNo++
+    }
+    
+    return days
+}
+
+@Composable
+fun CalendarHeaderRow(
+    selectedMonth: Int,
+    selectedYear: Int,
+    onMonthChange: (Int) -> Unit,
+    onYearChange: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF2E7D32)) // Beautiful Fintech Green
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Prev / Month Title / Next
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            IconButton(
+                onClick = {
+                    if (selectedMonth == 0) {
+                        onMonthChange(11)
+                        onYearChange(selectedYear - 1)
+                    } else {
+                        onMonthChange(selectedMonth - 1)
+                    }
+                },
+                modifier = Modifier.size(36.dp),
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.White.copy(alpha = 0.25f)
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ChevronLeft,
+                    contentDescription = "Tháng trước",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            val monthStr = "THÁNG %02d - %d".format(selectedMonth + 1, selectedYear)
+            Text(
+                text = monthStr,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            IconButton(
+                onClick = {
+                    if (selectedMonth == 11) {
+                        onMonthChange(0)
+                        onYearChange(selectedYear + 1)
+                    } else {
+                        onMonthChange(selectedMonth + 1)
+                    }
+                },
+                modifier = Modifier.size(36.dp),
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.White.copy(alpha = 0.25f)
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Tháng sau",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // Quick Month/Year Dropdown Selectors
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            var monthDropdownShow by remember { mutableStateOf(false) }
+            var yearDropdownShow by remember { mutableStateOf(false) }
+
+            // Month Selector
+            Box {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.9f))
+                        .clickable { monthDropdownShow = true }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Tháng ${selectedMonth + 1}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = monthDropdownShow,
+                    onDismissRequest = { monthDropdownShow = false }
+                ) {
+                    (0..11).forEach { mIdx ->
+                        DropdownMenuItem(
+                            text = { Text("Tháng ${mIdx + 1}", fontSize = 12.sp) },
+                            onClick = {
+                                onMonthChange(mIdx)
+                                monthDropdownShow = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Year Selector
+            Box {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.9f))
+                        .clickable { yearDropdownShow = true }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = selectedYear.toString(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = yearDropdownShow,
+                    onDismissRequest = { yearDropdownShow = false }
+                ) {
+                    val currYear = Calendar.getInstance().get(Calendar.YEAR)
+                    (currYear - 4..currYear + 2).forEach { yr ->
+                        DropdownMenuItem(
+                            text = { Text(yr.toString(), fontSize = 12.sp) },
+                            onClick = {
+                                onYearChange(yr)
+                                yearDropdownShow = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CalendarGrid(
+    selectedMonth: Int,
+    selectedYear: Int,
+    transactionsByDayKey: Map<String, List<Transaction>>,
+    selectedCalendarDay: CalendarDay?,
+    onDayClick: (CalendarDay) -> Unit,
+    onDayLongPress: (CalendarDay) -> Unit
+) {
+    val todayCal = remember { Calendar.getInstance() }
+    val todayYear = todayCal.get(Calendar.YEAR)
+    val todayMonth = todayCal.get(Calendar.MONTH)
+    val todayDay = todayCal.get(Calendar.DAY_OF_MONTH)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Week Header (Thứ hai, ... Chủ nhật as shown in the reference image)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            val weekdays = listOf("T.Hai", "T.Ba", "T.Tư", "T.Năm", "T.Sáu", "T.Bảy", "C.Nhật")
+            weekdays.forEach { name ->
+                Text(
+                    text = name,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = Color(0xFF51AE5A)
+                )
+            }
+        }
+
+        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), modifier = Modifier.padding(bottom = 4.dp))
+
+        // Grid Cells
+        val gridDays = remember(selectedMonth, selectedYear) {
+            getCalendarGridDays(selectedYear, selectedMonth)
+        }
+        val rows = remember(gridDays) {
+            gridDays.chunked(7)
+        }
+
+        rows.forEach { rowDays ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                rowDays.forEach { day ->
+                    val dayKey = "${day.year}-${day.month}-${day.dayOfMonth}"
+                    val dayTxs = transactionsByDayKey[dayKey] ?: emptyList()
+
+                    val isToday = day.year == todayYear && day.month == todayMonth && day.dayOfMonth == todayDay
+                    
+                    val isFuture = when {
+                        day.year > todayYear -> true
+                        day.year < todayYear -> false
+                        else -> {
+                            if (day.month > todayMonth) true
+                            else if (day.month < todayMonth) false
+                            else day.dayOfMonth > todayDay
+                        }
+                    }
+
+                    val isSelected = selectedCalendarDay?.run {
+                        this.year == day.year && this.month == day.month && this.dayOfMonth == day.dayOfMonth
+                    } == true
+
+                    CalendarCell(
+                        day = day,
+                        isToday = isToday,
+                        isSelected = isSelected,
+                        isFuture = isFuture,
+                        transactions = dayTxs,
+                        onClick = { onDayClick(day) },
+                        onLongPress = { onDayLongPress(day) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun CalendarCell(
+    day: CalendarDay,
+    isToday: Boolean,
+    isSelected: Boolean,
+    isFuture: Boolean,
+    transactions: List<Transaction>,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val totalIncome = remember(transactions) {
+        transactions.filter { it.type == "INCOME" }.sumOf { it.amount }
+    }
+    val totalExpense = remember(transactions) {
+        transactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+    }
+    
+    val hasTransactions = transactions.isNotEmpty()
+    
+    val cellBgColor = when {
+        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        isFuture -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f)
+        hasTransactions -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f)
+        else -> Color.Transparent
+    }
+    
+    val cellBorderModifier = when {
+        isSelected -> Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+        isToday -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+        hasTransactions -> Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+        else -> Modifier
+    }
+
+    val contentAlpha = if (day.isCurrentMonth) {
+        if (isFuture) 0.45f else 1.0f
+    } else {
+        0.35f
+    }
+
+    Box(
+        modifier = modifier
+            .aspectRatio(0.85f)
+            .padding(1.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(cellBgColor)
+            .then(cellBorderModifier)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            )
+            .padding(horizontal = 2.dp, vertical = 2.5.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Day Number Label
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = day.dayOfMonth.toString(),
+                    fontSize = 11.sp,
+                    fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Medium,
+                    color = if (isToday) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha)
+                    }
+                )
+            }
+            
+            // Amounts Container
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                if (totalExpense > 0.0) {
+                    Text(
+                        text = "-${formatCompactVND(totalExpense)}",
+                        fontSize = 9.sp,
+                        lineHeight = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF44336).copy(alpha = contentAlpha),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (totalIncome > 0.0) {
+                    Text(
+                        text = "+${formatCompactVND(totalIncome)}",
+                        fontSize = 9.sp,
+                        lineHeight = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4CAF50).copy(alpha = contentAlpha),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                
+                // Keep layout spacing consistent
+                if (totalIncome == 0.0 && totalExpense == 0.0) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DayTransactionsInline(
+    day: CalendarDay,
+    transactions: List<Transaction>,
+    onEditTransaction: (Transaction) -> Unit,
+    onDeleteTransaction: (Transaction) -> Unit
+) {
+    val dateLabel = "%02d/%02d/%d".format(day.dayOfMonth, day.month + 1, day.year)
+    val totalIncome = transactions.filter { it.type == "INCOME" }.sumOf { it.amount }
+    val totalExpense = transactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 12.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Header of selected day
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Giao dịch ngày $dateLabel",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    if (totalExpense > 0.0) {
+                        Text(
+                            text = "-${FormatHelper.formatVND(totalExpense)}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFF44336)
+                        )
+                    }
+                    if (totalIncome > 0.0) {
+                        Text(
+                            text = "+${FormatHelper.formatVND(totalIncome)}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                }
+            }
+        }
+
+        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+        if (transactions.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Không có giao dịch nào trong ngày này.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                transactions.forEach { tx ->
+                    RemovableTransactionItem(
+                        tx = tx,
+                        onDelete = { onDeleteTransaction(tx) },
+                        onEdit = { onEditTransaction(tx) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DayQuickActionsDialog(
+    day: CalendarDay,
+    hasTransactions: Boolean,
+    onDismiss: () -> Unit,
+    onQuickAdd: () -> Unit,
+    onManageDay: () -> Unit
+) {
+    val dateLabel = "%02d/%02d/%d".format(day.dayOfMonth, day.month + 1, day.year)
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Thao tác ngày $dateLabel",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // Action: Quick Add
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onQuickAdd() }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.AddCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Column {
+                        Text("Thêm Giao Dịch Nhanh", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Tạo nhanh một giao dịch cho ngày này", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                // Action: Manage Day (only if hasTransactions)
+                if (hasTransactions) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onManageDay() }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Column {
+                            Text("Xem chi tiết các giao dịch", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Xóa, sửa giao dịch của ngày $dateLabel", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("ĐÓNG")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickAddTransactionDialog(
+    initialTimestamp: Long,
+    categoriesList: List<FinanceCategory>,
+    walletsList: List<Wallet>,
+    onDismiss: () -> Unit,
+    onSave: (walletId: Int, type: String, amount: Double, categoryName: String, categoryIcon: String, categoryColor: String, note: String, timestamp: Long) -> Unit
+) {
+    var amountText by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf("EXPENSE") } // EXPENSE, INCOME
+    var selectedCategoryName by remember { mutableStateOf(categoriesList.firstOrNull { it.type == "EXPENSE" || it.type == "BOTH" }?.name ?: "") }
+    var selectedWalletId by remember { mutableStateOf<Int?>(walletsList.firstOrNull()?.id) }
+    var noteText by remember { mutableStateOf("") }
+    
+    // Dropdowns visibility
+    var categoryDropdownExpanded by remember { mutableStateOf(false) }
+    var walletDropdownExpanded by remember { mutableStateOf(false) }
+    
+    // Filter categories depending on selectedType
+    val filteredCategories = remember(categoriesList, selectedType) {
+        categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+    }
+    
+    // Ensure the category chosen is kept valid
+    LaunchedEffect(selectedType) {
+        val hasCategory = filteredCategories.any { it.name == selectedCategoryName }
+        if (!hasCategory && filteredCategories.isNotEmpty()) {
+            selectedCategoryName = filteredCategories.first().name
+        }
+    }
+
+    val dateTimeFormatter = remember { SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")) }
+    val dateLabel = dateTimeFormatter.format(initialTimestamp)
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Thêm Giao Dịch Nhanh",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Ngày: $dateLabel",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close Add")
+                    }
+                }
+
+                // 1. Transaction Type (Income / Expense Selector)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "EXPENSE" to "Khoản Chi",
+                        "INCOME" to "Khoản Thu"
+                    ).forEach { (typeVal, label) ->
+                        val isSelected = selectedType == typeVal
+                        val targetBgColor = if (isSelected) {
+                            if (typeVal == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        }
+                        val targetContentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+
+                        Button(
+                            onClick = { selectedType = typeVal },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = targetBgColor,
+                                contentColor = targetContentColor
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                        ) {
+                            Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                // 2. Amount Input field
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Số tiền *",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { amountText = it },
+                        placeholder = { Text("0") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val expressionValue = FormatHelper.evaluateExpression(amountText)
+                    if (expressionValue > 0.0) {
+                        Text(
+                            text = "= " + FormatHelper.formatVND(expressionValue),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (selectedType == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                    }
+                }
+
+                // 3. Note Field
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Ghi chú",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    OutlinedTextField(
+                        value = noteText,
+                        onValueChange = { noteText = it },
+                        placeholder = { Text("Mô tả chi tiết giao dịch...") },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // 4. Category Selector Dropdown Button
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Danh mục *",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        val currentCategoryObject = categoriesList.find { it.name == selectedCategoryName }
+                        
+                        OutlinedTextField(
+                            value = selectedCategoryName,
+                            onValueChange = {},
+                            readOnly = true,
+                            leadingIcon = currentCategoryObject?.let { cat ->
+                                {
+                                    Icon(
+                                        imageVector = IconMapper.getIconByName(cat.iconName),
+                                        contentDescription = cat.name,
+                                        tint = FormatHelper.parseColor(cat.colorHex),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { categoryDropdownExpanded = !categoryDropdownExpanded }) {
+                                    Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                                }
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { categoryDropdownExpanded = true }
+                        )
+
+                        DropdownMenu(
+                            expanded = categoryDropdownExpanded,
+                            onDismissRequest = { categoryDropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        ) {
+                            filteredCategories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = IconMapper.getIconByName(cat.iconName),
+                                                contentDescription = cat.name,
+                                                tint = FormatHelper.parseColor(cat.colorHex),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Text(cat.name, fontSize = 14.sp)
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedCategoryName = cat.name
+                                        categoryDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 5. Wallet Dropdown Selector
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Chọn tài khoản / Ví *",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        val currentWalletObject = walletsList.find { it.id == selectedWalletId }
+                        
+                        OutlinedTextField(
+                            value = currentWalletObject?.name ?: "Chưa chọn tài khoản",
+                            onValueChange = {},
+                            readOnly = true,
+                            leadingIcon = currentWalletObject?.let { w ->
+                                {
+                                    Icon(
+                                        imageVector = IconMapper.getIconByName(w.iconName),
+                                        contentDescription = w.name,
+                                        tint = FormatHelper.parseColor(w.colorHex),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { walletDropdownExpanded = !walletDropdownExpanded }) {
+                                    Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                                }
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { walletDropdownExpanded = true }
+                        )
+
+                        DropdownMenu(
+                            expanded = walletDropdownExpanded,
+                            onDismissRequest = { walletDropdownExpanded = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        ) {
+                            walletsList.forEach { w ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = IconMapper.getIconByName(w.iconName),
+                                                contentDescription = w.name,
+                                                tint = FormatHelper.parseColor(w.colorHex),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Text(w.name, fontSize = 14.sp)
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedWalletId = w.id
+                                        walletDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Bottom Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                    ) {
+                        Text("HỦY BỎ")
+                    }
+
+                    val finalAmount = FormatHelper.evaluateExpression(amountText)
+                    Button(
+                        onClick = {
+                            val targetCat = categoriesList.find { it.name == selectedCategoryName } ?: categoriesList.first()
+                            onSave(
+                                selectedWalletId ?: walletsList.first().id,
+                                selectedType,
+                                finalAmount,
+                                targetCat.name,
+                                targetCat.iconName,
+                                targetCat.colorHex,
+                                noteText.ifEmpty { targetCat.name },
+                                initialTimestamp
+                            )
+                        },
+                        enabled = finalAmount > 0.0 && selectedWalletId != null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(48.dp)
+                    ) {
+                        Text("THÊM", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatCompactVND(amount: Double): String {
+    if (amount <= 0.0) return ""
+    return when {
+        amount >= 1_000_000_000 -> {
+            val bnVal = amount / 1_000_000_000.0
+            val formatted = if (bnVal % 1.0 == 0.0) "%.0f".format(Locale.US, bnVal) else "%.1f".format(Locale.US, bnVal)
+            "${formatted}B"
+        }
+        amount >= 1_000_000 -> {
+            val mVal = amount / 1_000_000.0
+            val formatted = if (mVal % 1.0 == 0.0) "%.0f".format(Locale.US, mVal) else "%.1f".format(Locale.US, mVal)
+            "${formatted}tr"
+        }
+        amount >= 1_000 -> {
+            val kVal = amount / 1_000.0
+            val formatted = if (kVal % 1.0 == 0.0) "%.0f".format(Locale.US, kVal) else "%.1f".format(Locale.US, kVal)
+            "${formatted}k"
+        }
+        else -> "%.0f".format(Locale.US, amount)
     }
 }

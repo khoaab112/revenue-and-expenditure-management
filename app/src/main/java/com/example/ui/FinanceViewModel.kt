@@ -160,7 +160,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // --- CATEGORIES LOGIC ---
     private fun serializeCategories(categories: List<FinanceCategory>): String {
-        return categories.joinToString(";;") { "${it.name}|${it.iconName}|${it.colorHex}|${it.type}" }
+        return categories.joinToString(";;") { "${it.name}|${it.iconName}|${it.colorHex}|${it.type}|${it.parentName ?: ""}" }
     }
 
     private fun deserializeCategories(data: String): List<FinanceCategory> {
@@ -168,7 +168,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         return data.split(";;").mapNotNull {
             val parts = it.split("|")
             if (parts.size >= 4) {
-                FinanceCategory(parts[0], parts[1], parts[2], parts[3])
+                val parentName = if (parts.size >= 5 && parts[4].isNotEmpty()) parts[4] else null
+                FinanceCategory(parts[0], parts[1], parts[2], parts[3], parentName)
             } else null
         }
     }
@@ -184,11 +185,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun addCategory(name: String, iconName: String, colorHex: String, type: String) {
+    fun addCategory(name: String, iconName: String, colorHex: String, type: String, parentName: String? = null) {
         viewModelScope.launch {
             val currentList = _categoriesList.value.toMutableList()
             if (!currentList.any { it.name.lowercase() == name.lowercase() }) {
-                currentList.add(FinanceCategory(name, iconName, colorHex, type))
+                currentList.add(FinanceCategory(name, iconName, colorHex, type, parentName))
                 repository.saveSetting("custom_categories", serializeCategories(currentList))
                 _categoriesList.value = currentList
             }

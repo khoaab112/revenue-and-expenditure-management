@@ -24,7 +24,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -780,6 +784,7 @@ fun CategoryManagementDialog(
     var selectedTypeTab by remember { mutableStateOf("EXPENSE") } // EXPENSE, INCOME
     var showAddForm by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
+    var parentName by remember { mutableStateOf<String?>(null) }
     var type by remember { mutableStateOf("EXPENSE") } // EXPENSE, INCOME, BOTH
     var selectedColor by remember { mutableStateOf("#4CAF50") }
     var selectedIcon by remember { mutableStateOf("ShoppingCart") }
@@ -792,7 +797,15 @@ fun CategoryManagementDialog(
         "SportsEsports", "School", "LocalHospital", "Home", 
         "Work", "CardGiftcard", "Storefront", "Payments", 
         "AccountBalance", "AccountBalanceWallet", "Savings", 
-        "TrendingUp", "TrendingDown", "Lock", "Settings"
+        "TrendingUp", "TrendingDown", "Lock", "Settings",
+        // New icons
+        "Coffee", "LocalBar", "Flight", "Checkroom", "FitnessCenter",
+        "Pets", "ChildCare", "FaceRetouchingNatural", "Spa", "Movie",
+        "Theaters", "LibraryMusic", "Headphones", "VideogameAsset",
+        "LocalPizza", "LocalCafe", "LocalDining", "Brush", "Palette",
+        "Computer", "PhoneIphone", "CameraAlt", "Map", "CrueltyFree",
+        "PedalBike", "AutoAwesome", "Celebration", "Cake", "EmojiEmotions",
+        "Favorite", "Mood", "SelfImprovement", "EmojiObjects", "RocketLaunch"
     )
 
     AlertDialog(
@@ -866,6 +879,57 @@ fun CategoryManagementDialog(
                                 label = { Text("Tên danh mục") },
                                 modifier = Modifier.fillMaxWidth().testTag("category_name_input")
                             )
+
+                            var categoryDropdownExpanded by remember { mutableStateOf(false) }
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                OutlinedTextField(
+                                    value = parentName ?: "Không có (Danh mục gốc)",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Trực thuộc (Mục cha)") },
+                                    trailingIcon = {
+                                        IconButton(onClick = { categoryDropdownExpanded = !categoryDropdownExpanded }) {
+                                            Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { categoryDropdownExpanded = true }
+                                )
+
+                                DropdownMenu(
+                                    expanded = categoryDropdownExpanded,
+                                    onDismissRequest = { categoryDropdownExpanded = false },
+                                    modifier = Modifier.fillMaxWidth(0.9f)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Không có (Danh mục gốc)") },
+                                        onClick = {
+                                            parentName = null
+                                            categoryDropdownExpanded = false
+                                        }
+                                    )
+                                    val parentCandidates = categoriesList.filter { (it.type == type || it.type == "BOTH") && it.parentName == null }
+                                    parentCandidates.forEach { p ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    val colorValue = try { FormatHelper.parseColor(p.colorHex) } catch(e:Exception){ Color.Gray }
+                                                    Icon(IconMapper.getIconByName(p.iconName), contentDescription = p.name, tint = colorValue, modifier = Modifier.size(20.dp))
+                                                    Text(p.name, fontSize = 14.sp)
+                                                }
+                                            },
+                                            onClick = {
+                                                parentName = p.name
+                                                categoryDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
 
                             // Type select description
                             Text("Áp dụng cho: ${if (selectedTypeTab == "EXPENSE") "Hóa đơn & Chi tiêu" else "Thu nhập & Tiền vào"}", fontSize = 13.sp)
@@ -1003,8 +1067,9 @@ fun CategoryManagementDialog(
                                 Button(
                                     onClick = {
                                         if (name.isNotBlank()) {
-                                            viewModel.addCategory(name, selectedIcon, selectedColor, type)
+                                            viewModel.addCategory(name, selectedIcon, selectedColor, type, parentName)
                                             name = ""
+                                            parentName = null
                                             showAddForm = false
                                         }
                                     },
@@ -1027,7 +1092,11 @@ fun CategoryManagementDialog(
                     SortableCategoryList(
                         categories = currentFilterList,
                         viewModel = viewModel,
-                        typeTab = selectedTypeTab
+                        typeTab = selectedTypeTab,
+                        onAddSubcategory = { parentNameValue ->
+                            parentName = parentNameValue
+                            showAddForm = true
+                        }
                     )
                 }
             }
@@ -1055,9 +1124,11 @@ fun CategoryManagementDialog(
 fun SortableCategoryList(
     categories: List<FinanceCategory>,
     viewModel: FinanceViewModel,
-    typeTab: String
+    typeTab: String,
+    onAddSubcategory: (parentName: String) -> Unit
 ) {
-    val listState = remember(categories) { mutableStateListOf<FinanceCategory>().apply { addAll(categories) } }
+    val roots = remember(categories) { categories.filter { it.parentName == null } }
+    val listState = remember(roots) { mutableStateListOf<FinanceCategory>().apply { addAll(roots) } }
     var draggedIndex by remember { mutableStateOf<Int?>(null) }
     var driftY by remember { mutableStateOf(0f) }
 
@@ -1083,72 +1154,9 @@ fun SortableCategoryList(
                 MaterialTheme.colorScheme.primary
             }
 
-            ListItem(
-                headlineContent = { Text(cat.name, fontWeight = FontWeight.Bold) },
-                leadingContent = {
-                    Icon(
-                        imageVector = IconMapper.getIconByName(cat.iconName),
-                        contentDescription = cat.name,
-                        tint = colorValue
-                    )
-                },
-                trailingContent = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (listState.size > 1) {
-                            IconButton(onClick = { viewModel.deleteCategory(cat) }) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+            var isExpanded by remember { mutableStateOf(false) }
 
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Kéo để sắp xếp",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .padding(4.dp)
-                                .pointerInput(index) {
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            draggedIndex = index
-                                            driftY = 0f
-                                        },
-                                        onDragEnd = { onDragReleased() },
-                                        onDragCancel = { onDragReleased() },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            driftY += dragAmount.y
-                                            val itemHeightPx = 56.dp.toPx()
-                                            val targetIdx = draggedIndex
-                                            if (targetIdx != null) {
-                                                if (driftY > itemHeightPx * 0.8f && targetIdx < listState.lastIndex) {
-                                                    val next = listState[targetIdx + 1]
-                                                    listState[targetIdx + 1] = listState[targetIdx]
-                                                    listState[targetIdx] = next
-                                                    draggedIndex = targetIdx + 1
-                                                    driftY -= itemHeightPx
-                                                } else if (driftY < -itemHeightPx * 0.8f && targetIdx > 0) {
-                                                    val prev = listState[targetIdx - 1]
-                                                    listState[targetIdx - 1] = listState[targetIdx]
-                                                    listState[targetIdx] = prev
-                                                    draggedIndex = targetIdx - 1
-                                                    driftY += itemHeightPx
-                                                }
-                                            }
-                                        }
-                                    )
-                                }
-                        )
-                    }
-                },
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .zIndex(zIndexValue)
@@ -1168,7 +1176,167 @@ fun SortableCategoryList(
                         else MaterialTheme.colorScheme.outlineVariant, 
                         RoundedCornerShape(12.dp)
                     )
-            )
+            ) {
+                ListItem(
+                    modifier = Modifier.clickable { isExpanded = !isExpanded },
+                    headlineContent = { Text(cat.name, fontWeight = FontWeight.Bold) },
+                    leadingContent = {
+                        Icon(
+                            imageVector = IconMapper.getIconByName(cat.iconName),
+                            contentDescription = cat.name,
+                            tint = colorValue
+                        )
+                    },
+                    trailingContent = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (listState.size > 1) {
+                                IconButton(onClick = { viewModel.deleteCategory(cat) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Kéo để sắp xếp",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .padding(4.dp)
+                                    .pointerInput(index) {
+                                        detectDragGestures(
+                                            onDragStart = {
+                                                draggedIndex = index
+                                                driftY = 0f
+                                            },
+                                            onDragEnd = { onDragReleased() },
+                                            onDragCancel = { onDragReleased() },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                driftY += dragAmount.y
+                                                val itemHeightPx = 56.dp.toPx()
+                                                val targetIdx = draggedIndex
+                                                if (targetIdx != null) {
+                                                    if (driftY > itemHeightPx * 0.8f && targetIdx < listState.lastIndex) {
+                                                        val next = listState[targetIdx + 1]
+                                                        listState[targetIdx + 1] = listState[targetIdx]
+                                                        listState[targetIdx] = next
+                                                        draggedIndex = targetIdx + 1
+                                                        driftY -= itemHeightPx
+                                                    } else if (driftY < -itemHeightPx * 0.8f && targetIdx > 0) {
+                                                        val prev = listState[targetIdx - 1]
+                                                        listState[targetIdx - 1] = listState[targetIdx]
+                                                        listState[targetIdx] = prev
+                                                        draggedIndex = targetIdx - 1
+                                                        driftY += itemHeightPx
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                            )
+                        }
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+
+                // Subcategories
+                if (isExpanded) {
+                    val subcats = categories.filter { it.parentName == cat.name }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = 16.dp, bottom = 12.dp, start = 56.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        subcats.forEach { subCat ->
+                            val subColor = try { FormatHelper.parseColor(subCat.colorHex) } catch(e: Exception) { Color.Gray }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = IconMapper.getIconByName(subCat.iconName),
+                                        contentDescription = subCat.name,
+                                        tint = subColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = subCat.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.deleteCategory(subCat) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Delete subcategory",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Dotted add subcategory button
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onAddSubcategory(cat.name) }
+                                .drawBehind {
+                                    drawRoundRect(
+                                        color = colorValue.copy(alpha = 0.6f),
+                                        style = Stroke(
+                                            width = 1.5.dp.toPx(),
+                                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)
+                                        ),
+                                        cornerRadius = CornerRadius(8.dp.toPx())
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Add subcategory",
+                                    tint = colorValue.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Thêm mục con",
+                                    color = colorValue.copy(alpha = 0.8f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

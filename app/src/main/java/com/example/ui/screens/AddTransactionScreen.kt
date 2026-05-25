@@ -41,6 +41,7 @@ fun AddTransactionScreen(
     val context = LocalContext.current
     val wallets by viewModel.dailyWallets.collectAsState()
     val categoriesList by viewModel.categoriesList.collectAsState()
+    val allTransactions by viewModel.allTransactions.collectAsState()
 
     var rawExpression by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("EXPENSE") } // EXPENSE, INCOME
@@ -66,11 +67,31 @@ fun AddTransactionScreen(
 
     // Filter categories depending on type
     val filteredCategories = remember(categoriesList, selectedType) {
-        val list = categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
-        if (list.isNotEmpty()) {
-            selectedCategoryName = list.first().name
+        categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+    }
+
+    val categoryUsageCounts = remember(allTransactions) {
+        val counts = mutableMapOf<String, Int>()
+        allTransactions.forEach { tx ->
+            counts[tx.categoryName] = counts.getOrDefault(tx.categoryName, 0) + 1
         }
-        list
+        counts
+    }
+
+    val parentCategories = remember(filteredCategories, categoryUsageCounts) {
+        val parents = filteredCategories.filter { it.parentName == null }
+        parents.sortedByDescending { parent ->
+            val subCategoryNames = filteredCategories.filter { it.parentName == parent.name }.map { it.name }
+            categoryUsageCounts.getOrDefault(parent.name, 0) + subCategoryNames.sumOf { categoryUsageCounts.getOrDefault(it, 0) }
+        }
+    }
+
+    LaunchedEffect(parentCategories) {
+        if (parentCategories.isNotEmpty() && selectedCategoryName.isBlank()) {
+            selectedCategoryName = parentCategories.first().name
+        } else if (parentCategories.isNotEmpty() && filteredCategories.none { it.name == selectedCategoryName }) {
+            selectedCategoryName = parentCategories.first().name
+        }
     }
 
     val dateTimeFormatter = remember { SimpleDateFormat("HH:mm dd/MM/yyyy", Locale("vi", "VN")) }
@@ -164,6 +185,14 @@ fun AddTransactionScreen(
                 Text("Khoản Thu")
             }
         }
+
+        // 7. Số tiền
+        com.example.ui.components.CustomMoneyInputField(
+            value = rawExpression,
+            onValueChange = { rawExpression = it },
+            label = "Số tiền phát sinh",
+            testTag = "tx_amount_text_field"
+        )
 
         // 2. Tài khoản thanh toán (bố cục 2x2 đẹp mắt)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -270,61 +299,170 @@ fun AddTransactionScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            val chunkedCategories = filteredCategories.chunked(4)
+            val chunkedCategories = parentCategories.chunked(4)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val currentSelectedCategory = filteredCategories.firstOrNull { it.name == selectedCategoryName }
+                val activeParentName = currentSelectedCategory?.parentName ?: currentSelectedCategory?.name
+
                 chunkedCategories.forEach { rowCats ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         rowCats.forEach { cat ->
-                            val isSelected = selectedCategoryName == cat.name
-                            val categoryColor = FormatHelper.parseColor(cat.colorHex)
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { selectedCategoryName = cat.name }
-                                    .padding(vertical = 4.dp)
-                                    .testTag("category_select_${cat.name}")
-                            ) {
-                                Box(
+                            val isSelected = activeParentName == cat.name
+                            val categoryColor = try { FormatHelper.parseColor(cat.colorHex) } catch(e: Exception) { Color.Gray }
+                            
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (isSelected) categoryColor
-                                            else categoryColor.copy(alpha = 0.12f)
-                                        )
-                                        .border(
-                                            width = if (isSelected) 2.dp else 1.dp,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onSurface else categoryColor.copy(alpha = 0.5f),
-                                            shape = CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedCategoryName = cat.name // select this parent category. SubCats will show below.
+                                        }
+                                        .padding(vertical = 4.dp)
+                                        .testTag("category_select_${cat.name}")
                                 ) {
-                                    Icon(
-                                        imageVector = IconMapper.getIconByName(cat.iconName),
-                                        contentDescription = cat.name,
-                                        tint = if (isSelected) Color.White else categoryColor,
-                                        modifier = Modifier.size(16.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (isSelected) categoryColor
+                                                else categoryColor.copy(alpha = 0.12f)
+                                            )
+                                            .border(
+                                                width = if (isSelected) 2.dp else 1.dp,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onSurface else categoryColor.copy(alpha = 0.5f),
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = IconMapper.getIconByName(cat.iconName),
+                                            contentDescription = cat.name,
+                                            tint = if (isSelected) Color.White else categoryColor,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = cat.name,
+                                        fontSize = 9.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = cat.name,
-                                    fontSize = 9.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
                             }
                         }
                         if (rowCats.size < 4) {
                             for (i in 0 until (4 - rowCats.size)) {
                                 Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+
+                    // Render subcategories for the active parent if it is in this row
+                    val activeCatInRow = rowCats.firstOrNull { it.name == activeParentName }
+                    if (activeCatInRow != null) {
+                        val subCats = filteredCategories.filter { it.parentName == activeCatInRow.name }
+                        if (subCats.isNotEmpty()) {
+                            val activeColor = try { FormatHelper.parseColor(activeCatInRow.colorHex) } catch(e: Exception) { Color.Gray }
+                            val parentIndex = rowCats.indexOf(activeCatInRow)
+                            
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                androidx.compose.foundation.Canvas(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(16.dp)
+                                ) {
+                                    val canvasWidth = size.width
+                                    val canvasHeight = size.height
+                                    val strokePx = 2.dp.toPx()
+                                    
+                                    val gapWidth = 8.dp.toPx()
+                                    val totalGapsWidth = gapWidth * 3
+                                    val itemWidth = (canvasWidth - totalGapsWidth) / 4f
+                                    val arrowCenterX = parentIndex * (itemWidth + gapWidth) + itemWidth / 2f
+                                    
+                                    val arrowWidth = 16.dp.toPx()
+                                    val arrowHeight = 8.dp.toPx()
+                                    
+                                    val baseY = canvasHeight - strokePx / 2f
+                                    
+                                    val path = androidx.compose.ui.graphics.Path().apply {
+                                        moveTo(0f, baseY)
+                                        lineTo(arrowCenterX - arrowWidth / 2f, baseY)
+                                        lineTo(arrowCenterX, baseY - arrowHeight)
+                                        lineTo(arrowCenterX + arrowWidth / 2f, baseY)
+                                        lineTo(canvasWidth, baseY)
+                                    }
+                                    
+                                    drawPath(
+                                        path = path,
+                                        color = activeColor,
+                                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                            width = strokePx,
+                                            join = androidx.compose.ui.graphics.StrokeJoin.Round,
+                                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                                        )
+                                    )
+                                }
+                                
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            activeColor.copy(alpha = 0.08f), 
+                                            RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
+                                        )
+                                        .padding(vertical = 12.dp, horizontal = 8.dp)
+                                ) {
+                                    androidx.compose.foundation.lazy.LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        item {
+                                            val isSubSelected = selectedCategoryName == activeCatInRow.name
+                                            FilterChip(
+                                                selected = isSubSelected,
+                                                onClick = { selectedCategoryName = activeCatInRow.name },
+                                                label = { Text("Chung", fontSize = 12.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = activeColor,
+                                                    selectedLabelColor = Color.White
+                                                )
+                                            )
+                                        }
+                                        items(subCats.size) { idx ->
+                                            val sub = subCats[idx]
+                                            val isSubSelected = selectedCategoryName == sub.name
+                                            FilterChip(
+                                                selected = isSubSelected,
+                                                onClick = { selectedCategoryName = sub.name },
+                                                label = { Text(sub.name, fontSize = 12.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = activeColor,
+                                                    selectedLabelColor = Color.White
+                                                ),
+                                                leadingIcon = {
+                                                    Icon(
+                                                        imageVector = IconMapper.getIconByName(sub.iconName),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(14.dp),
+                                                        tint = if (isSubSelected) Color.White else activeColor
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -424,14 +562,6 @@ fun AddTransactionScreen(
                 )
             }
         }
-
-        // 7. Số tiền
-        com.example.ui.components.CustomMoneyInputField(
-            value = rawExpression,
-            onValueChange = { rawExpression = it },
-            label = "Số tiền phát sinh",
-            testTag = "tx_amount_text_field"
-        )
 
         // --- Recurring Transaction Setup Section ---
         Card(
