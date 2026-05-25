@@ -6,8 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 
 data class FilterCriteria(
     val query: String,
@@ -20,6 +25,28 @@ data class FilterCriteria(
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
+
+    // Google Sync settings Flow
+    private val _googleSheetUrl = MutableStateFlow("")
+    val googleSheetUrl: StateFlow<String> = _googleSheetUrl.asStateFlow()
+
+    private val _googleDocUrl = MutableStateFlow("")
+    val googleDocUrl: StateFlow<String> = _googleDocUrl.asStateFlow()
+
+    private val _googleAppsScriptUrl = MutableStateFlow("")
+    val googleAppsScriptUrl: StateFlow<String> = _googleAppsScriptUrl.asStateFlow()
+
+    private val _googleSheetLastSync = MutableStateFlow("")
+    val googleSheetLastSync: StateFlow<String> = _googleSheetLastSync.asStateFlow()
+
+    private val _googleDocLastSync = MutableStateFlow("")
+    val googleDocLastSync: StateFlow<String> = _googleDocLastSync.asStateFlow()
+
+    private val _syncStatus = MutableStateFlow("") // "IDLE", "SYNCING", "SUCCESS", "ERROR"
+    val syncStatus: StateFlow<String> = _syncStatus.asStateFlow()
+
+    private val _syncProgressLogs = MutableStateFlow<List<String>>(emptyList())
+    val syncProgressLogs: StateFlow<List<String>> = _syncProgressLogs.asStateFlow()
 
     // Base flows
     val allWallets: StateFlow<List<Wallet>>
@@ -156,6 +183,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         
         // If PIN is not enabled, the app is unlocked by default
         _isAppUnlocked.value = !enabled
+
+        // Load sync configurations
+        _googleSheetUrl.value = repository.getSetting("google_sheet_url")?.value ?: ""
+        _googleDocUrl.value = repository.getSetting("google_doc_url")?.value ?: ""
+        _googleAppsScriptUrl.value = repository.getSetting("google_apps_script_url")?.value ?: ""
+        _googleSheetLastSync.value = repository.getSetting("google_sheet_last_sync")?.value ?: "Chưa đồng bộ"
+        _googleDocLastSync.value = repository.getSetting("google_doc_last_sync")?.value ?: "Chưa đồng bộ"
     }
 
     // --- CATEGORIES LOGIC ---
@@ -533,5 +567,200 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     fun setActiveMonth(month: String) {
         _activeMonth.value = month
+    }
+
+    // --- GOOGLE CLOUD SYNC SERVICES ---
+    fun saveGoogleSheetUrl(url: String) {
+        viewModelScope.launch {
+            repository.saveSetting("google_sheet_url", url)
+            _googleSheetUrl.value = url
+        }
+    }
+
+    fun saveGoogleDocUrl(url: String) {
+        viewModelScope.launch {
+            repository.saveSetting("google_doc_url", url)
+            _googleDocUrl.value = url
+        }
+    }
+
+    fun saveGoogleAppsScriptUrl(url: String) {
+        viewModelScope.launch {
+            repository.saveSetting("google_apps_script_url", url)
+            _googleAppsScriptUrl.value = url
+        }
+    }
+
+    fun clearSyncLogs() {
+        _syncStatus.value = "IDLE"
+        _syncProgressLogs.value = emptyList()
+    }
+
+    fun syncToGoogle(type: String, context: android.content.Context) {
+        viewModelScope.launch {
+            _syncStatus.value = "SYNCING"
+            val logs = mutableListOf<String>()
+            fun addLog(msg: String) {
+                logs.add("[${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}] $msg")
+                _syncProgressLogs.value = logs.toList()
+            }
+
+            addLog("Bắt đầu tiến trình đồng bộ lên ứng dụng Google $type...")
+
+            val targetUrl = if (type == "SHEETS") _googleSheetUrl.value else _googleDocUrl.value
+            if (targetUrl.isBlank()) {
+                addLog("Thao tác thất bại: Quý khách chưa liên kết link Google $type.")
+                _syncStatus.value = "ERROR"
+                return@launch
+            }
+
+            // Extract spreadsheet ID or doc ID
+            val regex = "/d/([a-zA-Z0-9-_]+)".toRegex()
+            val matchResult = regex.find(targetUrl)
+            val fileId = matchResult?.groupValues?.get(1)
+            if (fileId == null) {
+                addLog("Thao tác thất bại: Định dạng đường dẫn Google $type không hợp lệ.")
+                _syncStatus.value = "ERROR"
+                return@launch
+            }
+            addLog("Xác định ID tài liệu: ...${fileId.takeLast(8)}")
+
+            // Gather transaction data
+            val txs = allTransactions.value
+            addLog("Hệ thống nén thành công ${txs.size} giao dịch từ bộ nhớ cục bộ.")
+
+            val webAppUrl = _googleAppsScriptUrl.value
+            if (webAppUrl.isNotBlank() && (webAppUrl.startsWith("http://") || webAppUrl.startsWith("https://"))) {
+                addLog("Phát hiện Web App Proxy. Đang kết nối API Google...")
+                try {
+                    val root = org.json.JSONObject()
+                    root.put("type", type)
+                    root.put("sheetUrl", _googleSheetUrl.value)
+                    root.put("docUrl", _googleDocUrl.value)
+                    
+                    val txArray = org.json.JSONArray()
+                    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("vi", "VN"))
+                    txs.forEach { tx ->
+                        val obj = org.json.JSONObject()
+                        obj.put("id", tx.id)
+                        obj.put("walletName", tx.walletName)
+                        obj.put("type", tx.type)
+                        obj.put("amount", tx.amount)
+                        obj.put("categoryName", tx.categoryName)
+                        obj.put("note", tx.note ?: "")
+                        obj.put("formattedDate", sdf.format(Date(tx.timestamp)))
+                        txArray.put(obj)
+                    }
+                    root.put("transactions", txArray)
+
+                    // Execute request with okhttp
+                    val okHttpClient = okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+
+                    val body = okhttp3.RequestBody.create(
+                        "application/json; charset=utf-8".toMediaTypeOrNull(),
+                        root.toString()
+                    )
+
+                    val request = okhttp3.Request.Builder()
+                        .url(webAppUrl)
+                        .post(body)
+                        .build()
+
+                    addLog("Đang tải dữ liệu lên Máy chủ Cloud của bạn...")
+                    withContext(Dispatchers.IO) {
+                        okHttpClient.newCall(request).execute().use { response ->
+                            if (response.isSuccessful) {
+                                val bodyStr = response.body?.string() ?: "{}"
+                                val respObj = org.json.JSONObject(bodyStr)
+                                val successResult = respObj.optBoolean("success", false)
+                                if (successResult) {
+                                    val nowStr = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date())
+                                    if (type == "SHEETS") {
+                                        repository.saveSetting("google_sheet_last_sync", nowStr)
+                                        _googleSheetLastSync.value = nowStr
+                                    } else {
+                                        repository.saveSetting("google_doc_last_sync", nowStr)
+                                        _googleDocLastSync.value = nowStr
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        addLog("Thành công: " + respObj.optString("message", "Đồng bộ thành công!"))
+                                        _syncStatus.value = "SUCCESS"
+                                    }
+                                } else {
+                                    val errorMsg = respObj.optString("error", "Lỗi từ Apps Script của bạn")
+                                    withContext(Dispatchers.Main) {
+                                        addLog("Lỗi Sync Cloud: $errorMsg")
+                                        _syncStatus.value = "ERROR"
+                                    }
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    addLog("Phản hồi lỗi cổng API: HTTP ${response.code}")
+                                    _syncStatus.value = "ERROR"
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    addLog("Lỗi đường truyền hoặc phản hồi: ${e.message}")
+                    _syncStatus.value = "ERROR"
+                }
+            } else {
+                // FALLBACK: Offline format copy-paste helper
+                addLog("Chế độ: Đồng bộ Thông minh (Không dùng Web Script).")
+                addLog("Đang xây dựng báo cáo chuyên sâu...")
+                
+                val content = StringBuilder()
+                if (type == "SHEETS") {
+                    content.append("ID,Ví,Loại,Số tiền (vnđ),Hạng mục,Ghi chú,Thời gian\n")
+                    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("vi", "VN"))
+                    txs.forEach { tx ->
+                        val cleanNote = (tx.note ?: "").replace("\"", "\"\"")
+                        content.append("${tx.id},\"${tx.walletName}\",${if (tx.type == "EXPENSE") "Chi" else "Thu"},${tx.amount},\"${tx.categoryName}\",\"$cleanNote\",\"${sdf.format(Date(tx.timestamp))}\"\n")
+                    }
+                } else {
+                    content.append("==========================================\n")
+                    content.append("BÁO CÁO GIAO DỊCH TỪ SỔ CHI TIÊU\n")
+                    content.append("Mốc thời gian tải: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}\n")
+                    content.append("==========================================\n\n")
+                    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("vi", "VN"))
+                    var totalIn = 0.0
+                    var totalOut = 0.0
+                    txs.forEach { tx ->
+                        val sign = if (tx.type == "EXPENSE") { totalOut += tx.amount; "-" } else { totalIn += tx.amount; "+" }
+                        content.append("${sdf.format(Date(tx.timestamp))} | $sign${FormatHelper.formatVND(tx.amount)} | [${tx.walletName}] | ${tx.categoryName} ${if (tx.note.isNullOrBlank()) "" else "| " + tx.note}\n")
+                    }
+                    content.append("------------------------------------------\n")
+                    content.append("TỔNG THU: +${FormatHelper.formatVND(totalIn)}\n")
+                    content.append("TỔNG CHI: -${FormatHelper.formatVND(totalOut)}\n")
+                    content.append("SỐ DỰ DỰ KIẾN: ${FormatHelper.formatVND(totalIn - totalOut)}\n")
+                }
+
+                try {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Sổ Chi Tiêu Sync Data", content.toString())
+                    clipboard.setPrimaryClip(clip)
+                    addLog("Đã định dạng thành công dữ liệu báo cáo!")
+                    addLog("Đã tự động sao chép (Copy) toàn bộ nội dung vào Clipboard của bạn!")
+                    addLog("HƯỚNG DẪN: Hãy nhấn nút mở link Tài liệu, dán vào tài liệu của bạn. Dữ liệu sẽ lập tức xuất hiện.")
+                    
+                    val nowStr = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date())
+                    if (type == "SHEETS") {
+                        repository.saveSetting("google_sheet_last_sync", nowStr)
+                        _googleSheetLastSync.value = nowStr
+                    } else {
+                        repository.saveSetting("google_doc_last_sync", nowStr)
+                        _googleDocLastSync.value = nowStr
+                    }
+                    _syncStatus.value = "SUCCESS"
+                } catch (e: Exception) {
+                    addLog("Lỗi chuyển dịch Clipboard: ${e.message}")
+                    _syncStatus.value = "ERROR"
+                }
+            }
+        }
     }
 }

@@ -280,6 +280,384 @@ fun SettingsScreen(
             }
         }
 
+        // --- GOOGLE DRIVE CLOUD SYNC SECTION ---
+        Text(
+            text = "ĐỒNG BỘ CLOUD (GOOGLE DRIVE)",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        val context = LocalContext.current
+        val googleSheetUrl by viewModel.googleSheetUrl.collectAsState()
+        val googleDocUrl by viewModel.googleDocUrl.collectAsState()
+        val googleAppsScriptUrl by viewModel.googleAppsScriptUrl.collectAsState()
+        val googleSheetLastSync by viewModel.googleSheetLastSync.collectAsState()
+        val googleDocLastSync by viewModel.googleDocLastSync.collectAsState()
+        val syncStatus by viewModel.syncStatus.collectAsState()
+        val syncProgressLogs by viewModel.syncProgressLogs.collectAsState()
+
+        var editSheetUrl by remember(googleSheetUrl) { mutableStateOf(googleSheetUrl) }
+        var editDocUrl by remember(googleDocUrl) { mutableStateOf(googleDocUrl) }
+        var editAppsScriptUrl by remember(googleAppsScriptUrl) { mutableStateOf(googleAppsScriptUrl) }
+        var showGuideByScript by remember { mutableStateOf(false) }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Dữ liệu thuộc về bạn. Hãy nhập link public của Google Sheet hoặc Google Doc. Ứng dụng sẽ đồng bộ toàn bộ giao dịch của bạn tức thì.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Google Sheets Segment
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GridOn,
+                            contentDescription = "Google Sheets",
+                            tint = Color(0xFF0F9D58),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Đường dẫn Google Sheets (Bảng tính)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = editSheetUrl,
+                        onValueChange = {
+                            editSheetUrl = it
+                            viewModel.saveGoogleSheetUrl(it)
+                        },
+                        placeholder = { Text("https://docs.google.com/spreadsheets/d/...") },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.fillMaxWidth().testTag("sync_sheet_url_input")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Đồng bộ cuối: $googleSheetLastSync",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Button(
+                            onClick = {
+                                viewModel.syncToGoogle("SHEETS", context)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF0F9D58)
+                            ),
+                            enabled = editSheetUrl.isNotBlank() && syncStatus != "SYNCING",
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier.testTag("sync_sheet_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = "Sync Sheets",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Đồng bộ Sheets", fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Google Docs Segment
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = "Google Docs",
+                            tint = Color(0xFF4285F4),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Đường dẫn Google Docs (Tài liệu)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = editDocUrl,
+                        onValueChange = {
+                            editDocUrl = it
+                            viewModel.saveGoogleDocUrl(it)
+                        },
+                        placeholder = { Text("https://docs.google.com/document/d/...") },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.fillMaxWidth().testTag("sync_doc_url_input")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Đồng bộ cuối: $googleDocLastSync",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Button(
+                            onClick = {
+                                viewModel.syncToGoogle("DOCS", context)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4285F4)
+                            ),
+                            enabled = editDocUrl.isNotBlank() && syncStatus != "SYNCING",
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier.testTag("sync_doc_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = "Sync Docs",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Đồng bộ Docs", fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Advanced synchronization setup
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showGuideByScript = !showGuideByScript }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SettingsInputComponent,
+                                contentDescription = "Apps Script",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Thiết lập Cloud Sync Tự động (Apps Script)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        Icon(
+                            imageVector = if (showGuideByScript) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = "Expand/Collapse",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    if (showGuideByScript) {
+                        Text(
+                            text = "Để đồng bộ tự động trực tiếp và an toàn từ thiết bị lên Cloud (không thông qua máy chủ trung gian), quý khách dán URL Web App được tạo từ Google Apps Script trên File của bạn bên dưới:",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        OutlinedTextField(
+                            value = editAppsScriptUrl,
+                            onValueChange = {
+                                editAppsScriptUrl = it
+                                viewModel.saveGoogleAppsScriptUrl(it)
+                            },
+                            placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                            modifier = Modifier.fillMaxWidth().testTag("sync_apps_script_input")
+                        )
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Mã Google Apps Script mẫu:",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    val scriptTemplate = """
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var targetType = data.type;
+    
+    if (targetType === "SHEETS") {
+      var ss = SpreadsheetApp.openByUrl(data.sheetUrl);
+      var sheet = ss.getSheets()[0];
+      sheet.clear();
+      sheet.appendRow(["ID", "Ví", "Loại", "Số tiền (vđ)", "Hạng mục", "Ghi chú", "Thời gian"]);
+      var txs = data.transactions;
+      for (var i = 0; i < txs.length; i++) {
+        var tx = txs[i];
+        sheet.appendRow([
+          tx.id,
+          tx.walletName,
+          tx.type === "EXPENSE" ? "Chi" : "Thu",
+          tx.amount,
+          tx.categoryName,
+          tx.note,
+          tx.formattedDate
+        ]);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Đồng bộ thành công " + txs.length + " giao dịch!" })).setMimeType(ContentService.MimeType.JSON);
+    } else if (targetType === "DOCS") {
+      var doc = DocumentApp.openByUrl(data.docUrl);
+      var body = doc.getBody();
+      body.clear();
+      body.appendParagraph("BÁO CÁO GIAO DỊCH TỪ SỔ CHI TIÊU").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+      body.appendParagraph("Thời gian đồng bộ: " + new Date().toLocaleString());
+      body.appendParagraph("------------------------------------------");
+      var txs = data.transactions;
+      var totalIncome = 0; var totalExpense = 0;
+      for (var i = 0; i < txs.length; i++) {
+        var tx = txs[i];
+        if (tx.type === "EXPENSE") { totalExpense += tx.amount; } else { totalIncome += tx.amount; }
+        body.appendParagraph(tx.formattedDate + " | " + (tx.type === "EXPENSE" ? "[Chi]" : "[Thu]") + " | " + tx.walletName + " -> " + tx.categoryName + ": -" + tx.amount.toLocaleString() + "đ" + (tx.note ? " (" + tx.note + ")" : ""));
+      }
+      body.appendParagraph("------------------------------------------");
+      body.appendParagraph("TỔNG THU: " + totalIncome.toLocaleString() + "đ");
+      body.appendParagraph("TỔNG CHI: " + totalExpense.toLocaleString() + "đ");
+      body.appendParagraph("SỐ DƯ DỰ KIẾN: " + (totalIncome - totalExpense).toLocaleString() + "đ");
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Đồng bộ báo cáo lên Google Docs thành công!" })).setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+                                    """.trimIndent()
+                                    
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText("Apps Script Template", scriptTemplate)
+                                                clipboard.setPrimaryClip(clip)
+                                                android.widget.Toast.makeText(context, "Đã sao chép mã Apps Script!", android.widget.Toast.LENGTH_SHORT).show()
+                                            } catch (e: Exception) {}
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(28.dp).testTag("copy_script_code_button")
+                                    ) {
+                                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy script", modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Sao chép mã", fontSize = 10.sp)
+                                    }
+                                }
+
+                                Text(
+                                    text = "Quy trình thực hiện: \n1. Mở file Google Sheet hoặc Doc của quý khách, chọn Tiện ích mở rộng (Extensions) -> Apps Script.\n2. Dán mã bên trên vào và Lưu.\n3. Chọn Triển khai (Deploy) -> Triển khai mới -> Chọn Loại 'Ứng dụng web' (Web App) -> Quyền truy cập chọn 'Mọi người' (Anyone) -> Triển khai và dán URL vào hộp văn bản phía trên.",
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Beautiful Interactive State Dialog for sync feedback
+        if (syncStatus.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { viewModel.clearSyncLogs() },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.clearSyncLogs() }) {
+                        Text("Đóng")
+                    }
+                },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        when (syncStatus) {
+                            "SYNCING" -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            "SUCCESS" -> Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Success", tint = Color(0xFF0F9D58))
+                            "ERROR" -> Icon(imageVector = Icons.Default.Error, contentDescription = "Error", tint = MaterialTheme.colorScheme.error)
+                        }
+                        Text(
+                            text = when (syncStatus) {
+                                "SYNCING" -> "ĐANG ĐỒNG BỘ..."
+                                "SUCCESS" -> "ĐỒNG BỘ THÀNH CÔNG"
+                                else -> "ĐỒNG BỘ THẤT BẠI"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        syncProgressLogs.forEach { log ->
+                            Text(
+                                text = log,
+                                fontSize = 11.sp,
+                                color = if (log.contains("Lỗi") || log.contains("Thất bại")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            )
+        }
+
         // Secure PIN Setup Dialog
         if (showPinSetupDialog) {
             PinSetupDialog(
