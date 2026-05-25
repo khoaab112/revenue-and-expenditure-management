@@ -41,6 +41,7 @@ fun HistoryScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedTypeFilter by viewModel.selectedTypeFilter.collectAsState()
     val selectedCategoryFilter by viewModel.selectedCategoryFilter.collectAsState()
+    val categoriesList by viewModel.categoriesList.collectAsState()
 
     var showFilterSheet by remember { mutableStateOf(false) }
 
@@ -109,7 +110,7 @@ fun HistoryScreen(
                 modifier = Modifier.testTag("filter_category_ALL")
             )
 
-            Categories.list.forEach { cat ->
+            categoriesList.forEach { cat ->
                 val isSelected = selectedCategoryFilter == cat.name
                 FilterChip(
                     selected = isSelected,

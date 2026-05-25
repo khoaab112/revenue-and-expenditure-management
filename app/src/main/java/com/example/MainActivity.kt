@@ -109,16 +109,22 @@ fun MainContent(
                 ) {
                     Spacer(modifier = Modifier.height(16.dp))
                     navigationItems.forEach { item ->
-                        val isSelected = currentRoute == item.route
+                        val isSelected = when (item.route) {
+                            Routes.DASHBOARD -> currentRoute == Routes.DASHBOARD || currentRoute == Routes.WALLETS
+                            Routes.HISTORY -> currentRoute == Routes.HISTORY
+                            Routes.ADD_TRANSACTION -> currentRoute == Routes.ADD_TRANSACTION
+                            Routes.STATS -> currentRoute == Routes.STATS
+                            Routes.SETTINGS -> currentRoute == Routes.SETTINGS
+                            else -> false
+                        }
                         if (item.route == Routes.ADD_TRANSACTION) {
                             NavigationRailItem(
                                 selected = isSelected,
                                 onClick = {
                                     if (currentRoute != item.route) {
                                         navController.navigate(item.route) {
-                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                            popUpTo(navController.graph.startDestinationId)
                                             launchSingleTop = true
-                                            restoreState = true
                                         }
                                     }
                                 },
@@ -144,9 +150,8 @@ fun MainContent(
                                 onClick = {
                                     if (currentRoute != item.route) {
                                         navController.navigate(item.route) {
-                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                            popUpTo(navController.graph.startDestinationId)
                                             launchSingleTop = true
-                                            restoreState = true
                                         }
                                     }
                                 },
@@ -176,16 +181,22 @@ fun MainContent(
                         modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
                     ) {
                         navigationItems.forEach { item ->
-                            val isSelected = currentRoute == item.route
+                            val isSelected = when (item.route) {
+                                Routes.DASHBOARD -> currentRoute == Routes.DASHBOARD || currentRoute == Routes.WALLETS
+                                Routes.HISTORY -> currentRoute == Routes.HISTORY
+                                Routes.ADD_TRANSACTION -> currentRoute == Routes.ADD_TRANSACTION
+                                Routes.STATS -> currentRoute == Routes.STATS
+                                Routes.SETTINGS -> currentRoute == Routes.SETTINGS
+                                else -> false
+                            }
                             if (item.route == Routes.ADD_TRANSACTION) {
                                 NavigationBarItem(
                                     selected = isSelected,
                                     onClick = {
                                         if (currentRoute != item.route) {
                                             navController.navigate(item.route) {
-                                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                                popUpTo(navController.graph.startDestinationId)
                                                 launchSingleTop = true
-                                                restoreState = true
                                             }
                                         }
                                     },
@@ -228,9 +239,8 @@ fun MainContent(
                                     onClick = {
                                         if (currentRoute != item.route) {
                                             navController.navigate(item.route) {
-                                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                                popUpTo(navController.graph.startDestinationId)
                                                 launchSingleTop = true
-                                                restoreState = true
                                             }
                                         }
                                     },

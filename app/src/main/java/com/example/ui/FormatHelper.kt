@@ -22,6 +22,93 @@ object FormatHelper {
         }
     }
 
+    fun formatInputNumber(input: String): String {
+        val clean = input.filter { it.isDigit() }
+        if (clean.isEmpty()) return ""
+        val parsed = clean.toDoubleOrNull() ?: 0.0
+        val symbols = DecimalFormatSymbols(Locale("vi", "VN")).apply {
+            groupingSeparator = '.'
+            decimalSeparator = ','
+        }
+        val formatter = DecimalFormat("#,###", symbols)
+        return try {
+            formatter.format(parsed)
+        } catch (e: Exception) {
+            clean
+        }
+    }
+
+    fun formatExpression(expr: String): String {
+        val regex = Regex("\\d+")
+        return regex.replace(expr) { matchResult ->
+            formatInputNumber(matchResult.value)
+        }
+    }
+
+    fun evaluateExpression(expr: String): Double {
+        var clean = expr.replace(".", "").replace("x", "*").replace("×", "*").replace("÷", "/")
+        clean = clean.trim()
+        while (clean.endsWith("+") || clean.endsWith("-") || clean.endsWith("*") || clean.endsWith("/")) {
+            clean = clean.substring(0, clean.length - 1).trim()
+        }
+        if (clean.isEmpty()) return 0.0
+        return try {
+            evalSimpleExpr(clean)
+        } catch (e: Exception) {
+            0.0
+        }
+    }
+
+    private fun evalSimpleExpr(str: String): Double {
+        var opIndex = -1
+        var opType = ' '
+
+        // Prioritize + and - from right to left (respects left-associativity)
+        for (i in str.length - 1 downTo 0) {
+            val c = str[i]
+            if (c == '+' || c == '-') {
+                opIndex = i
+                opType = c
+                break
+            }
+        }
+
+        if (opIndex != -1) {
+            val left = str.substring(0, opIndex).trim()
+            val right = str.substring(opIndex + 1).trim()
+            val leftVal = if (left.isEmpty()) 0.0 else evalSimpleExpr(left)
+            val rightVal = if (right.isEmpty()) 0.0 else evalSimpleExpr(right)
+            return if (opType == '+') leftVal + rightVal else leftVal - rightVal
+        }
+
+        // Parentheses / Higher precedence operators: * and /
+        for (i in str.length - 1 downTo 0) {
+            val c = str[i]
+            if (c == '*' || c == '/') {
+                opIndex = i
+                opType = c
+                break
+            }
+        }
+
+        if (opIndex != -1) {
+            val left = str.substring(0, opIndex).trim()
+            val right = str.substring(opIndex + 1).trim()
+            val leftVal = if (left.isEmpty()) 1.0 else evalSimpleExpr(left)
+            val rightVal = if (right.isEmpty()) 1.0 else evalSimpleExpr(right)
+            return if (opType == '*') leftVal * rightVal else {
+                if (rightVal == 0.0) 0.0 else leftVal / rightVal
+            }
+        }
+
+        return str.toDoubleOrNull() ?: 0.0
+    }
+
+    fun parseInputNumber(input: String): Double {
+        val clean = input.filter { it.isDigit() }
+        return clean.toDoubleOrNull() ?: 0.0
+    }
+
     fun parseColor(hex: String): androidx.compose.ui.graphics.Color {
         return try {
             androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(hex))

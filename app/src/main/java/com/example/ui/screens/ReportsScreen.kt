@@ -29,12 +29,24 @@ fun ReportsScreen(
     viewModel: FinanceViewModel,
     modifier: Modifier = Modifier
 ) {
-    val transactions by viewModel.allTransactions.collectAsState()
+    val transactions by viewModel.dailyTransactions.collectAsState()
     val activeMonth by viewModel.activeMonth.collectAsState() // Format: "YYYY-MM"
 
-    // Parse activeMonth date
-    val currentYear = remember(activeMonth) { activeMonth.substring(0, 4).toInt() }
-    val currentMonth = remember(activeMonth) { activeMonth.substring(5, 7).toInt() }
+    // Parse activeMonth date safely
+    val currentYear = remember(activeMonth) {
+        try {
+            activeMonth.substring(0, 4).toInt()
+        } catch (e: Exception) {
+            Calendar.getInstance().get(Calendar.YEAR)
+        }
+    }
+    val currentMonth = remember(activeMonth) {
+        try {
+            activeMonth.substring(5, 7).toInt()
+        } catch (e: Exception) {
+            Calendar.getInstance().get(Calendar.MONTH) + 1
+        }
+    }
 
     // Helpers to toggle months
     fun adjustMonth(diff: Int) {

@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         SavingsGoal::class,
         AppSetting::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

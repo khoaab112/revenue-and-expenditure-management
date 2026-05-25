@@ -27,6 +27,14 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     val allBudgets: StateFlow<List<Budget>>
     val allSavingsGoals: StateFlow<List<SavingsGoal>>
 
+    val dailyWallets: StateFlow<List<Wallet>>
+    val savingsWallets: StateFlow<List<Wallet>>
+    val dailyTransactions: StateFlow<List<Transaction>>
+    val savingsTransactions: StateFlow<List<Transaction>>
+
+    private val _categoriesList = MutableStateFlow<List<FinanceCategory>>(Categories.list)
+    val categoriesList: StateFlow<List<FinanceCategory>> = _categoriesList.asStateFlow()
+
     // PIN Protection Flow
     private val _isPinEnabled = MutableStateFlow(false)
     val isPinEnabled: StateFlow<Boolean> = _isPinEnabled.asStateFlow()
@@ -76,6 +84,24 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         allTransactions = repository.allTransactions
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+        dailyWallets = repository.allWallets
+            .map { list -> list.filter { it.type != "SAVINGS" } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        savingsWallets = repository.allWallets
+            .map { list -> list.filter { it.type == "SAVINGS" } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        dailyTransactions = combine(repository.allTransactions, repository.allWallets) { txs, wts ->
+            val savingsIds = wts.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
+            txs.filter { it.walletId !in savingsIds }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        savingsTransactions = combine(repository.allTransactions, repository.allWallets) { txs, wts ->
+            val savingsIds = wts.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
+            txs.filter { it.walletId in savingsIds }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
         allBudgets = repository.getAllBudgets()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -94,7 +120,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
 
         filteredTransactions = combine(
-            allTransactions,
+            dailyTransactions,
             filterCriteriaFlow
         ) { txs, criteria ->
             txs.filter { tx ->
@@ -113,6 +139,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         // Check and Seed default data
         viewModelScope.launch {
             repository.checkAndSeedDatabase()
+            loadCategories()
             loadSecuritySettings()
             processRecurringTransactions()
         }
@@ -129,6 +156,81 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         
         // If PIN is not enabled, the app is unlocked by default
         _isAppUnlocked.value = !enabled
+    }
+
+    // --- CATEGORIES LOGIC ---
+    private fun serializeCategories(categories: List<FinanceCategory>): String {
+        return categories.joinToString(";;") { "${it.name}|${it.iconName}|${it.colorHex}|${it.type}" }
+    }
+
+    private fun deserializeCategories(data: String): List<FinanceCategory> {
+        if (data.isEmpty()) return emptyList()
+        return data.split(";;").mapNotNull {
+            val parts = it.split("|")
+            if (parts.size >= 4) {
+                FinanceCategory(parts[0], parts[1], parts[2], parts[3])
+            } else null
+        }
+    }
+
+    private suspend fun loadCategories() {
+        val catSetting = repository.getSetting("custom_categories")
+        if (catSetting != null) {
+            _categoriesList.value = deserializeCategories(catSetting.value)
+        } else {
+            // Seed defaults
+            repository.saveSetting("custom_categories", serializeCategories(Categories.list))
+            _categoriesList.value = Categories.list
+        }
+    }
+
+    fun addCategory(name: String, iconName: String, colorHex: String, type: String) {
+        viewModelScope.launch {
+            val currentList = _categoriesList.value.toMutableList()
+            if (!currentList.any { it.name.lowercase() == name.lowercase() }) {
+                currentList.add(FinanceCategory(name, iconName, colorHex, type))
+                repository.saveSetting("custom_categories", serializeCategories(currentList))
+                _categoriesList.value = currentList
+            }
+        }
+    }
+
+    fun deleteCategory(category: FinanceCategory) {
+        viewModelScope.launch {
+            val currentList = _categoriesList.value.filter { it.name.lowercase() != category.name.lowercase() }
+            repository.saveSetting("custom_categories", serializeCategories(currentList))
+            _categoriesList.value = currentList
+        }
+    }
+
+    fun updateCategoriesOrder(orderedSubList: List<FinanceCategory>, typeTab: String) {
+        viewModelScope.launch {
+            val fullList = _categoriesList.value.toMutableList()
+            val subNames = orderedSubList.map { it.name.lowercase() }.toSet()
+            val newList = mutableListOf<FinanceCategory>()
+            var subIndex = 0
+            for (cat in fullList) {
+                if (cat.name.lowercase() in subNames) {
+                    if (subIndex < orderedSubList.size) {
+                        newList.add(orderedSubList[subIndex])
+                        subIndex++
+                    }
+                } else {
+                    newList.add(cat)
+                }
+            }
+            while (subIndex < orderedSubList.size) {
+                newList.add(orderedSubList[subIndex])
+                subIndex++
+            }
+            repository.saveSetting("custom_categories", serializeCategories(newList))
+            _categoriesList.value = newList
+        }
+    }
+
+    fun getCategoryByName(name: String): FinanceCategory {
+        return _categoriesList.value.firstOrNull { it.name.lowercase() == name.lowercase() }
+            ?: FinanceCategory("Khác", "Category", "#607D8B", "BOTH")
     }
 
     fun enablePin(pin: String) {
@@ -215,21 +317,86 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     // --- WALLETS SERVICES ---
     fun addWallet(name: String, type: String, initialBalance: Double, colorHex: String, iconName: String) {
         viewModelScope.launch {
+            val list = allWallets.value
+            val maxOrder = list.maxOfOrNull { it.displayOrder } ?: -1
             repository.insertWallet(
                 Wallet(
                     name = name,
                     type = type,
                     balance = initialBalance,
                     colorHex = colorHex,
-                    iconName = iconName
+                    iconName = iconName,
+                    displayOrder = maxOrder + 1
                 )
             )
+        }
+    }
+
+    fun moveWalletUp(wallet: Wallet) {
+        viewModelScope.launch {
+            val list = allWallets.value
+            val needsReassign = list.map { it.displayOrder }.toSet().size < list.size
+            val sortedList = if (needsReassign) {
+                list.sortedBy { it.id }.mapIndexed { index, w -> 
+                    val updated = w.copy(displayOrder = index)
+                    repository.updateWallet(updated)
+                    updated
+                }
+            } else {
+                list.sortedWith(compareBy<Wallet> { it.displayOrder }.thenBy { it.id })
+            }
+            
+            val index = sortedList.indexOfFirst { it.id == wallet.id }
+            if (index > 0) {
+                val prev = sortedList[index - 1]
+                val prevOrder = prev.displayOrder
+                val currOrder = sortedList[index].displayOrder
+                
+                repository.updateWallet(prev.copy(displayOrder = currOrder))
+                repository.updateWallet(sortedList[index].copy(displayOrder = prevOrder))
+            }
+        }
+    }
+
+    fun moveWalletDown(wallet: Wallet) {
+        viewModelScope.launch {
+            val list = allWallets.value
+            val needsReassign = list.map { it.displayOrder }.toSet().size < list.size
+            val sortedList = if (needsReassign) {
+                list.sortedBy { it.id }.mapIndexed { index, w -> 
+                    val updated = w.copy(displayOrder = index)
+                    repository.updateWallet(updated)
+                    updated
+                }
+            } else {
+                list.sortedWith(compareBy<Wallet> { it.displayOrder }.thenBy { it.id })
+            }
+            
+            val index = sortedList.indexOfFirst { it.id == wallet.id }
+            if (index >= 0 && index < sortedList.lastIndex) {
+                val next = sortedList[index + 1]
+                val nextOrder = next.displayOrder
+                val currOrder = sortedList[index].displayOrder
+                
+                repository.updateWallet(next.copy(displayOrder = currOrder))
+                repository.updateWallet(sortedList[index].copy(displayOrder = nextOrder))
+            }
         }
     }
 
     fun deleteWallet(wallet: Wallet) {
         viewModelScope.launch {
             repository.deleteWallet(wallet)
+        }
+    }
+
+    fun updateWalletsOrder(orderedList: List<Wallet>) {
+        viewModelScope.launch {
+            orderedList.forEachIndexed { index, wallet ->
+                if (wallet.displayOrder != index) {
+                    repository.updateWallet(wallet.copy(displayOrder = index))
+                }
+            }
         }
     }
 
@@ -246,7 +413,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     ) {
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
-            val cat = Categories.getByCategoryName(categoryName)
+            val cat = getCategoryByName(categoryName)
             val tx = Transaction(
                 walletId = walletId,
                 walletName = wallet.name,
@@ -279,7 +446,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     // --- BUDGETS SERVICES ---
     fun addBudget(categoryName: String, limitAmount: Double, month: String) {
         viewModelScope.launch {
-            val cat = Categories.getByCategoryName(categoryName)
+            val cat = getCategoryByName(categoryName)
             
             // Calculate current month's spending for this category to seed spentAmount!
             val txs = repository.allTransactions.firstOrNull() ?: emptyList()

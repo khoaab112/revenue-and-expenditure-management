@@ -10,7 +10,8 @@ data class Wallet(
     val type: String, // CASH, BANK, WALLET, SAVINGS
     val balance: Double,
     val colorHex: String,
-    val iconName: String
+    val iconName: String,
+    val displayOrder: Int = 0
 )
 
 @Entity(tableName = "transactions")

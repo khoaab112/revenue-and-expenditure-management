@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
 import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import java.text.SimpleDateFormat
+import java.util.Locale
+import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -19,6 +23,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.Categories
@@ -34,9 +39,10 @@ fun AddTransactionScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val wallets by viewModel.allWallets.collectAsState()
+    val wallets by viewModel.dailyWallets.collectAsState()
+    val categoriesList by viewModel.categoriesList.collectAsState()
 
-    var amountStr by remember { mutableStateOf("") }
+    var rawExpression by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("EXPENSE") } // EXPENSE, INCOME
     var selectedWalletId by remember { mutableStateOf<Int?>(null) }
     var selectedCategoryName by remember { mutableStateOf("") }
@@ -59,42 +65,51 @@ fun AddTransactionScreen(
     }
 
     // Filter categories depending on type
-    val filteredCategories = remember(selectedType) {
-        val list = Categories.list.filter { it.type == selectedType || it.type == "BOTH" }
+    val filteredCategories = remember(categoriesList, selectedType) {
+        val list = categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
         if (list.isNotEmpty()) {
             selectedCategoryName = list.first().name
         }
         list
     }
 
-    val datePickerDialog = remember {
-        DatePickerDialog(
+    val dateTimeFormatter = remember { SimpleDateFormat("HH:mm dd/MM/yyyy", Locale("vi", "VN")) }
+
+    val showDateTimePicker = {
+        val currentCal = Calendar.getInstance().apply { timeInMillis = selectedTimestamp }
+        val timePicker = TimePickerDialog(
+            context,
+            { _, hourOfDay, minute ->
+                val finalCal = Calendar.getInstance().apply {
+                    timeInMillis = selectedTimestamp
+                    set(Calendar.HOUR_OF_DAY, hourOfDay)
+                    set(Calendar.MINUTE, minute)
+                }
+                selectedTimestamp = finalCal.timeInMillis
+                dateLabel = dateTimeFormatter.format(finalCal.timeInMillis)
+            },
+            currentCal.get(Calendar.HOUR_OF_DAY),
+            currentCal.get(Calendar.MINUTE),
+            true // 24-hour style
+        )
+
+        val datePicker = DatePickerDialog(
             context,
             { _, year, month, dayOfMonth ->
-                val newCal = Calendar.getInstance().apply {
+                val partialCal = Calendar.getInstance().apply {
+                    timeInMillis = selectedTimestamp
                     set(Calendar.YEAR, year)
                     set(Calendar.MONTH, month)
                     set(Calendar.DAY_OF_MONTH, dayOfMonth)
                 }
-                selectedTimestamp = newCal.timeInMillis
-
-                val todayCal = Calendar.getInstance()
-                val yesterdayCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-
-                dateLabel = if (newCal.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
-                    newCal.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)) {
-                    "Hôm nay"
-                } else if (newCal.get(Calendar.YEAR) == yesterdayCal.get(Calendar.YEAR) &&
-                    newCal.get(Calendar.DAY_OF_YEAR) == yesterdayCal.get(Calendar.DAY_OF_YEAR)) {
-                    "Hôm qua"
-                } else {
-                    String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
-                }
+                selectedTimestamp = partialCal.timeInMillis
+                timePicker.show()
             },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
+            currentCal.get(Calendar.YEAR),
+            currentCal.get(Calendar.MONTH),
+            currentCal.get(Calendar.DAY_OF_MONTH)
         )
+        datePicker.show()
     }
 
     Column(
@@ -112,7 +127,7 @@ fun AddTransactionScreen(
             color = MaterialTheme.colorScheme.onBackground
         )
 
-        // Type Switch Row
+        // 1. Loại tiền (Switch EXPENSE vs INCOME)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -150,73 +165,10 @@ fun AddTransactionScreen(
             }
         }
 
-        // --- Large Money Amount Entry Card ---
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-            shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "SỐ TIỀN PHÁT SINH",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = amountStr,
-                        onValueChange = { newVal -> amountStr = newVal },
-                        textStyle = LocalTextStyle.current.copy(
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selectedType == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
-                            textAlign = TextAlign.Center
-                        ),
-                        placeholder = {
-                            Text(
-                                text = "0",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("tx_amount_text_field"),
-                        singleLine = true
-                    )
-
-                    Text(
-                        text = "₫",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-            }
-        }
-
-        // --- Wallet Selector ---
+        // 2. Tài khoản thanh toán (bố cục 2x2 đẹp mắt)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = "Tài khoản thanh toán / nhận tiền",
+                text = "Tài khoản thanh toán",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -229,118 +181,172 @@ fun AddTransactionScreen(
                     fontSize = 13.sp
                 )
             } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    wallets.forEach { wt ->
-                        val isSelected = selectedWalletId == wt.id
-                        val borderColor = if (isSelected) FormatHelper.parseColor(wt.colorHex)
-                                          else MaterialTheme.colorScheme.outlineVariant
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { selectedWalletId = wt.id },
-                            label = {
-                                Text("${wt.name} (${FormatHelper.formatVND(wt.balance)})")
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = IconMapper.getIconByName(wt.iconName),
-                                    contentDescription = wt.name,
-                                    tint = if (isSelected) Color.White else FormatHelper.parseColor(wt.colorHex),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = FormatHelper.parseColor(wt.colorHex).copy(alpha = 0.25f),
-                                selectedLabelColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = isSelected,
-                                selectedBorderColor = FormatHelper.parseColor(wt.colorHex),
-                                borderColor = MaterialTheme.colorScheme.outlineVariant
-                            ),
-                            modifier = Modifier.testTag("tx_wallet_chip_${wt.id}")
-                        )
+                val chunkedWallets = wallets.chunked(2)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    chunkedWallets.forEach { rowWallets ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowWallets.forEach { wt ->
+                                val isSelected = selectedWalletId == wt.id
+                                val accentColor = FormatHelper.parseColor(wt.colorHex)
+                                val cardColor = if (isSelected) accentColor.copy(alpha = 0.15f)
+                                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                val borderColor = if (isSelected) accentColor
+                                                  else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                                
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(52.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { selectedWalletId = wt.id }
+                                        .testTag("tx_wallet_chip_${wt.id}"),
+                                    colors = CardDefaults.cardColors(containerColor = cardColor),
+                                    border = BorderStroke(if (isSelected) 1.8.dp else 1.dp, borderColor)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .background(accentColor.copy(alpha = 0.15f), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = IconMapper.getIconByName(wt.iconName),
+                                                contentDescription = wt.name,
+                                                tint = accentColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = wt.name,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = FormatHelper.formatVND(wt.balance),
+                                                fontSize = 9.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = "Selected",
+                                                tint = accentColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            if (rowWallets.size < 2) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // --- Category Selector (Visual grid) ---
+        // 3. Hạng mục dạng lưới (các mục bé hơn, 4 cột)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = "Hạng mục / Danh mục chi thu",
+                text = "Hạng mục giao dịch",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                filteredCategories.forEach { cat ->
-                    val isSelected = selectedCategoryName == cat.name
-                    val categoryColor = FormatHelper.parseColor(cat.colorHex)
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clickable { selectedCategoryName = cat.name }
-                            .padding(vertical = 4.dp)
-                            .testTag("category_select_${cat.name}")
+            val chunkedCategories = filteredCategories.chunked(4)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                chunkedCategories.forEach { rowCats ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isSelected) categoryColor
-                                    else categoryColor.copy(alpha = 0.15f)
+                        rowCats.forEach { cat ->
+                            val isSelected = selectedCategoryName == cat.name
+                            val categoryColor = FormatHelper.parseColor(cat.colorHex)
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { selectedCategoryName = cat.name }
+                                    .padding(vertical = 4.dp)
+                                    .testTag("category_select_${cat.name}")
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isSelected) categoryColor
+                                            else categoryColor.copy(alpha = 0.12f)
+                                        )
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onSurface else categoryColor.copy(alpha = 0.5f),
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = IconMapper.getIconByName(cat.iconName),
+                                        contentDescription = cat.name,
+                                        tint = if (isSelected) Color.White else categoryColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = cat.name,
+                                    fontSize = 9.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                                .border(
-                                    width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else categoryColor,
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = IconMapper.getIconByName(cat.iconName),
-                                contentDescription = cat.name,
-                                tint = if (isSelected) Color.White else categoryColor,
-                                modifier = Modifier.size(24.dp)
-                            )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = cat.name,
-                            fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        if (rowCats.size < 4) {
+                            for (i in 0 until (4 - rowCats.size)) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // --- Notes Input field ---
+        // 4 & 6. Ghi chú hóa đơn/mô tả
         OutlinedTextField(
             value = note,
             onValueChange = { note = it },
-            label = { Text("Ghi chú hóa đơn / mô tả") },
+            label = { Text("Ghi chú / Mô tả giao dịch") },
             leadingIcon = { Icon(imageVector = Icons.Default.EditNote, contentDescription = "Note") },
             modifier = Modifier.fillMaxWidth().testTag("tx_note_input"),
-            singleLine = true
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+            )
         )
 
-        // --- Dates Inline Selection Row ---
+        // 5. Thời gian (Có chức năng lấy thời gian nhanh, format HH:mm dd/MM/yyyy)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = "Thời gian phát sinh",
@@ -349,40 +355,83 @@ fun AddTransactionScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = dateTimeFormatter.format(selectedTimestamp),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Ngày & Giờ (HH:mm dd/MM/yyyy)") },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Schedule, contentDescription = "Time") },
+                    trailingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Calendar",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showDateTimePicker() }
+                )
+            }
+
+            // Chức năng lấy thời gian nhanh
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Today Button
+                // "Bây giờ" Quick choice
                 FilterChip(
-                    selected = dateLabel == "Hôm nay",
+                    selected = false,
                     onClick = {
-                        selectedTimestamp = Calendar.getInstance().timeInMillis
-                        dateLabel = "Hôm nay"
+                        selectedTimestamp = System.currentTimeMillis()
+                        dateLabel = "Bây giờ"
                     },
-                    label = { Text("Hôm nay") }
+                    label = { Text("Bây giờ ⚡") },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                    )
                 )
 
-                // Yesterday Button
+                // Today at 08:00
                 FilterChip(
-                    selected = dateLabel == "Hôm qua",
+                    selected = false,
                     onClick = {
-                        selectedTimestamp = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }.timeInMillis
+                        selectedTimestamp = Calendar.getInstance().apply {
+                            set(Calendar.HOUR_OF_DAY, 8)
+                            set(Calendar.MINUTE, 0)
+                        }.timeInMillis
+                        dateLabel = "Hôm nay"
+                    },
+                    label = { Text("08:00 Sáng") }
+                )
+
+                // Yesterday
+                FilterChip(
+                    selected = false,
+                    onClick = {
+                        selectedTimestamp = Calendar.getInstance().apply {
+                            add(Calendar.DAY_OF_YEAR, -1)
+                        }.timeInMillis
                         dateLabel = "Hôm qua"
                     },
                     label = { Text("Hôm qua") }
                 )
-
-                // Calendar Dialog Button
-                FilterChip(
-                    selected = dateLabel != "Hôm nay" && dateLabel != "Hôm qua",
-                    onClick = { datePickerDialog.show() },
-                    label = { Text(if (dateLabel == "Hôm nay" || dateLabel == "Hôm qua") "Khác..." else dateLabel) },
-                    leadingIcon = { Icon(imageVector = Icons.Default.DateRange, contentDescription = "Calendar", modifier = Modifier.size(16.dp)) }
-                )
             }
         }
+
+        // 7. Số tiền
+        com.example.ui.components.CustomMoneyInputField(
+            value = rawExpression,
+            onValueChange = { rawExpression = it },
+            label = "Số tiền phát sinh",
+            testTag = "tx_amount_text_field"
+        )
 
         // --- Recurring Transaction Setup Section ---
         Card(
@@ -436,12 +485,12 @@ fun AddTransactionScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Save Button
+        // 8. Lưu
         Button(
             onClick = {
-                val amount = amountStr.toDoubleOrNull() ?: 0.0
+                val amount = FormatHelper.evaluateExpression(rawExpression)
                 val walletId = selectedWalletId
                 if (amount > 0 && walletId != null) {
                     viewModel.addTransaction(
@@ -457,15 +506,19 @@ fun AddTransactionScreen(
                     onSuccess()
                 }
             },
-            enabled = (amountStr.toDoubleOrNull() ?: 0.0) > 0.0 && selectedWalletId != null,
+            enabled = FormatHelper.evaluateExpression(rawExpression) > 0.0 && selectedWalletId != null,
             modifier = Modifier.fillMaxWidth().height(52.dp).testTag("save_transaction_btn"),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (selectedType == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
+                contentColor = Color.White
+            ),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
         ) {
             Text(
                 text = "LƯU GIAO DỊCH",
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+                fontWeight = FontWeight.Bold
             )
         }
 

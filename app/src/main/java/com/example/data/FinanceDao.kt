@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface FinanceDao {
     // ---- Wallets ----
-    @Query("SELECT * FROM wallets ORDER BY id ASC")
+    @Query("SELECT * FROM wallets ORDER BY displayOrder ASC, id ASC")
     fun getAllWallets(): Flow<List<Wallet>>
 
     @Query("SELECT * FROM wallets WHERE id = :id")

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.Budget
 import com.example.data.Categories
+import com.example.data.FinanceCategory
 import com.example.data.SavingsGoal
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
@@ -79,7 +80,16 @@ fun BudgetsSection(
 ) {
     val budgets by viewModel.allBudgets.collectAsState()
     val activeMonth by viewModel.activeMonth.collectAsState()
+    val categoriesList by viewModel.categoriesList.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
+
+    val displayBudgetMonth = remember(activeMonth) {
+        if (activeMonth.length >= 7) {
+            "Tháng ${activeMonth.substring(5)}/${activeMonth.substring(0, 4)}"
+        } else {
+            activeMonth
+        }
+    }
 
     // Filter budgets for the active month
     val filteredBudgets = remember(budgets, activeMonth) {
@@ -94,7 +104,7 @@ fun BudgetsSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Ngân Sách: Tháng ${activeMonth.substring(5)}/${activeMonth.substring(0,4)}",
+                    text = "Ngân Sách: $displayBudgetMonth",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -156,6 +166,7 @@ fun BudgetsSection(
 
         if (showAddDialog) {
             AddBudgetDialog(
+                categoriesList = categoriesList,
                 onDismiss = { showAddDialog = false },
                 onAddBudget = { category, limit ->
                     viewModel.addBudget(category, limit, activeMonth)
@@ -288,10 +299,14 @@ fun BudgetItemCard(
 
 @Composable
 fun AddBudgetDialog(
+    categoriesList: List<FinanceCategory>,
     onDismiss: () -> Unit,
     onAddBudget: (String, Double) -> Unit
 ) {
-    var selectedCategory by remember { mutableStateOf(Categories.list.first { it.type == "EXPENSE" }.name) }
+    var selectedCategory by remember {
+        val defaultExpenseCat = categoriesList.firstOrNull { it.type == "EXPENSE" } ?: categoriesList.firstOrNull()
+        mutableStateOf(defaultExpenseCat?.name ?: "Khác")
+    }
     var limitStr by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -311,7 +326,7 @@ fun AddBudgetDialog(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Categories.list.filter { it.type == "EXPENSE" }.forEach { cat ->
+                        categoriesList.filter { it.type == "EXPENSE" || it.type == "BOTH" }.forEach { cat ->
                             FilterChip(
                                 selected = selectedCategory == cat.name,
                                 onClick = { selectedCategory = cat.name },
@@ -321,19 +336,18 @@ fun AddBudgetDialog(
                     }
                 }
 
-                OutlinedTextField(
+                com.example.ui.components.CustomMoneyInputField(
                     value = limitStr,
                     onValueChange = { limitStr = it },
-                    label = { Text("Hạn mức tối đa (VND)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().testTag("budget_limit_input")
+                    label = "Hạn mức tối đa (VND)",
+                    testTag = "budget_limit_input"
                 )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val lm = limitStr.toDoubleOrNull() ?: 0.0
+                    val lm = FormatHelper.evaluateExpression(limitStr)
                     if (lm > 0) {
                         onAddBudget(selectedCategory, lm)
                     }
@@ -628,20 +642,18 @@ fun AddSavingsGoalDialog(
                     modifier = Modifier.fillMaxWidth().testTag("goal_name")
                 )
 
-                OutlinedTextField(
+                com.example.ui.components.CustomMoneyInputField(
                     value = targetStr,
                     onValueChange = { targetStr = it },
-                    label = { Text("Số tiền mục tiêu (VND)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().testTag("goal_target")
+                    label = "Số tiền mục tiêu (VND)",
+                    testTag = "goal_target"
                 )
 
-                OutlinedTextField(
+                com.example.ui.components.CustomMoneyInputField(
                     value = currentStr,
                     onValueChange = { currentStr = it },
-                    label = { Text("Đã tích lũy sẵn (VND)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().testTag("goal_current")
+                    label = "Đã tích lũy sẵn (VND)",
+                    testTag = "goal_current"
                 )
 
                 OutlinedTextField(
@@ -664,8 +676,8 @@ fun AddSavingsGoalDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val tg = targetStr.toDoubleOrNull() ?: 0.0
-                    val cr = currentStr.toDoubleOrNull() ?: 0.0
+                    val tg = FormatHelper.evaluateExpression(targetStr)
+                    val cr = FormatHelper.evaluateExpression(currentStr)
                     if (name.isNotEmpty() && tg > 0) {
                         onAddGoal(name, tg, cr, selectedTimestamp, notes)
                     }
@@ -700,19 +712,18 @@ fun AddFundsGoalDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(text = "Đóng góp ngân sách tích lũy tích cực cho: ${goal.name}", fontSize = 13.sp)
-                OutlinedTextField(
+                com.example.ui.components.CustomMoneyInputField(
                     value = amountStr,
                     onValueChange = { amountStr = it },
-                    label = { Text("Số tiền tích lũy thêm (VND)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().testTag("add_funds_input")
+                    label = "Số tiền tích lũy thêm (VND)",
+                    testTag = "add_funds_input"
                 )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val am = amountStr.toDoubleOrNull() ?: 0.0
+                    val am = FormatHelper.evaluateExpression(amountStr)
                     if (am > 0) {
                         onAddFunds(am)
                     }

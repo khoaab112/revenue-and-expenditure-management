@@ -30,8 +30,8 @@ fun WalletsScreen(
     viewModel: FinanceViewModel,
     modifier: Modifier = Modifier
 ) {
-    val wallets by viewModel.allWallets.collectAsState()
-    val transactions by viewModel.allTransactions.collectAsState()
+    val wallets by viewModel.dailyWallets.collectAsState()
+    val transactions by viewModel.dailyTransactions.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedWalletForTransactions by remember { mutableStateOf<Wallet?>(null) }
@@ -289,6 +289,8 @@ fun AddWalletDialog(
 
     val colors = listOf("#FF5722", "#2196F3", "#E91E63", "#4CAF50", "#9C27B0", "#FFC107", "#009688", "#607D8B")
     var selectedColor by remember { mutableStateOf(colors.first()) }
+    var isCustomColorActive by remember { mutableStateOf(false) }
+    var customColorHex by remember { mutableStateOf("#9C27B0") }
 
     val icons = listOf("Payments", "AccountBalance", "AccountBalanceWallet", "Savings")
     var selectedIcon by remember { mutableStateOf(icons.first()) }
@@ -310,47 +312,51 @@ fun AddWalletDialog(
                     modifier = Modifier.fillMaxWidth().testTag("new_wallet_name_input")
                 )
 
-                // Type select
-                Column {
+                // Type select in a 2x2 grid
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Loại Ví", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val types = listOf(
-                            "CASH" to "Tiền mặt",
-                            "BANK" to "Ngân hàng",
-                            "WALLET" to "Ví điện tử",
-                            "SAVINGS" to "Tiết kiệm"
-                        )
-                        types.forEach { (typeVal, label) ->
-                            FilterChip(
-                                selected = selectedType == typeVal,
-                                onClick = { selectedType = typeVal },
-                                label = { Text(label) }
-                            )
+                    val types = listOf(
+                        "CASH" to "Tiền mặt",
+                        "BANK" to "Ngân hàng",
+                        "WALLET" to "Ví điện tử",
+                        "SAVINGS" to "Tiết kiệm"
+                    )
+                    val chunked = types.chunked(2)
+                    chunked.forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowItems.forEach { (typeVal, label) ->
+                                FilterChip(
+                                    selected = selectedType == typeVal,
+                                    onClick = { selectedType = typeVal },
+                                    label = { Text(label, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
 
-                OutlinedTextField(
+                com.example.ui.components.CustomMoneyInputField(
                     value = startingBalanceStr,
                     onValueChange = { startingBalanceStr = it },
-                    label = { Text("Số dư ban đầu (VND)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().testTag("new_wallet_balance_input")
+                    label = "Số dư ban đầu (VND)",
+                    testTag = "new_wallet_balance_input"
                 )
 
-                // Color picker
-                Column {
+                // Color picker & custom color support
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Màu Sắc Đại Diện", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Predefined colors
                         colors.forEach { colHex ->
+                            val isSelected = !isCustomColorActive && selectedColor == colHex
                             val col = FormatHelper.parseColor(colHex)
                             Box(
                                 modifier = Modifier
@@ -358,13 +364,58 @@ fun AddWalletDialog(
                                     .clip(CircleShape)
                                     .background(col)
                                     .border(
-                                        width = if (selectedColor == colHex) 3.dp else 0.dp,
+                                        width = if (isSelected) 3.dp else 0.dp,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         shape = CircleShape
                                     )
-                                    .clickable { selectedColor = colHex }
+                                    .clickable { 
+                                        isCustomColorActive = false
+                                        selectedColor = colHex
+                                    }
                             )
                         }
+
+                        // Custom color circle option
+                        val currentCustColor = try {
+                            FormatHelper.parseColor(customColorHex)
+                        } catch (e: Exception) {
+                            Color.Gray
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(currentCustColor)
+                                .clickable { 
+                                    isCustomColorActive = true
+                                    selectedColor = customColorHex
+                                }
+                                .border(
+                                    BorderStroke(
+                                        width = if (isCustomColorActive) 3.dp else 0.dp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = "Custom color",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    if (isCustomColorActive) {
+                        com.example.ui.components.ColorSliderPicker(
+                            initialColorHex = selectedColor,
+                            onColorChanged = { newHex ->
+                                selectedColor = newHex
+                                customColorHex = newHex
+                            }
+                        )
                     }
                 }
 
@@ -404,7 +455,7 @@ fun AddWalletDialog(
             Button(
                 onClick = {
                     if (walletName.isNotEmpty()) {
-                        val bal = startingBalanceStr.toDoubleOrNull() ?: 0.0
+                        val bal = FormatHelper.evaluateExpression(startingBalanceStr)
                         onAddWallet(walletName, selectedType, bal, selectedColor, selectedIcon)
                     }
                 },

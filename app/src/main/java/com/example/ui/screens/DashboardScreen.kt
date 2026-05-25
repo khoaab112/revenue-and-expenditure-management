@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,8 +37,8 @@ fun DashboardScreen(
     onNavigateToBudget: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val wallets by viewModel.allWallets.collectAsState()
-    val transactions by viewModel.allTransactions.collectAsState()
+    val wallets by viewModel.dailyWallets.collectAsState()
+    val transactions by viewModel.dailyTransactions.collectAsState()
     val activeMonth by viewModel.activeMonth.collectAsState()
 
     val totalBalance = wallets.sumOf { it.balance }
@@ -54,6 +55,14 @@ fun DashboardScreen(
 
     val totalIncome = currentMonthTransactions.filter { it.type == "INCOME" }.sumOf { it.amount }
     val totalExpense = currentMonthTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+
+    val displayMonth = remember(activeMonth) {
+        if (activeMonth.length >= 7) {
+            "${activeMonth.substring(5)}/${activeMonth.substring(2, 4)}"
+        } else {
+            activeMonth
+        }
+    }
 
     Column(
         modifier = modifier
@@ -116,7 +125,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Thu nhập (${activeMonth.substring(5)}/${activeMonth.substring(2,4)})",
+                                text = "Thu nhập ($displayMonth)",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                             )
@@ -139,7 +148,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Chi tiêu (${activeMonth.substring(5)}/${activeMonth.substring(2,4)})",
+                                text = "Chi tiêu ($displayMonth)",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                             )
@@ -196,12 +205,23 @@ fun DashboardScreen(
                 )
             }
         } else {
+            val walletChunks = remember(wallets) { wallets.chunked(4) }
+            val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+            val chunkWidth = remember(walletChunks.size, screenWidth) {
+                if (walletChunks.size > 1) screenWidth - 48.dp else screenWidth - 32.dp
+            }
+
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp),
                 modifier = Modifier.fillMaxWidth().testTag("dashboard_wallets_row")
             ) {
-                items(wallets, key = { it.id }) { wallet ->
-                    WalletMiniCard(wallet = wallet, onClick = onNavigateToWallets)
+                items(walletChunks) { chunk ->
+                    WalletChunkGrid(
+                        chunk = chunk,
+                        onWalletClick = onNavigateToWallets,
+                        modifier = Modifier.width(chunkWidth)
+                    )
                 }
             }
         }
@@ -401,7 +421,6 @@ fun WalletMiniCard(
 ) {
     Card(
         modifier = modifier
-            .width(160.dp)
             .height(110.dp)
             .clickable { onClick() }
             .testTag("wallet_mini_${wallet.id}"),
@@ -532,3 +551,68 @@ fun RecentTransactionItem(
         )
     }
 }
+
+@Composable
+fun WalletChunkGrid(
+    chunk: List<Wallet>,
+    onWalletClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Row 1 (Item 0 and Item 1)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (chunk.isNotEmpty()) {
+                WalletMiniCard(
+                    wallet = chunk[0],
+                    onClick = onWalletClick,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            if (chunk.size > 1) {
+                WalletMiniCard(
+                    wallet = chunk[1],
+                    onClick = onWalletClick,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+
+        // Row 2 (Item 2 and Item 3)
+        if (chunk.size > 2) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                WalletMiniCard(
+                    wallet = chunk[2],
+                    onClick = onWalletClick,
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (chunk.size > 3) {
+                    WalletMiniCard(
+                        wallet = chunk[3],
+                        onClick = onWalletClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+

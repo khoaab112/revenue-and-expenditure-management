@@ -158,10 +158,10 @@ class FinanceRepository(private val dao: FinanceDao) {
         val wallets = dao.getAllWallets().firstOrNull()
         if (wallets.isNullOrEmpty()) {
             // Seed default wallets
-            dao.insertWallet(Wallet(name = "Tiền mặt", type = "CASH", balance = 5000000.0, colorHex = "#FF5722", iconName = "Payments"))
-            dao.insertWallet(Wallet(name = "Tài khoản ngân hàng", type = "BANK", balance = 15000000.0, colorHex = "#2196F3", iconName = "AccountBalance"))
-            dao.insertWallet(Wallet(name = "Ví MoMo", type = "WALLET", balance = 2000000.0, colorHex = "#E91E63", iconName = "AccountBalanceWallet"))
-            dao.insertWallet(Wallet(name = "Hũ Tiết Kiệm", type = "SAVINGS", balance = 10000000.0, colorHex = "#4CAF50", iconName = "Savings"))
+            dao.insertWallet(Wallet(name = "Tiền mặt", type = "CASH", balance = 5000000.0, colorHex = "#FF5722", iconName = "Payments", displayOrder = 0))
+            dao.insertWallet(Wallet(name = "Tài khoản ngân hàng", type = "BANK", balance = 15000000.0, colorHex = "#2196F3", iconName = "AccountBalance", displayOrder = 1))
+            dao.insertWallet(Wallet(name = "Ví MoMo", type = "WALLET", balance = 2000000.0, colorHex = "#E91E63", iconName = "AccountBalanceWallet", displayOrder = 2))
+            dao.insertWallet(Wallet(name = "Hũ Tiết Kiệm", type = "SAVINGS", balance = 10000000.0, colorHex = "#4CAF50", iconName = "Savings", displayOrder = 3))
 
             // Seed default budgets for the current month
             val cal = Calendar.getInstance()
