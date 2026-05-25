@@ -37,6 +37,7 @@ import com.example.data.Wallet
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
 import com.example.ui.IconMapper
+import com.example.ui.components.CustomMoneyInputField
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -786,7 +787,13 @@ fun CategoryManagementDialog(
     var customColorHex by remember { mutableStateOf("#9C27B0") }
     
     val colorPalette = listOf("#F44336", "#2196F3", "#4CAF50", "#FFC107", "#9C27B0", "#009688", "#E91E63", "#795548")
-    val iconPalette = listOf("Restaurant", "DirectionsCar", "ShoppingBag", "Receipt", "SportsEsports", "School", "LocalHospital", "Home", "Work", "CardGiftcard", "Storefront")
+    val iconPalette = listOf(
+        "Restaurant", "DirectionsCar", "ShoppingBag", "Receipt", 
+        "SportsEsports", "School", "LocalHospital", "Home", 
+        "Work", "CardGiftcard", "Storefront", "Payments", 
+        "AccountBalance", "AccountBalanceWallet", "Savings", 
+        "TrendingUp", "TrendingDown", "Lock", "Settings"
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -938,27 +945,46 @@ fun CategoryManagementDialog(
                             }
 
                             // Icons grid
-                            Column {
-                                Text("Biểu tượng hiển thị", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Biểu tượng hiển thị (Lưới biểu tượng)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                        .padding(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    iconPalette.forEach { iconName ->
-                                        val isSelected = selectedIcon == iconName
-                                        IconButton(
-                                            onClick = { selectedIcon = iconName },
-                                            modifier = Modifier
-                                                .background(
-                                                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                                    shape = RoundedCornerShape(8.dp)
-                                                )
+                                    iconPalette.chunked(6).forEach { rowIcons ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start)
                                         ) {
-                                            Icon(
-                                                imageVector = IconMapper.getIconByName(iconName),
-                                                contentDescription = iconName,
-                                                tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            rowIcons.forEach { iconName ->
+                                                val isSelected = selectedIcon == iconName
+                                                IconButton(
+                                                    onClick = { selectedIcon = iconName },
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .background(
+                                                            if (isSelected) MaterialTheme.colorScheme.primaryContainer 
+                                                            else MaterialTheme.colorScheme.surface,
+                                                            shape = RoundedCornerShape(8.dp)
+                                                        )
+                                                        .border(
+                                                            width = 1.dp,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.primary 
+                                                                    else MaterialTheme.colorScheme.outlineVariant,
+                                                            shape = RoundedCornerShape(8.dp)
+                                                        )
+                                                ) {
+                                                    Icon(
+                                                        imageVector = IconMapper.getIconByName(iconName),
+                                                        contentDescription = iconName,
+                                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer 
+                                                               else MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1320,27 +1346,27 @@ fun SavingsManagementDialog(
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = { isDeposit = true },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isDeposit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        containerColor = if (isDeposit) Color(0xFF4CAF50) else MaterialTheme.colorScheme.surfaceVariant,
                                         contentColor = if (isDeposit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 ) {
-                                    Icon(imageVector = Icons.Default.TrendingUp, contentDescription = "In")
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Nạp Tiết Kiệm")
+                                    Text("Nạp", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 }
                                 Button(
                                     onClick = { isDeposit = false },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (!isDeposit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant,
+                                        containerColor = if (!isDeposit) Color(0xFFF44336) else MaterialTheme.colorScheme.surfaceVariant,
                                         contentColor = if (!isDeposit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 ) {
-                                    Icon(imageVector = Icons.Default.TrendingDown, contentDescription = "Out")
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Rút Tiết Kiệm")
+                                    Text("Rút", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 }
                             }
 
@@ -1366,11 +1392,10 @@ fun SavingsManagementDialog(
                             }
 
                             // Amount input
-                            OutlinedTextField(
+                            CustomMoneyInputField(
                                 value = amountStr,
                                 onValueChange = { amountStr = it },
-                                label = { Text("Số tiền thực thi (đ)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                label = "Số tiền",
                                 modifier = Modifier.fillMaxWidth().testTag("savings_amount_input")
                             )
 
@@ -1513,7 +1538,7 @@ fun SavingsManagementDialog(
                             },
                             leadingContent = {
                                 Icon(
-                                    imageVector = if (tx.type == "INCOME") Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                                    imageVector = if (tx.type == "INCOME") Icons.Default.Add else Icons.Default.Remove,
                                     contentDescription = tx.type,
                                     tint = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                 )
@@ -1534,8 +1559,19 @@ fun SavingsManagementDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Đóng")
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("close_savings_management_btn"),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Text("Đóng", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
     )
