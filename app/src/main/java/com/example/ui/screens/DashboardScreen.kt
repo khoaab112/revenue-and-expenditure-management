@@ -535,7 +535,7 @@ fun RecentTransactionItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = FormatHelper.formatDate(tx.timestamp),
+                    text = "${FormatHelper.formatDate(tx.timestamp)} ${java.text.SimpleDateFormat("HH:mm", java.util.Locale("vi", "VN")).format(tx.timestamp)}",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

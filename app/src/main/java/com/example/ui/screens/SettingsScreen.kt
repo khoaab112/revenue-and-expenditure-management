@@ -1530,30 +1530,71 @@ fun SavingsManagementDialog(
                         Text("Không có lịch sử biến động hũ tiết kiệm.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    savingsTransactions.forEach { tx ->
-                        ListItem(
-                            headlineContent = { Text(tx.note, fontWeight = FontWeight.Bold, maxLines = 1) },
-                            supportingContent = {
-                                Text("${tx.walletName} • ${SimpleDateFormat("HH:mm dd/MM/yyyy", Locale("vi", "VN")).format(tx.timestamp)}")
-                            },
-                            leadingContent = {
-                                Icon(
-                                    imageVector = if (tx.type == "INCOME") Icons.Default.Add else Icons.Default.Remove,
-                                    contentDescription = tx.type,
-                                    tint = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                )
-                            },
-                            trailingContent = {
-                                Text(
-                                    text = "${if (tx.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(tx.amount)}",
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                )
-                            },
+                    val groupedTxs = remember(savingsTransactions) {
+                        savingsTransactions.groupBy { FormatHelper.formatDate(it.timestamp) }
+                    }
+                    groupedTxs.forEach { (dateStr, txList) ->
+                        // Timeline milestone / date group header
+                        Row(
                             modifier = Modifier
-                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-                        )
+                                .fillMaxWidth()
+                                .padding(top = 10.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "Date",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = dateStr,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        txList.forEach { tx ->
+                            ListItem(
+                                headlineContent = { 
+                                    Text(
+                                        text = tx.note, 
+                                        fontWeight = FontWeight.Medium, 
+                                        fontSize = 13.sp, 
+                                        maxLines = 1,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ) 
+                                },
+                                supportingContent = {
+                                    Text(
+                                        text = "${tx.walletName} • ${SimpleDateFormat("HH:mm", Locale("vi", "VN")).format(tx.timestamp)}",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    )
+                                },
+                                leadingContent = {
+                                    Icon(
+                                        imageVector = if (tx.type == "INCOME") Icons.Default.Add else Icons.Default.Remove,
+                                        contentDescription = tx.type,
+                                        tint = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    )
+                                },
+                                trailingContent = {
+                                    Text(
+                                        text = "${if (tx.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(tx.amount)}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    )
+                                },
+                                modifier = Modifier
+                                    .padding(vertical = 2.dp)
+                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                            )
+                        }
                     }
                 }
             }
