@@ -27,10 +27,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.Categories
+import com.example.data.FinanceCategory
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
 import com.example.ui.IconMapper
 import java.util.Calendar
+import kotlinx.coroutines.launch
+
+data class SmartCategorySuggestion(
+    val category: FinanceCategory,
+    val score: Double,
+    val reason: String
+)
 
 @Composable
 fun AddTransactionScreen(
@@ -39,6 +47,8 @@ fun AddTransactionScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
     val wallets by viewModel.dailyWallets.collectAsState()
     val categoriesList by viewModel.categoriesList.collectAsState()
     val allTransactions by viewModel.allTransactions.collectAsState()
@@ -58,6 +68,13 @@ fun AddTransactionScreen(
     var selectedTimestamp by remember { mutableStateOf(calendar.timeInMillis) }
     var dateLabel by remember { mutableStateOf("Hôm nay") }
 
+    // Smart Select State Management
+    var hasManuallySelected by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedType) {
+        hasManuallySelected = false
+    }
+
     // Auto-select first wallet if available
     LaunchedEffect(wallets) {
         if (selectedWalletId == null && wallets.isNotEmpty()) {
@@ -68,6 +85,174 @@ fun AddTransactionScreen(
     // Filter categories depending on type
     val filteredCategories = remember(categoriesList, selectedType) {
         categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+    }
+
+    val currentAmount = remember(rawExpression) {
+        FormatHelper.evaluateExpression(rawExpression)
+    }
+
+    // Compute intelligent category suggestions in real-time
+    val smartSuggestions = remember(
+        currentAmount,
+        note,
+        selectedType,
+        selectedWalletId,
+        selectedTimestamp,
+        allTransactions,
+        filteredCategories
+    ) {
+        if (currentAmount <= 0.0) return@remember emptyList<SmartCategorySuggestion>()
+        if (allTransactions.isEmpty() || filteredCategories.isEmpty()) return@remember emptyList<SmartCategorySuggestion>()
+
+        val typeTxs = allTransactions.filter { it.type == selectedType }
+        if (typeTxs.isEmpty()) return@remember emptyList<SmartCategorySuggestion>()
+
+        val latestTxCategory = typeTxs.maxByOrNull { it.timestamp }?.categoryName
+        val frequencyMap = typeTxs.groupBy { it.categoryName }.mapValues { it.value.size }
+
+        // Group similar amounts of the same type
+        val exactAmountMatches = if (currentAmount > 0.0) {
+            typeTxs.filter { it.amount == currentAmount }
+        } else {
+            emptyList()
+        }
+
+        filteredCategories.mapNotNull { cat ->
+            val cName = cat.name
+            var categoryScore = 0.0
+            val reasonsList = mutableListOf<String>()
+
+            // 1. Base Frequency Usage bias (Max 15)
+            val occurrences = frequencyMap.getOrDefault(cName, 0)
+            if (occurrences > 0) {
+                categoryScore += Math.min(15.0, occurrences * 1.5)
+            }
+
+            // 2. Most recent transaction bias (10 pts)
+            if (cName == latestTxCategory) {
+                categoryScore += 10.0
+            }
+
+            // 3. Amount consistency bonus (from previous similar amounts)
+            if (exactAmountMatches.isNotEmpty()) {
+                val amountMatchesForCat = exactAmountMatches.filter { it.categoryName == cName }.size
+                val amountRatio = amountMatchesForCat.toDouble() / exactAmountMatches.size
+                if (amountMatchesForCat >= 1) {
+                    if (amountRatio >= 0.7 && exactAmountMatches.size >= 2) {
+                        categoryScore += 45.0
+                        reasonsList.add("Thường chi mức này")
+                    } else {
+                        categoryScore += 15.0
+                        reasonsList.add("Có chi mức này")
+                    }
+                }
+            }
+
+            // 4. Historical comparison logic
+            val txsToCheck = typeTxs.take(150)
+            var historicalMaxForCat = 0.0
+            var bestReasonForCat = ""
+
+            for (tx in txsToCheck) {
+                if (tx.categoryName != cName) continue
+
+                var txRawScore = 0.0
+                val currentTxReasons = mutableListOf<String>()
+
+                // Match note
+                if (note.isNotBlank() && tx.note.isNotBlank()) {
+                    val curNoteNorm = note.trim().lowercase()
+                    val txNoteNorm = tx.note.trim().lowercase()
+                    
+                    if (curNoteNorm == txNoteNorm) {
+                        txRawScore += 70.0
+                        currentTxReasons.add("Ghi chú y hệt")
+                    } else if (curNoteNorm.contains(txNoteNorm) || txNoteNorm.contains(curNoteNorm)) {
+                        txRawScore += 45.0
+                        currentTxReasons.add("Ghi chú tương đồng")
+                    }
+                }
+
+                // Match exact or close amounts
+                if (currentAmount > 0.0) {
+                    if (currentAmount == tx.amount) {
+                         txRawScore += 20.0
+                         currentTxReasons.add("Số tiền giống")
+                    } else {
+                        val diff = Math.abs(currentAmount - tx.amount)
+                        val maxAmt = Math.max(currentAmount, tx.amount)
+                        if (maxAmt > 0 && diff / maxAmt <= 0.1) {
+                            txRawScore += 15.0
+                            currentTxReasons.add("Số tiền tương tự")
+                        } else if (maxAmt > 0 && diff / maxAmt <= 0.25) {
+                            txRawScore += 10.0
+                            currentTxReasons.add("Số tiền hơi giống")
+                        }
+                    }
+                }
+
+                // Match hours
+                val calCurrent = Calendar.getInstance().apply { timeInMillis = selectedTimestamp }
+                val calTx = Calendar.getInstance().apply { timeInMillis = tx.timestamp }
+                val currHour = calCurrent.get(Calendar.HOUR_OF_DAY)
+                val txHour = calTx.get(Calendar.HOUR_OF_DAY)
+                val hourDiff = Math.abs(currHour - txHour)
+                if (hourDiff == 0 || hourDiff == 23) {
+                    txRawScore += 10.0
+                    currentTxReasons.add("Cùng khung giờ")
+                } else if (hourDiff <= 2 || hourDiff >= 22) {
+                    txRawScore += 7.0
+                    currentTxReasons.add("Gần khung giờ")
+                }
+
+                // Match wallet
+                if (selectedWalletId != null && tx.walletId == selectedWalletId) {
+                    txRawScore += 5.0
+                    currentTxReasons.add("Cùng tài khoản")
+                }
+
+                // Recency preference
+                val daysAgo = (selectedTimestamp - tx.timestamp) / (24L * 60L * 60L * 1000L).toDouble()
+                val recencyWeight = 1.0 / (1.0 + Math.max(0.0, daysAgo) / 30.0)
+
+                val weightedScore = txRawScore * recencyWeight
+                if (weightedScore > historicalMaxForCat) {
+                    historicalMaxForCat = weightedScore
+                    bestReasonForCat = currentTxReasons.joinToString(", ")
+                }
+            }
+
+            categoryScore += historicalMaxForCat
+            
+            if (categoryScore > 10.0) {
+                val displayReason = if (bestReasonForCat.isNotEmpty()) {
+                    bestReasonForCat
+                } else if (reasonsList.isNotEmpty()) {
+                    reasonsList.joinToString(", ")
+                } else {
+                    "Danh mục quen thuộc"
+                }
+                SmartCategorySuggestion(
+                    category = cat,
+                    score = Math.min(100.0, categoryScore),
+                    reason = displayReason
+                )
+            } else {
+                null
+            }
+        }.sortedByDescending { it.score }.take(3)
+    }
+
+    // High confidence trigger for auto-selecting category
+    LaunchedEffect(smartSuggestions) {
+        if (!hasManuallySelected && smartSuggestions.isNotEmpty()) {
+            val topSuggest = smartSuggestions.first()
+            if (topSuggest.score >= 65.0) {
+                if (selectedCategoryName != topSuggest.category.name) {
+                    selectedCategoryName = topSuggest.category.name
+                }
+            }
+        }
     }
 
     val categoryUsageCounts = remember(allTransactions) {
@@ -136,7 +321,7 @@ fun AddTransactionScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -191,6 +376,12 @@ fun AddTransactionScreen(
             value = rawExpression,
             onValueChange = { rawExpression = it },
             label = "Số tiền phát sinh",
+            autoFocus = true,
+            onDismissKeyboard = {
+                scope.launch {
+                    scrollState.animateScrollTo(0)
+                }
+            },
             testTag = "tx_amount_text_field"
         )
 
@@ -299,6 +490,126 @@ fun AddTransactionScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
+            // Dynamic horizontal view containing top 3 smart suggestions
+            if (allTransactions.isNotEmpty() && smartSuggestions.isNotEmpty()) {
+                AnimatedVisibility(
+                    visible = smartSuggestions.isNotEmpty(),
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lightbulb,
+                                contentDescription = "Gợi ý thông minh",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Gợi ý nhanh (tối đa 3):",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            smartSuggestions.forEach { suggestion ->
+                                val cat = suggestion.category
+                                val isSelected = selectedCategoryName == cat.name
+                                val isAutoSelected = !hasManuallySelected && suggestion.score >= 65.0 && isSelected
+                                val accentColor = try { FormatHelper.parseColor(cat.colorHex) } catch (e: Exception) { Color.Gray }
+
+                                val chipBg = if (isSelected) {
+                                    accentColor.copy(alpha = 0.15f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                }
+
+                                val chipBorder = if (isAutoSelected) {
+                                    BorderStroke(1.2.dp, if (selectedType == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50))
+                                } else if (isSelected) {
+                                    BorderStroke(1.2.dp, accentColor)
+                                } else {
+                                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                }
+
+                                Surface(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            selectedCategoryName = cat.name
+                                            hasManuallySelected = true
+                                        }
+                                        .testTag("smart_suggest_${cat.name}"),
+                                    color = chipBg,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = chipBorder
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = IconMapper.getIconByName(cat.iconName),
+                                            contentDescription = cat.name,
+                                            tint = accentColor,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Text(
+                                            text = cat.name,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (isAutoSelected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(
+                                                        if (selectedType == "EXPENSE") Color(0xFFF44336).copy(alpha = 0.12f)
+                                                        else Color(0xFF4CAF50).copy(alpha = 0.12f),
+                                                        RoundedCornerShape(3.dp)
+                                                    )
+                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Tự động chọn",
+                                                    fontSize = 7.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (selectedType == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
+                                                )
+                                            }
+                                        } else {
+                                            Text(
+                                                text = "${suggestion.score.toInt()}%",
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             val chunkedCategories = parentCategories.chunked(4)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val currentSelectedCategory = filteredCategories.firstOrNull { it.name == selectedCategoryName }
@@ -320,6 +631,7 @@ fun AddTransactionScreen(
                                         .fillMaxWidth()
                                         .clickable {
                                             selectedCategoryName = cat.name // select this parent category. SubCats will show below.
+                                            hasManuallySelected = true
                                         }
                                         .padding(vertical = 4.dp)
                                         .testTag("category_select_${cat.name}")
@@ -432,7 +744,10 @@ fun AddTransactionScreen(
                                             val isSubSelected = selectedCategoryName == activeCatInRow.name
                                             FilterChip(
                                                 selected = isSubSelected,
-                                                onClick = { selectedCategoryName = activeCatInRow.name },
+                                                onClick = {
+                                                    selectedCategoryName = activeCatInRow.name
+                                                    hasManuallySelected = true
+                                                },
                                                 label = { Text("Chung", fontSize = 12.sp) },
                                                 colors = FilterChipDefaults.filterChipColors(
                                                     selectedContainerColor = activeColor,
@@ -445,7 +760,10 @@ fun AddTransactionScreen(
                                             val isSubSelected = selectedCategoryName == sub.name
                                             FilterChip(
                                                 selected = isSubSelected,
-                                                onClick = { selectedCategoryName = sub.name },
+                                                onClick = {
+                                                    selectedCategoryName = sub.name
+                                                    hasManuallySelected = true
+                                                },
                                                 label = { Text(sub.name, fontSize = 12.sp) },
                                                 colors = FilterChipDefaults.filterChipColors(
                                                     selectedContainerColor = activeColor,
@@ -633,6 +951,7 @@ fun AddTransactionScreen(
                         isRecurring = isRecurring,
                         recurrencePeriod = if (isRecurring) recurrencePeriod else "NONE"
                     )
+                    android.widget.Toast.makeText(context, "Thêm giao dịch mới thành công!", android.widget.Toast.LENGTH_SHORT).show()
                     onSuccess()
                 }
             },

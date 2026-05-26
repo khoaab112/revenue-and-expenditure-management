@@ -656,36 +656,7 @@ fun HistoryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val isAll = activeTimeFilterMode == "ALL"
-                FilterChip(
-                    selected = isAll,
-                    onClick = { activeTimeFilterMode = "ALL" },
-                    label = { Text("Mọi lúc", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "All time",
-                            modifier = Modifier.size(14.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("time_filter_ALL")
-                )
-
-                val isWeek = activeTimeFilterMode == "WEEK"
-                FilterChip(
-                    selected = isWeek,
-                    onClick = { activeTimeFilterMode = "WEEK" },
-                    label = { Text("1 Tuần", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Last week",
-                            modifier = Modifier.size(14.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("time_filter_WEEK")
-                )
-
+                // 1. Theo ngày
                 val isDay = activeTimeFilterMode == "DAY"
                 val dayLabel = if (selectedCustomDate != null) {
                     SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(selectedCustomDate!!.time)
@@ -706,38 +677,23 @@ fun HistoryScreen(
                     modifier = Modifier.testTag("time_filter_DAY")
                 )
 
-                val isMonth = activeTimeFilterMode == "MONTH"
-                val monthLabel = "Thg ${selectedCustomMonth + 1}/$selectedCustomMonthYear"
+                // 2. 1 Tuần
+                val isWeek = activeTimeFilterMode == "WEEK"
                 FilterChip(
-                    selected = isMonth,
-                    onClick = { showMonthDialog = true },
-                    label = { Text(if (isMonth) monthLabel else "Theo tháng", fontSize = 12.sp) },
+                    selected = isWeek,
+                    onClick = { activeTimeFilterMode = "WEEK" },
+                    label = { Text("1 Tuần", fontSize = 12.sp) },
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = "Specific month",
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "Last week",
                             modifier = Modifier.size(14.dp)
                         )
                     },
-                    modifier = Modifier.testTag("time_filter_MONTH")
+                    modifier = Modifier.testTag("time_filter_WEEK")
                 )
 
-                val isYear = activeTimeFilterMode == "YEAR"
-                val yearLabel = "Năm $selectedCustomYear"
-                FilterChip(
-                    selected = isYear,
-                    onClick = { showYearDialog = true },
-                    label = { Text(if (isYear) yearLabel else "Theo năm", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = "Specific year",
-                            modifier = Modifier.size(14.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("time_filter_YEAR")
-                )
-
+                // 3. Khoảng ngày / Khoảng thời gian
                 val isRange = activeTimeFilterMode == "RANGE"
                 val rangeLabel = if (selectedRangeStart != null && selectedRangeEnd != null) {
                     val startStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeStart!!.time)
@@ -758,6 +714,56 @@ fun HistoryScreen(
                         )
                     },
                     modifier = Modifier.testTag("time_filter_RANGE")
+                )
+
+                // 4. Theo tháng
+                val isMonth = activeTimeFilterMode == "MONTH"
+                val monthLabel = "Thg ${selectedCustomMonth + 1}/$selectedCustomMonthYear"
+                FilterChip(
+                    selected = isMonth,
+                    onClick = { showMonthDialog = true },
+                    label = { Text(if (isMonth) monthLabel else "Theo tháng", fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Specific month",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_MONTH")
+                )
+
+                // 5. Theo năm
+                val isYear = activeTimeFilterMode == "YEAR"
+                val yearLabel = "Năm $selectedCustomYear"
+                FilterChip(
+                    selected = isYear,
+                    onClick = { showYearDialog = true },
+                    label = { Text(if (isYear) yearLabel else "Theo năm", fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Specific year",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_YEAR")
+                )
+
+                // 6. Mọi lúc
+                val isAll = activeTimeFilterMode == "ALL"
+                FilterChip(
+                    selected = isAll,
+                    onClick = { activeTimeFilterMode = "ALL" },
+                    label = { Text("Mọi lúc", fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = "All time",
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("time_filter_ALL")
                 )
             }
 
@@ -1911,7 +1917,7 @@ fun CalendarCell(
 
     Box(
         modifier = modifier
-            .aspectRatio(0.85f)
+            .aspectRatio(0.65f)
             .padding(1.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(cellBgColor)
@@ -1920,7 +1926,7 @@ fun CalendarCell(
                 onClick = onClick,
                 onLongClick = onLongPress
             )
-            .padding(horizontal = 2.dp, vertical = 2.5.dp)
+            .padding(horizontal = 4.dp, vertical = 4.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1929,7 +1935,7 @@ fun CalendarCell(
         ) {
             // Day Number Label
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(end = 2.dp, top = 2.dp),
                 horizontalArrangement = Arrangement.End
             ) {
                 Text(

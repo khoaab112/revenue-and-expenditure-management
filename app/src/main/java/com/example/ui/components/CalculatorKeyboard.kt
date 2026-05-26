@@ -44,9 +44,11 @@ fun CustomMoneyInputField(
     modifier: Modifier = Modifier,
     isError: Boolean = false,
     placeholder: String = "0",
+    autoFocus: Boolean = false,
+    onDismissKeyboard: () -> Unit = {},
     testTag: String = "custom_money_input"
 ) {
-    var showKeyboardDialog by remember { mutableStateOf(false) }
+    var showKeyboardDialog by remember { mutableStateOf(autoFocus) }
 
     Box(
         modifier = modifier
@@ -59,27 +61,49 @@ fun CustomMoneyInputField(
             value = if (value.isEmpty()) "" else FormatHelper.formatExpression(value),
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = { Text(label, style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp)) },
             placeholder = { Text(placeholder) },
             isError = isError,
             trailingIcon = {
                 Icon(
                     imageVector = Icons.Default.Calculate,
                     contentDescription = "Máy tính tài chính",
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
                 )
             },
             prefix = {
                 Text(
                     text = "₫",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.primary
                 )
             },
+            supportingText = {
+                val evaluated = FormatHelper.evaluateExpression(value)
+                if (evaluated > 0.0) {
+                    Text(
+                        text = "Số tiền định dạng: ${FormatHelper.formatVND(evaluated)}",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary
+            ),
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                focusedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.06f),
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                unfocusedLabelColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
             )
         )
 
@@ -98,7 +122,10 @@ fun CustomMoneyInputField(
             initialValue = value,
             title = label,
             onValueChange = onValueChange,
-            onDismiss = { showKeyboardDialog = false }
+            onDismiss = {
+                showKeyboardDialog = false
+                onDismissKeyboard()
+            }
         )
     }
 }
@@ -176,7 +203,7 @@ fun CalculatorKeyboardDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 40.dp), // Elevated bottom padding to lift keyboard from gestural indicator beautifully
+                            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 52.dp), // Elevated bottom padding to lift keyboard from gestural indicator beautifully
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         // Header Area

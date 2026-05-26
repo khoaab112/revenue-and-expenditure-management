@@ -23,6 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import com.example.ui.FinanceViewModel
 import com.example.ui.screens.*
 import com.example.ui.theme.MyApplicationTheme
@@ -35,6 +38,7 @@ object Routes {
     const val BUDGET_GOAL = "budget_goal"
     const val SETTINGS = "settings"
     const val ADD_TRANSACTION = "add_transaction"
+    const val BANK_NOTIFICATION_HISTORY = "bank_notification_history"
 }
 
 class MainActivity : ComponentActivity() {
@@ -82,11 +86,11 @@ fun MainContent(
     val isWideScreen = configuration.screenWidthDp >= 600
 
     val navigationItems = listOf(
-        NavigationItem(Routes.DASHBOARD, "Tổng quan", Icons.Default.GridView),
-        NavigationItem(Routes.HISTORY, "Lịch sử", Icons.Default.History),
-        NavigationItem(Routes.ADD_TRANSACTION, "Giao dịch", Icons.Default.Add),
-        NavigationItem(Routes.STATS, "Thống kê", Icons.Default.PieChart),
-        NavigationItem(Routes.SETTINGS, "Cài đặt", Icons.Default.Settings)
+        MainNavigationItem(Routes.DASHBOARD, "Tổng quan", Icons.Default.GridView),
+        MainNavigationItem(Routes.HISTORY, "Lịch sử", Icons.Default.History),
+        MainNavigationItem(Routes.ADD_TRANSACTION, "Giao dịch", Icons.Default.Add),
+        MainNavigationItem(Routes.STATS, "Thống kê", Icons.Default.PieChart),
+        MainNavigationItem(Routes.SETTINGS, "Cài đặt", Icons.Default.Settings)
     )
 
     if (!isAppUnlocked) {
@@ -100,7 +104,17 @@ fun MainContent(
         }
     } else {
         // App is unlocked -> display primary dashboard or nested modules
-        if (isWideScreen) {
+        val focusManager = LocalFocusManager.current
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        focusManager.clearFocus()
+                    })
+                }
+        ) {
+            if (isWideScreen) {
             // Adaptive wide layout: use Left Navigation Rail + Right Box
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRail(
@@ -266,6 +280,7 @@ fun MainContent(
                 }
             }
         }
+        }
     }
 }
 
@@ -319,7 +334,17 @@ fun NavHostContainer(
         }
 
         composable(Routes.SETTINGS) {
-            SettingsScreen(viewModel = viewModel)
+            SettingsScreen(
+                viewModel = viewModel,
+                onNavigateToBankNotificationHistory = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) }
+            )
+        }
+
+        composable(Routes.BANK_NOTIFICATION_HISTORY) {
+            BankNotificationHistoryScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(
@@ -359,7 +384,7 @@ fun NavHostContainer(
     }
 }
 
-data class NavigationItem(
+data class MainNavigationItem(
     val route: String,
     val label: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector

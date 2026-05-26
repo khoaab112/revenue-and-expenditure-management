@@ -78,4 +78,16 @@ interface FinanceDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSetting(setting: AppSetting)
+
+    @Query("DELETE FROM wallets")
+    suspend fun deleteAllWallets()
+
+    @Query("DELETE FROM transactions")
+    suspend fun deleteAllTransactions()
+
+    @Query("DELETE FROM budgets")
+    suspend fun deleteAllBudgets()
+
+    @Query("DELETE FROM savings_goals")
+    suspend fun deleteAllSavingsGoals()
 }

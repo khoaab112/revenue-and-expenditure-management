@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.animateContentSize
 import com.example.data.Transaction
 import com.example.data.Wallet
 import com.example.ui.FinanceViewModel
@@ -353,6 +354,379 @@ fun DashboardScreen(
             }
         }
 
+        // --- Smart Spending Analysis Component ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("dashboard_smart_insights_card"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header of Insights
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Insights,
+                                contentDescription = "Trợ lý thông minh",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "Phân tích chi tiêu thông minh",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "AI Trợ Lý",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                // Mini Trend Chart / Progress comparing This Week vs Last Week
+                val expenses = remember(transactions) { transactions.filter { it.type == "EXPENSE" } }
+                val anchorTime = remember(transactions) { System.currentTimeMillis() }
+                val MS_IN_DAY = 24 * 60 * 60 * 1000L
+
+                val thisWeekTotal = remember(expenses, anchorTime) {
+                    expenses.filter { anchorTime - it.timestamp <= 7 * MS_IN_DAY }.sumOf { it.amount }
+                }
+                val lastWeekTotal = remember(expenses, anchorTime) {
+                    expenses.filter {
+                        val diff = anchorTime - it.timestamp
+                        diff > 7 * MS_IN_DAY && diff <= 14 * MS_IN_DAY
+                    }.sumOf { it.amount }
+                }
+
+                if (expenses.isNotEmpty() && (thisWeekTotal > 0.0 || lastWeekTotal > 0.0)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "So sánh xu hướng chi tiêu tuần này",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        // Dual Bar visualization
+                        val maxTotal = Math.max(thisWeekTotal, lastWeekTotal)
+                        val thisWeekRatio = if (maxTotal > 0) (thisWeekTotal / maxTotal).toFloat() else 0f
+                        val lastWeekRatio = if (maxTotal > 0) (lastWeekTotal / maxTotal).toFloat() else 0f
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // Last week
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Tuần trước",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = FormatHelper.formatVND(lastWeekTotal),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(lastWeekRatio.coerceIn(0.01f, 1f))
+                                            .fillMaxHeight()
+                                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f), CircleShape)
+                                    )
+                                }
+                            }
+
+                            // This week
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Tuần này",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = FormatHelper.formatVND(thisWeekTotal),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (thisWeekTotal > lastWeekTotal) MaterialTheme.colorScheme.error else Color(0xFF4CAF50)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(thisWeekRatio.coerceIn(0.01f, 1f))
+                                            .fillMaxHeight()
+                                            .background(
+                                                if (thisWeekTotal > lastWeekTotal) MaterialTheme.colorScheme.error
+                                                else Color(0xFF4CAF50),
+                                                CircleShape
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Insights section list
+                val computedInsights = remember(transactions, currentMonthTransactions, totalIncome, totalExpense) {
+                    val insightsList = mutableListOf<SmartSpendingInsight>()
+                    val exps = transactions.filter { it.type == "EXPENSE" }
+                    
+                    if (exps.isEmpty()) {
+                        insightsList.add(
+                            SmartSpendingInsight(
+                                title = "Khởi tạo dữ liệu sinh trắc",
+                                description = "Gợi ý thông minh sẽ tự động học hỏi khi bạn có giao dịch chi tiêu.",
+                                icon = Icons.Default.Lightbulb,
+                                tint = Color(0xFFA0A0A0)
+                            )
+                        )
+                        return@remember insightsList
+                    }
+
+                    val now = System.currentTimeMillis()
+                    val MS_DAY = 24 * 60 * 60 * 1000L
+
+                    // 1. Difference trend
+                    val cWeek = exps.filter { now - it.timestamp <= 7 * MS_DAY }.sumOf { it.amount }
+                    val pWeek = exps.filter { 
+                        val diff = now - it.timestamp
+                        diff > 7 * MS_DAY && diff <= 14 * MS_DAY 
+                    }.sumOf { it.amount }
+
+                    if (pWeek > 0.0) {
+                        val diffPercent = ((cWeek - pWeek) / pWeek * 100).toInt()
+                        if (diffPercent < 0) {
+                            insightsList.add(
+                                SmartSpendingInsight(
+                                    title = "Xu hướng tuần này giảm tốt",
+                                    description = "Chi tiêu tuần này giảm ${-diffPercent}% so với tuần trước. Bạn tiết kiệm giỏi hơn!",
+                                    icon = Icons.Default.TrendingDown,
+                                    tint = Color(0xFF4CAF50),
+                                    score = 90
+                                )
+                            )
+                        } else if (diffPercent > 0) {
+                            insightsList.add(
+                                SmartSpendingInsight(
+                                    title = "Chi tiêu tăng so với tuần trước",
+                                    description = "Chi tiêu tuần này đã tăng ${diffPercent}% so với tuần trước. Hãy cân đối bớt thói quen tiêu vặt.",
+                                    icon = Icons.Default.TrendingUp,
+                                    tint = Color(0xFFF44336),
+                                    score = 85
+                                )
+                            )
+                        }
+                    }
+
+                    // 2. Daily hour habit detecting
+                    val hbMap = mutableMapOf<Pair<String, String>, MutableList<Transaction>>()
+                    val cl = Calendar.getInstance()
+                    exps.forEach { tx ->
+                        cl.timeInMillis = tx.timestamp
+                        val hr = cl.get(Calendar.HOUR_OF_DAY)
+                        val period = when {
+                            hr in 6..11 -> "buổi sáng (6h - 11h)"
+                            hr in 12..17 -> "buổi trưa chiều (12h - 17h)"
+                            hr in 18..22 -> "buổi tối (18h - 22h)"
+                            else -> "đêm muộn (23h - 5h)"
+                        }
+                        val pairKey = Pair(tx.categoryName, period)
+                        hbMap.getOrPut(pairKey) { mutableListOf() }.add(tx)
+                    }
+
+                    val maxHabit = hbMap.entries.filter { it.value.size >= 2 }.maxByOrNull { it.value.size }
+                    if (maxHabit != null) {
+                        val meanVal = maxHabit.value.map { it.amount }.average()
+                        insightsList.add(
+                            SmartSpendingInsight(
+                                title = "Khung giờ chi tiêu nổi bật",
+                                description = "Bạn thường chi tiêu mức ${FormatHelper.formatVND(meanVal)} cho '${maxHabit.key.first}' vào ${maxHabit.key.second}.",
+                                icon = Icons.Default.Schedule,
+                                tint = Color(0xFF2196F3),
+                                score = 80
+                            )
+                        )
+                    }
+
+                    // 3. Subscription/Recurring Keyword mapping (e.g., Cafe, Highlands, Grab, Netflix)
+                    val specNotes = exps.filter { it.note.isNotBlank() }
+                        .groupBy { it.note.trim().lowercase() }
+                        .mapValues { it.value.size }
+
+                    val topNoteMatch = specNotes.entries.filter { it.value >= 2 }.maxByOrNull { it.value }
+                    if (topNoteMatch != null) {
+                        val item = exps.first { it.note.trim().lowercase() == topNoteMatch.key }
+                        insightsList.add(
+                            SmartSpendingInsight(
+                                title = "Hành vi lặp lại thường xuyên",
+                                description = "Ghi chú '${item.note}' được bạn thanh toán đều đặn lặp lại ${topNoteMatch.value} lần vừa qua.",
+                                icon = Icons.Default.Sync,
+                                tint = Color(0xFF9C27B0),
+                                score = 75
+                            )
+                        )
+                    }
+
+                    // 4. Monthly High Outlier
+                    val catSums = currentMonthTransactions.filter { it.type == "EXPENSE" }
+                        .groupBy { it.categoryName }
+                        .mapValues { it.value.sumOf { tx -> tx.amount } }
+
+                    val maxCat = catSums.maxByOrNull { it.value }
+                    if (maxCat != null && maxCat.value > 0) {
+                        insightsList.add(
+                            SmartSpendingInsight(
+                                title = "Hạng mục tiêu dùng lớn nhất",
+                                description = "Hạng mục '${maxCat.key}' đang tiêu tốn ngân sách lớn nhất tháng này (${FormatHelper.formatVND(maxCat.value)}).",
+                                icon = Icons.Default.PieChart,
+                                tint = Color(0xFFE91E63),
+                                score = 70
+                            )
+                        )
+                    }
+
+                    // 5. Total saving rates metrics
+                    if (totalIncome > 0.0) {
+                        val svRatio = (totalIncome - totalExpense) / totalIncome
+                        if (svRatio >= 0.2) {
+                            insightsList.add(
+                                SmartSpendingInsight(
+                                    title = "Tích lũy tài sản tốt",
+                                    description = "Dòng tiền dương! Bạn đã tiết kiệm thành công ${(svRatio * 100).toInt()}% thu nhập tháng này.",
+                                    icon = Icons.Default.ThumbUp,
+                                    tint = Color(0xFF4CAF50),
+                                    score = 95
+                                )
+                            )
+                        } else if (svRatio < 0.0) {
+                            insightsList.add(
+                                SmartSpendingInsight(
+                                    title = "Báo động dòng tiền âm",
+                                    description = "Tổng chi tiêu vượt quá mức thu nhập trong tháng. Vui lòng dừng mua sắm bất chợt để tránh thâm hụt tài chính.",
+                                    icon = Icons.Default.Warning,
+                                    tint = Color(0xFFF44336),
+                                    score = 100
+                                )
+                            )
+                        }
+                    }
+
+                    insightsList.sortedByDescending { it.score }.take(3)
+                }
+
+                computedInsights.forEachIndexed { idx, ins ->
+                    if (idx > 0) {
+                        Divider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            thickness = 0.5.dp
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().animateContentSize(),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(ins.tint.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = ins.icon,
+                                contentDescription = ins.title,
+                                tint = ins.tint,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = ins.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = ins.description,
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // --- Recent Transactions ---
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -615,4 +989,13 @@ fun WalletChunkGrid(
         }
     }
 }
+
+data class SmartSpendingInsight(
+    val title: String,
+    val description: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val tint: Color,
+    val score: Int = 0
+)
+
 

@@ -219,23 +219,36 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
             val list = mutableListOf<NotificationLog>()
+            var modified = false
+            val now = System.currentTimeMillis()
+            val limitTime = now - (3L * 24 * 60 * 60 * 1000) // 3 days in ms
             try {
                 val array = org.json.JSONArray(logsSetting)
+                val newJSONArray = org.json.JSONArray()
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
-                    list.add(
-                        NotificationLog(
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                            title = obj.optString("title", ""),
-                            text = obj.optString("text", ""),
-                            bankName = obj.optString("bankName", ""),
-                            amount = obj.optDouble("amount", 0.0),
-                            type = obj.optString("type", "EXPENSE"),
-                            note = obj.optString("note", ""),
-                            walletName = obj.optString("walletName", ""),
-                            status = obj.optString("status", "")
+                    val timestamp = obj.optLong("timestamp", now)
+                    if (timestamp >= limitTime) {
+                        list.add(
+                            NotificationLog(
+                                timestamp = timestamp,
+                                title = obj.optString("title", ""),
+                                text = obj.optString("text", ""),
+                                bankName = obj.optString("bankName", ""),
+                                amount = obj.optDouble("amount", 0.0),
+                                type = obj.optString("type", "EXPENSE"),
+                                note = obj.optString("note", ""),
+                                walletName = obj.optString("walletName", ""),
+                                status = obj.optString("status", "")
+                            )
                         )
-                    )
+                        newJSONArray.put(obj)
+                    } else {
+                        modified = true
+                    }
+                }
+                if (modified) {
+                    repository.saveSetting("notification_logs", newJSONArray.toString())
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -346,8 +359,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         val newList = org.json.JSONArray()
         newList.put(logObj)
-        for (i in 0 until Math.min(jsonArray.length(), 49)) {
-            newList.put(jsonArray.getJSONObject(i))
+        val limitTime = System.currentTimeMillis() - (3L * 24 * 60 * 60 * 1000) // 3 days in ms
+        for (i in 0 until jsonArray.length()) {
+            val item = jsonArray.getJSONObject(i)
+            val timestamp = item.optLong("timestamp", 0L)
+            if (timestamp >= limitTime) {
+                newList.put(item)
+            }
         }
 
         repository.saveSetting("notification_logs", newList.toString())
@@ -862,12 +880,67 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     file.writeText(jsonString)
                 }
 
-                addLog("Đã viết file thành công: $filename")
-                addLog("Đường dẫn file: ${file.absolutePath}")
+                addLog("Đã viết file hệ thống thành công: $filename")
+                addLog("Đường dẫn file hệ thống: ${file.absolutePath}")
+
+                // Save copies in the Public Downloads folder under "SoChiTieuBackups" as well
+                var publicSavedPath: String? = null
+                withContext(Dispatchers.IO) {
+                    try {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            val resolver = context.contentResolver
+                            val contentValues = android.content.ContentValues().apply {
+                                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/SoChiTieuBackups")
+                            }
+                            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                            if (uri != null) {
+                                resolver.openOutputStream(uri)?.use { outputStream ->
+                                    outputStream.write(jsonString.toByteArray())
+                                }
+                                publicSavedPath = "Bộ nhớ trong > Download > SoChiTieuBackups > $filename"
+                            }
+                        } else {
+                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                            val subDir = java.io.File(downloadsDir, "SoChiTieuBackups")
+                            if (!subDir.exists()) {
+                                subDir.mkdirs()
+                            }
+                            val publicFile = java.io.File(subDir, filename)
+                            publicFile.writeText(jsonString)
+                            publicSavedPath = publicFile.absolutePath
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+
+                if (publicSavedPath != null) {
+                    addLog("✨ Đã tự động nhân bản file sao lưu công khai vào thư mục Downloads của bạn!")
+                    addLog("Đường dẫn: $publicSavedPath")
+                }
 
                 val nowStr = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date())
                 repository.saveSetting("local_backup_last_time", nowStr)
                 _localBackupLastTime.value = nowStr
+
+                // Dọn dẹp các bản sao lưu cũ, chỉ giữ lại tối đa 3 bản gần đây nhất (bao gồm cả bản hiện tại)
+                val allBackupFiles = backupDir.listFiles { _, name -> name.endsWith(".json") }
+                if (allBackupFiles != null && allBackupFiles.size > 3) {
+                    val sortedFiles = allBackupFiles.sortedByDescending { it.lastModified() }
+                    for (i in 3 until sortedFiles.size) {
+                        try {
+                            val fileToDelete = sortedFiles[i]
+                            val deleted = fileToDelete.delete()
+                            if (deleted) {
+                                addLog("🗑️ Đã xóa bản sao lưu cũ thừa: ${fileToDelete.name}")
+                            }
+                        } catch (ex: Exception) {
+                            addLog("⚠️ Lỗi khi tự động xóa file cũ: ${ex.message}")
+                        }
+                    }
+                }
 
                 val filesList = backupDir.listFiles { _, name -> name.endsWith(".json") }
                 _localBackupCount.value = filesList?.size ?: 0
@@ -926,53 +999,209 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     backupDir.mkdirs()
                 }
 
-                val absolutePath = backupDir.absolutePath
-                addLog("Đường dẫn hệ thống: $absolutePath")
+                val publicPath = "Download/SoChiTieuBackups"
+                addLog("Thư mục sao lưu công khai: $publicPath")
 
                 // Copy path to clipboard as backup option
                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("Đường dẫn sao lưu Sổ Chi Tiêu", absolutePath)
+                val clip = android.content.ClipData.newPlainText("Đường dẫn sao lưu Sổ Chi Tiêu", publicPath)
                 clipboard.setPrimaryClip(clip)
-                addLog("📋 ĐÃ COPY ĐƯỜNG DẪN THƯ MỤC VÀO CLIPBOARD.")
+                addLog("📋 ĐÃ COPY ĐƯỜNG DẪN 'Download/SoChiTieuBackups' VÀO CLIPBOARD.")
 
                 addLog("Đang kích hoạt trình quản lý tệp trên thiết bị...")
 
                 try {
-                    // Start an intent to view the file provider uri folder path or storage directory
-                    val fileUri = androidx.core.content.FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        backupDir
-                    )
-                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                        setDataAndType(fileUri, "resource/folder")
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    // Start an intent to view the Download directory
+                    val intent = android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
                         addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     context.startActivity(intent)
-                    addLog("🚀 Mở thư mục thành công!")
+                    addLog("🚀 Mở thư mục Tải xuống thành công!")
                 } catch (e: Exception) {
                     try {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
-                            type = "*/*"
-                            addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            backupDir
+                        )
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(fileUri, "resource/folder")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(intent)
-                        addLog("🚀 Mở trình chọn tệp hệ thống thành công!")
+                        addLog("🚀 Mở thư mục ứng dụng thành công!")
                     } catch (ex: Exception) {
-                        addLog("⚠️ Thiết bị thiếu ứng dụng File Manager tương thích.")
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
+                                type = "*/*"
+                                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                            addLog("🚀 Mở trình chọn tệp hệ thống thành công!")
+                        } catch (ey: Exception) {
+                            addLog("⚠️ Thiết bị thiếu ứng dụng File Manager tương ứng.")
+                        }
                     }
                 }
 
                 addLog("\n💡 HƯỚNG DẪN TÌM THỦ CÔNG:")
-                addLog("1. Mở ứng dụng 'Tệp' (Files) có sẵn trên điện thoại của bạn.")
-                addLog("2. Điều hướng theo đường dẫn: Bộ nhớ trong > Android > data > ${context.packageName} > files > Backups")
-                addLog("3. Tại đây bạn sẽ thấy tất cả các file dạng .json đã sao lưu trước đó.")
+                addLog("1. Mở ứng dụng 'Tệp' (Files by Google), 'Tệp của tôi' hoặc bất kỳ app quản lý file nào.")
+                addLog("2. Điều hướng vào: Bộ nhớ trong > Download > SoChiTieuBackups")
+                addLog("3. Tại đây bạn sẽ thấy tất cả file backup .json đã được tạo.")
                 
                 _syncStatus.value = "SUCCESS"
             } catch (e: Exception) {
                 addLog("Mở thư mục lỗi: ${e.localizedMessage ?: "Lỗi không xác định"}")
+                _syncStatus.value = "ERROR"
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun clearAllData(context: android.content.Context) {
+        viewModelScope.launch {
+            try {
+                _syncStatus.value = "SYNCING"
+                val logs = mutableListOf<String>()
+                fun addLog(msg: String) {
+                    logs.add("[${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}] $msg")
+                    _syncProgressLogs.value = logs.toList()
+                }
+                addLog("Khởi chạy tiến trình xóa sạch dữ liệu...")
+                repository.clearAllData()
+                addLog("Xóa sạch toàn bộ giao dịch, ví, ngân sách thành công!")
+                _syncStatus.value = "SUCCESS"
+                android.widget.Toast.makeText(context, "Đã xóa toàn bộ dữ liệu!", android.widget.Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                _syncStatus.value = "ERROR"
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun importLocalBackup(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch {
+            _syncStatus.value = "SYNCING"
+            val logs = mutableListOf<String>()
+            fun addLog(msg: String) {
+                logs.add("[${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}] $msg")
+                _syncProgressLogs.value = logs.toList()
+            }
+
+            try {
+                addLog("Bắt đầu giải nén file sao lưu...")
+                val contentResolver = context.contentResolver
+                val jsonString = contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.bufferedReader().use { it.readText() }
+                }
+
+                if (jsonString.isNullOrBlank()) {
+                    addLog("Lỗi: File trống hoặc không đọc được.")
+                    _syncStatus.value = "ERROR"
+                    return@launch
+                }
+
+                val root = org.json.JSONObject(jsonString)
+                val version = root.optInt("version", 1)
+                addLog("Phân tích file phiên bản: $version")
+
+                // Start clear databases first
+                addLog("Khởi tạo tiến trình dọn dẹp cơ sở dữ liệu...")
+                repository.clearAllData()
+
+                // 1. Wallets
+                val walletsArray = root.optJSONArray("wallets")
+                if (walletsArray != null) {
+                    addLog("Đang nhập lại ${walletsArray.length()} ví tài chính...")
+                    for (i in 0 until walletsArray.length()) {
+                        val obj = walletsArray.getJSONObject(i)
+                        val w = com.example.data.Wallet(
+                            id = obj.optInt("id", 0),
+                            name = obj.optString("name", "Ví"),
+                            type = obj.optString("type", "CASH"),
+                            balance = obj.optDouble("balance", 0.0),
+                            colorHex = obj.optString("colorHex", "#9E9E9E"),
+                            iconName = obj.optString("iconName", "AccountBalanceWallet"),
+                            displayOrder = obj.optInt("displayOrder", 0)
+                        )
+                        repository.insertWalletDirect(w)
+                    }
+                }
+
+                // 2. Transactions
+                val transactionsArray = root.optJSONArray("transactions")
+                if (transactionsArray != null) {
+                    addLog("Đang nhập lại ${transactionsArray.length()} giao dịch tài chính...")
+                    for (i in 0 until transactionsArray.length()) {
+                        val obj = transactionsArray.getJSONObject(i)
+                        val t = com.example.data.Transaction(
+                            id = obj.optInt("id", 0),
+                            walletId = obj.optInt("walletId", 0),
+                            walletName = obj.optString("walletName", ""),
+                            type = obj.optString("type", "EXPENSE"),
+                            amount = obj.optDouble("amount", 0.0),
+                            categoryName = obj.optString("categoryName", ""),
+                            categoryIcon = obj.optString("categoryIcon", ""),
+                            categoryColor = obj.optString("categoryColor", ""),
+                            note = obj.optString("note", ""),
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            isRecurring = obj.optBoolean("isRecurring", false),
+                            recurrencePeriod = obj.optString("recurrencePeriod", "NONE")
+                        )
+                        repository.insertTransactionDirect(t)
+                    }
+                }
+
+                // 3. Budgets
+                val budgetsArray = root.optJSONArray("budgets")
+                if (budgetsArray != null) {
+                    addLog("Đang nhập lại ${budgetsArray.length()} hạn mức ngân sách...")
+                    for (i in 0 until budgetsArray.length()) {
+                        val obj = budgetsArray.getJSONObject(i)
+                        val b = com.example.data.Budget(
+                            id = obj.optInt("id", 0),
+                            categoryName = obj.optString("categoryName", ""),
+                            categoryIcon = obj.optString("categoryIcon", ""),
+                            categoryColor = obj.optString("categoryColor", ""),
+                            limitAmount = obj.optDouble("limitAmount", 0.0),
+                            spentAmount = obj.optDouble("spentAmount", 0.0),
+                            month = obj.optString("month", "")
+                        )
+                        repository.insertBudgetDirect(b)
+                    }
+                }
+
+                // 4. Savings Goals
+                val savingsGoalsArray = root.optJSONArray("savingsGoals")
+                if (savingsGoalsArray != null) {
+                    addLog("Đang nhập lại ${savingsGoalsArray.length()} mục tiêu tích lũy...")
+                    for (i in 0 until savingsGoalsArray.length()) {
+                        val obj = savingsGoalsArray.getJSONObject(i)
+                        val s = com.example.data.SavingsGoal(
+                            id = obj.optInt("id", 0),
+                            name = obj.optString("name", "Mục tiêu"),
+                            targetAmount = obj.optDouble("targetAmount", 0.0),
+                            currentAmount = obj.optDouble("currentAmount", 0.0),
+                            targetDate = obj.optLong("targetDate", System.currentTimeMillis()),
+                            note = obj.optString("note", "")
+                        )
+                        repository.insertSavingsGoalDirect(s)
+                    }
+                }
+
+                // 5. Custom Categories
+                val customCategories = root.optString("customCategories", "")
+                if (customCategories.isNotEmpty()) {
+                    repository.saveSetting("custom_categories", customCategories)
+                }
+
+                addLog("🎉 KHÔI PHỤC DỮ LIỆU THÀNH CÔNG HOÀN TOÀN!")
+                _syncStatus.value = "SUCCESS"
+                android.widget.Toast.makeText(context, "Khôi phục dữ liệu từ bản sao lưu thành công!", android.widget.Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                addLog("Lỗi khôi phục: ${e.localizedMessage ?: "File JSON lỗi cấu trúc."}")
                 _syncStatus.value = "ERROR"
                 e.printStackTrace()
             }

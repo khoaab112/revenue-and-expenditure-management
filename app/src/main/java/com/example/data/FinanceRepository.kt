@@ -177,4 +177,16 @@ class FinanceRepository(private val dao: FinanceDao) {
             dao.insertSavingsGoal(SavingsGoal(name = "Mua Điện Thoại Mới", targetAmount = 15000000.0, currentAmount = 5000000.0, targetDate = targetCal.timeInMillis, note = "Cần tiết kiệm thêm"))
         }
     }
+
+    suspend fun clearAllData() {
+        dao.deleteAllTransactions()
+        dao.deleteAllWallets()
+        dao.deleteAllBudgets()
+        dao.deleteAllSavingsGoals()
+    }
+
+    suspend fun insertWalletDirect(wallet: Wallet) = dao.insertWallet(wallet)
+    suspend fun insertTransactionDirect(transaction: Transaction) = dao.insertTransaction(transaction)
+    suspend fun insertBudgetDirect(budget: Budget) = dao.insertBudget(budget)
+    suspend fun insertSavingsGoalDirect(goal: SavingsGoal) = dao.insertSavingsGoal(goal)
 }
