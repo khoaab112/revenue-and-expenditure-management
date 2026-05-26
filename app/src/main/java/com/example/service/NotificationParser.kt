@@ -17,7 +17,7 @@ object NotificationParser {
         val lowerText = text.lowercase()
         val combinedText = "$lowerTitle $lowerText"
 
-        // 1. Determine Bank / App and corresponding Wallet name in Vietnamese
+        // 1. Determine Bank / App and corresponding Wallet name for Vietnamese and Foreign Banks
         val (bankName, detectedWalletName) = when {
             combinedText.contains("momo") || packageName.contains("momo") -> Pair("MoMo", "Ví MoMo")
             combinedText.contains("vietcombank") || packageName.contains("vietcombank") || combinedText.contains("vcb") -> Pair("Vietcombank", "Tài khoản ngân hàng")
@@ -28,6 +28,16 @@ object NotificationParser {
             combinedText.contains("acb") || packageName.contains("acb") -> Pair("ACB", "Tài khoản ngân hàng")
             combinedText.contains("viettel pay") || combinedText.contains("viettel money") || packageName.contains("viettelpay") -> Pair("Viettel Money", "Ví MoMo")
             combinedText.contains("zalopay") || packageName.contains("zalopay") || combinedText.contains("zalo pay") -> Pair("ZaloPay", "Ví MoMo")
+            
+            // International / Foreign Banks support
+            combinedText.contains("hsbc") || packageName.contains("hsbc") -> Pair("HSBC", "Foreign Bank Account")
+            combinedText.contains("citibank") || combinedText.contains("citi ") || packageName.contains("citibank") -> Pair("Citibank", "Foreign Bank Account")
+            combinedText.contains("standard chartered") || combinedText.contains("stanchart") -> Pair("Standard Chartered", "Foreign Bank Account")
+            combinedText.contains("chase") || packageName.contains("chase") -> Pair("Chase Bank", "Foreign Bank Account")
+            combinedText.contains("revolut") || packageName.contains("revolut") -> Pair("Revolut", "Foreign Bank Account")
+            combinedText.contains("paypal") || packageName.contains("paypal") -> Pair("PayPal", "Online Wallet")
+            combinedText.contains("wise") || packageName.contains("wise") || combinedText.contains("transferwise") -> Pair("Wise", "Online Wallet")
+            
             else -> {
                 // Heuristic detection based on common bank abbreviations
                 val words = listOf("bidv", "vpbank", "sacombank", "vbi", "shb", "vib", "msb", "ocb", "hdbank", "scb")
@@ -40,9 +50,15 @@ object NotificationParser {
             }
         }
 
-        // 2. Determine Transaction Type (INCOME or EXPENSE)
-        val incomeKeywords = listOf("+", "nhận tiền", "cong +", "nạp tiền", "nhận", "co:", "cộng", "transfer in", "chuyển đến", "tăng", "nhận từ", "được cộng")
-        val expenseKeywords = listOf("-", "trừ", "thanh toán", "chuyển đi", "nợ:", "trừ tiền", "chuyển khoản đi", "transfer out", "giảm", "rút tiền", "thanh toán hóa đơn", "phí")
+        // 2. Determine Transaction Type (INCOME or EXPENSE) with Vietnamese & English keywords
+        val incomeKeywords = listOf(
+            "+", "nhận tiền", "cong +", "nạp tiền", "nhận", "co:", "cộng", "transfer in", "chuyển đến", "tăng", "nhận từ", "được cộng",
+            "received", "deposited", "refunded", "transfer from", "credit", "incoming", "added"
+        )
+        val expenseKeywords = listOf(
+            "-", "trừ", "thanh toán", "chuyển đi", "nợ:", "trừ tiền", "chuyển khoản đi", "transfer out", "giảm", "rút tiền", "thanh toán hóa đơn", "phí",
+            "paid", "spent", "purchase", "withdrew", "charge", "outgoing", "payment for"
+        )
 
         var type = "EXPENSE" // default
         val hasPlus = combinedText.contains("+")
@@ -84,23 +100,19 @@ object NotificationParser {
     }
 
     private fun extractAmount(text: String): Double {
-        // Regex to match typical Vietnamese currency strings
-        // E.g. "+1.200.000d", "giam -50,000 VND", "+ 500.000 d", "+10,000,000 d"
-        // Try to match a pattern like [+ or -]? [numbers with dots or commas as thousand separators] [options: VND, đ, d, vnđ]
         val cleanText = text.replace("đ", "vnd")
             .replace("d", "vnd")
-            .replace("vnvnd", "vnd") // in case "vnđ" -> "vnvnd"
+            .replace("$", "usd")
+            .replace("€", "eur")
+            .replace("£", "gbp")
             .lowercase()
 
-        // Match numbers following signs or preceding currency markers
+        // Match numbers following signs or associated with currency keywords
         val patterns = listOf(
-            // Pattern for signed numbers +500.000 or -15.000
-            Pattern.compile("""[+-]\s?(\d{1,3}(?:[.,]\d{3})+)"""),
-            // Pattern for numbers before currency label, e.g. "500.000 vnd" or "50,000vnd"
-            Pattern.compile("""(\d{1,3}(?:[.,]\d{3})+)\s?vnd"""),
-            // Pattern for raw numbers with standard separator followed by text or boundaries
-            Pattern.compile("""\b(\d{1,3}(?:[.,]\d{3})+)\b"""),
-            // Fallback for simple integer numbers over 5000 (standard format without dots/commas, e.g. "chuyển khoản 200000")
+            Pattern.compile("""[+-]\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
+            Pattern.compile("""(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s?(?:vnd|usd|eur|gbp)\b"""),
+            Pattern.compile("""(?:usd|eur|gbp)\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
+            Pattern.compile("""\b(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
             Pattern.compile("""\b(\d{4,12})\b""")
         )
 
@@ -108,10 +120,27 @@ object NotificationParser {
             val matcher = pattern.matcher(cleanText)
             while (matcher.find()) {
                 val groupText = matcher.group(1) ?: continue
-                val normalizedNumStr = groupText.replace(".", "").replace(",", "")
-                val parsedVal = normalizedNumStr.toDoubleOrNull() ?: 0.0
-                if (parsedVal >= 1000.0) { // filter out small timestamps, transaction codes, or pins under 1000
-                    return parsedVal
+                
+                var normalized = groupText
+                val hasDecimal = normalized.length >= 4 && (normalized[normalized.length - 3] == '.' || normalized[normalized.length - 3] == ',')
+                val decimalChar = if (hasDecimal) normalized[normalized.length - 3] else null
+                
+                if (hasDecimal && decimalChar != null) {
+                    val integerPart = normalized.substring(0, normalized.length - 3)
+                    val decimalPart = normalized.substring(normalized.length - 2)
+                    
+                    val cleanInt = integerPart.filter { it.isDigit() }
+                    normalized = "$cleanInt.$decimalPart"
+                } else {
+                    normalized = normalized.filter { it.isDigit() }
+                }
+
+                val parsedVal = normalized.toDoubleOrNull() ?: 0.0
+                val isForeign = cleanText.contains("usd") || cleanText.contains("eur") || cleanText.contains("gbp")
+                if (isForeign) {
+                    if (parsedVal >= 1.0) return parsedVal
+                } else {
+                    if (parsedVal >= 1000.0) return parsedVal
                 }
             }
         }
@@ -121,18 +150,15 @@ object NotificationParser {
 
     private fun extractNote(text: String, bankName: String): String {
         val lowerText = text.lowercase()
-        // Typical prefixes showing transaction note
-        val indicators = listOf("nội dung:", "noidung:", "lý do:", "gd:", "nd:", "ref:", "mô tả:", "nội dung gd:")
+        val indicators = listOf("nội dung:", "noidung:", "lý do:", "gd:", "nd:", "ref:", "mô tả:", "nội dung gd:", "note:", "memo:", "desc:")
         for (indicator in indicators) {
             val idx = lowerText.indexOf(indicator)
             if (idx != -1) {
                 val rem = text.substring(idx + indicator.length).trim()
-                // Clean characters often found inside SMS
                 return cleanNoteString(rem)
             }
         }
 
-        // Fallback: If it's a MoMo or simple app, search for quoted text or text in parentheses
         val quotePattern = Pattern.compile(""""([^"]+)"""")
         val qMatcher = quotePattern.matcher(text)
         if (qMatcher.find()) {
@@ -143,8 +169,8 @@ object NotificationParser {
     }
 
     private fun cleanNoteString(input: String): String {
-        return input.replace(Regex("""[\[\]\(\)\{\}]"""), "") // remove braces
-            .replace(Regex("""\s+"""), " ") // normalize spacing
+        return input.replace(Regex("""[\[\]\(\)\{\}]"""), "")
+            .replace(Regex("""\s+"""), " ")
             .trim()
     }
 }

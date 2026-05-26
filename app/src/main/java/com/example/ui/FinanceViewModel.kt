@@ -45,6 +45,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _notificationLogs = MutableStateFlow<List<NotificationLog>>(emptyList())
     val notificationLogs: StateFlow<List<NotificationLog>> = _notificationLogs.asStateFlow()
 
+    private val _widgetsEnabled = MutableStateFlow(false)
+    val widgetsEnabled: StateFlow<Boolean> = _widgetsEnabled.asStateFlow()
+
     // Local Backup Flow Variables
     private val _localBackupLastTime = MutableStateFlow("Chưa sao lưu")
     val localBackupLastTime: StateFlow<String> = _localBackupLastTime.asStateFlow()
@@ -187,10 +190,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private suspend fun loadSecuritySettings() {
         val pinEnabledSetting = repository.getSetting("pin_enabled")
         val pinHashSetting = repository.getSetting("pin_hash")
+        val widgetsSetting = repository.getSetting("widgets_enabled")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
         _savedPinHash.value = pinHashSetting?.value ?: ""
+        _widgetsEnabled.value = widgetsSetting?.value == "true"
         
         // If PIN is not enabled, the app is unlocked by default
         _isAppUnlocked.value = !enabled
@@ -205,6 +210,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             _localBackupCount.value = filesList?.size ?: 0
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    fun setWidgetsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.saveSetting("widgets_enabled", enabled.toString())
+            _widgetsEnabled.value = enabled
         }
     }
 

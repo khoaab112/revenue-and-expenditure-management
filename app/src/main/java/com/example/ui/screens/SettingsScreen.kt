@@ -81,6 +81,7 @@ fun SettingsScreen(
     val syncProgressLogs by viewModel.syncProgressLogs.collectAsState()
 
     val notificationReaderEnabled by viewModel.notificationReaderEnabled.collectAsState()
+    val widgetsEnabled by viewModel.widgetsEnabled.collectAsState()
     val notificationLogs by viewModel.notificationLogs.collectAsState()
     val isServiceEnabled = remember(context) { isNotificationServiceEnabled(context) }
     var isPermitted by remember { mutableStateOf(isServiceEnabled) }
@@ -792,9 +793,9 @@ fun SettingsScreen(
             }
         }
 
-        // 5. THÔNG TIN DỮ LIỆU
+        // 5. THÔNG TIN
         Text(
-            text = "THÔNG TIN DỮ LIỆU",
+            text = "THÔNG TIN",
             fontSize = 12.sp,
             fontWeight = FontWeight.Black,
             color = MaterialTheme.colorScheme.primary,
@@ -814,6 +815,24 @@ fun SettingsScreen(
                     supportingContent = { Text("v1.0.0 (Bản mẫu Offline)") },
                     leadingContent = {
                         Icon(imageVector = Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
+                    }
+                )
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Main Screen Widget Settings row
+                ListItem(
+                    headlineContent = { Text("Tiện ích màn hình chính (Widgets)", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Các nút bấm nhanh ngoài màn hình điện thoại để thêm giao dịch chỉ trong 1 giây mà không cần mở app.") },
+                    leadingContent = {
+                        Icon(imageVector = Icons.Default.Widgets, contentDescription = "Widgets", tint = MaterialTheme.colorScheme.primary)
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = widgetsEnabled,
+                            onCheckedChange = { viewModel.setWidgetsEnabled(it) },
+                            modifier = Modifier.testTag("widgets_enabled_switch")
+                        )
                     }
                 )
 
