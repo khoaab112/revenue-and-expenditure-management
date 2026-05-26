@@ -22,25 +22,35 @@ data class FilterCriteria(
     val end: Long?
 )
 
+data class NotificationLog(
+    val timestamp: Long,
+    val title: String,
+    val text: String,
+    val bankName: String,
+    val amount: Double,
+    val type: String,
+    val note: String,
+    val walletName: String,
+    val status: String // "AUTO_ADDED", "FAILED_PARSE", "NO_WALLET"
+)
+
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
 
-    // Google Sync settings Flow
-    private val _googleSheetUrl = MutableStateFlow("")
-    val googleSheetUrl: StateFlow<String> = _googleSheetUrl.asStateFlow()
+    // Notification listener flows
+    private val _notificationReaderEnabled = MutableStateFlow(false)
+    val notificationReaderEnabled: StateFlow<Boolean> = _notificationReaderEnabled.asStateFlow()
 
-    private val _googleDocUrl = MutableStateFlow("")
-    val googleDocUrl: StateFlow<String> = _googleDocUrl.asStateFlow()
+    private val _notificationLogs = MutableStateFlow<List<NotificationLog>>(emptyList())
+    val notificationLogs: StateFlow<List<NotificationLog>> = _notificationLogs.asStateFlow()
 
-    private val _googleAppsScriptUrl = MutableStateFlow("")
-    val googleAppsScriptUrl: StateFlow<String> = _googleAppsScriptUrl.asStateFlow()
+    // Local Backup Flow Variables
+    private val _localBackupLastTime = MutableStateFlow("Chưa sao lưu")
+    val localBackupLastTime: StateFlow<String> = _localBackupLastTime.asStateFlow()
 
-    private val _googleSheetLastSync = MutableStateFlow("")
-    val googleSheetLastSync: StateFlow<String> = _googleSheetLastSync.asStateFlow()
-
-    private val _googleDocLastSync = MutableStateFlow("")
-    val googleDocLastSync: StateFlow<String> = _googleDocLastSync.asStateFlow()
+    private val _localBackupCount = MutableStateFlow(0)
+    val localBackupCount: StateFlow<Int> = _localBackupCount.asStateFlow()
 
     private val _syncStatus = MutableStateFlow("") // "IDLE", "SYNCING", "SUCCESS", "ERROR"
     val syncStatus: StateFlow<String> = _syncStatus.asStateFlow()
@@ -168,6 +178,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             repository.checkAndSeedDatabase()
             loadCategories()
             loadSecuritySettings()
+            loadNotificationSettings()
             processRecurringTransactions()
         }
     }
@@ -184,12 +195,181 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         // If PIN is not enabled, the app is unlocked by default
         _isAppUnlocked.value = !enabled
 
-        // Load sync configurations
-        _googleSheetUrl.value = repository.getSetting("google_sheet_url")?.value ?: ""
-        _googleDocUrl.value = repository.getSetting("google_doc_url")?.value ?: ""
-        _googleAppsScriptUrl.value = repository.getSetting("google_apps_script_url")?.value ?: ""
-        _googleSheetLastSync.value = repository.getSetting("google_sheet_last_sync")?.value ?: "Chưa đồng bộ"
-        _googleDocLastSync.value = repository.getSetting("google_doc_last_sync")?.value ?: "Chưa đồng bộ"
+        val lastTime = repository.getSetting("local_backup_last_time")?.value ?: "Chưa sao lưu"
+        _localBackupLastTime.value = lastTime
+        
+        try {
+            val context = getApplication<Application>()
+            val backupDir = context.getExternalFilesDir("Backups")
+            val filesList = backupDir?.listFiles { _, name -> name.endsWith(".json") }
+            _localBackupCount.value = filesList?.size ?: 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // --- BANK NOTIFICATION READER LOGIC ---
+    private suspend fun loadNotificationSettings() {
+        val enabledSetting = repository.getSetting("notification_reader_enabled")
+        _notificationReaderEnabled.value = enabledSetting?.value == "true"
+        loadNotificationLogs()
+    }
+
+    fun loadNotificationLogs() {
+        viewModelScope.launch {
+            val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+            val list = mutableListOf<NotificationLog>()
+            try {
+                val array = org.json.JSONArray(logsSetting)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    list.add(
+                        NotificationLog(
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            title = obj.optString("title", ""),
+                            text = obj.optString("text", ""),
+                            bankName = obj.optString("bankName", ""),
+                            amount = obj.optDouble("amount", 0.0),
+                            type = obj.optString("type", "EXPENSE"),
+                            note = obj.optString("note", ""),
+                            walletName = obj.optString("walletName", ""),
+                            status = obj.optString("status", "")
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            _notificationLogs.value = list
+        }
+    }
+
+    fun setNotificationReaderEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.saveSetting("notification_reader_enabled", enabled.toString())
+            _notificationReaderEnabled.value = enabled
+        }
+    }
+
+    fun clearNotificationLogs() {
+        viewModelScope.launch {
+            repository.saveSetting("notification_logs", "[]")
+            _notificationLogs.value = emptyList()
+        }
+    }
+
+    fun simulateBankNotification(title: String, text: String, packageName: String) {
+        viewModelScope.launch {
+            try {
+                val parsed = com.example.service.NotificationParser.parse(title, text, packageName)
+                
+                val wallets = repository.allWallets.firstOrNull() ?: emptyList()
+                val matchedWallet = wallets.find { it.name.lowercase().contains(parsed.bankName.lowercase()) }
+                    ?: wallets.find { it.name.lowercase().contains(parsed.detectedWalletName.lowercase()) }
+                    ?: wallets.find { it.type == "BANK" }
+                    ?: wallets.firstOrNull()
+
+                if (matchedWallet != null && parsed.success) {
+                    val categoryName = when (parsed.type) {
+                        "INCOME" -> {
+                            val lowerNote = parsed.note.lowercase()
+                            when {
+                                lowerNote.contains("luong") || lowerNote.contains("salary") -> "Lương"
+                                lowerNote.contains("thuong") || lowerNote.contains("gift") || lowerNote.contains("tang") -> "Thưởng"
+                                lowerNote.contains("ban hang") || lowerNote.contains("kinh doanh") -> "Kinh doanh"
+                                else -> "Khác"
+                            }
+                        }
+                        else -> {
+                            val lowerNote = parsed.note.lowercase()
+                            when {
+                                lowerNote.contains("an uong") || lowerNote.contains("restaurant") || lowerNote.contains("coffee") || lowerNote.contains("milktea") || lowerNote.contains("tra sua") -> "Ăn uống"
+                                lowerNote.contains("grab") || lowerNote.contains("xe") || lowerNote.contains("petrol") || lowerNote.contains("xang") -> "Di chuyển"
+                                lowerNote.contains("shopee") || lowerNote.contains("tiki") || lowerNote.contains("lazada") || lowerNote.contains("mua sam") -> "Mua sắm"
+                                lowerNote.contains("cuoc") || lowerNote.contains("dien nuoc") || lowerNote.contains("hoa don") || lowerNote.contains("tien dien") -> "Hóa đơn"
+                                lowerNote.contains("cgv") || lowerNote.contains("netflix") || lowerNote.contains("giai tri") -> "Giải trí"
+                                else -> "Khác"
+                            }
+                        }
+                    }
+
+                    val catDetails = Categories.getByCategoryName(categoryName)
+                    val tx = Transaction(
+                        walletId = matchedWallet.id,
+                        walletName = matchedWallet.name,
+                        type = parsed.type,
+                        amount = parsed.amount,
+                        categoryName = categoryName,
+                        categoryIcon = catDetails.iconName,
+                        categoryColor = catDetails.colorHex,
+                        note = parsed.note,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    repository.insertTransaction(tx)
+                    
+                    // Log success
+                    saveLocalLog(title, text, parsed, "AUTO_ADDED", matchedWallet.name)
+                } else {
+                    val walletLabel = matchedWallet?.name ?: "Không tìm thấy ví"
+                    saveLocalLog(title, text, parsed, if (!parsed.success) "FAILED_PARSE" else "NO_WALLET", walletLabel)
+                }
+                
+                // Reload logs
+                loadNotificationLogs()
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private suspend fun saveLocalLog(
+        title: String,
+        text: String,
+        parsed: com.example.service.NotificationParser.ParsedNotification,
+        status: String,
+        walletName: String?
+    ) {
+        val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+        val jsonArray = try { org.json.JSONArray(logsSetting) } catch (e: Exception) { org.json.JSONArray() }
+
+        val logObj = org.json.JSONObject()
+        logObj.put("timestamp", System.currentTimeMillis())
+        logObj.put("title", title)
+        logObj.put("text", text)
+        logObj.put("bankName", parsed.bankName)
+        logObj.put("amount", parsed.amount)
+        logObj.put("type", parsed.type)
+        logObj.put("note", parsed.note)
+        logObj.put("walletName", walletName ?: parsed.detectedWalletName)
+        logObj.put("status", status)
+
+        val newList = org.json.JSONArray()
+        newList.put(logObj)
+        for (i in 0 until Math.min(jsonArray.length(), 49)) {
+            newList.put(jsonArray.getJSONObject(i))
+        }
+
+        repository.saveSetting("notification_logs", newList.toString())
+    }
+
+    fun addManualTransactionFromLog(log: NotificationLog, walletId: Int, categoryName: String) {
+        viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId) ?: return@launch
+            val cat = getCategoryByName(categoryName)
+            val tx = Transaction(
+                walletId = walletId,
+                walletName = wallet.name,
+                type = log.type,
+                amount = log.amount,
+                categoryName = categoryName,
+                categoryIcon = cat.iconName,
+                categoryColor = cat.colorHex,
+                note = log.note.ifEmpty { "Ghi từ thông báo" },
+                timestamp = log.timestamp
+            )
+            repository.insertTransaction(tx)
+        }
     }
 
     // --- CATEGORIES LOGIC ---
@@ -570,33 +750,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // --- GOOGLE CLOUD SYNC SERVICES ---
-    fun saveGoogleSheetUrl(url: String) {
-        viewModelScope.launch {
-            repository.saveSetting("google_sheet_url", url)
-            _googleSheetUrl.value = url
-        }
-    }
-
-    fun saveGoogleDocUrl(url: String) {
-        viewModelScope.launch {
-            repository.saveSetting("google_doc_url", url)
-            _googleDocUrl.value = url
-        }
-    }
-
-    fun saveGoogleAppsScriptUrl(url: String) {
-        viewModelScope.launch {
-            repository.saveSetting("google_apps_script_url", url)
-            _googleAppsScriptUrl.value = url
-        }
-    }
-
     fun clearSyncLogs() {
-        _syncStatus.value = "IDLE"
+        _syncStatus.value = ""
         _syncProgressLogs.value = emptyList()
     }
 
-    fun syncToGoogle(type: String, context: android.content.Context) {
+    fun exportLocalBackup(context: android.content.Context) {
         viewModelScope.launch {
             _syncStatus.value = "SYNCING"
             val logs = mutableListOf<String>()
@@ -605,161 +764,217 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 _syncProgressLogs.value = logs.toList()
             }
 
-            addLog("Bắt đầu tiến trình đồng bộ lên ứng dụng Google $type...")
+            try {
+                addLog("Bắt đầu tạo bản sao lưu cục bộ...")
 
-            val targetUrl = if (type == "SHEETS") _googleSheetUrl.value else _googleDocUrl.value
-            if (targetUrl.isBlank()) {
-                addLog("Thao tác thất bại: Quý khách chưa liên kết link Google $type.")
-                _syncStatus.value = "ERROR"
-                return@launch
-            }
+                val walletsList = allWallets.value
+                val transactionsList = allTransactions.value
+                val budgetsList = allBudgets.value
+                val savingsGoalsList = allSavingsGoals.value
 
-            // Extract spreadsheet ID or doc ID
-            val regex = "/d/([a-zA-Z0-9-_]+)".toRegex()
-            val matchResult = regex.find(targetUrl)
-            val fileId = matchResult?.groupValues?.get(1)
-            if (fileId == null) {
-                addLog("Thao tác thất bại: Định dạng đường dẫn Google $type không hợp lệ.")
-                _syncStatus.value = "ERROR"
-                return@launch
-            }
-            addLog("Xác định ID tài liệu: ...${fileId.takeLast(8)}")
+                addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy.")
 
-            // Gather transaction data
-            val txs = allTransactions.value
-            addLog("Hệ thống nén thành công ${txs.size} giao dịch từ bộ nhớ cục bộ.")
+                val root = org.json.JSONObject()
+                root.put("version", 1)
+                root.put("backup_timestamp", System.currentTimeMillis())
 
-            val webAppUrl = _googleAppsScriptUrl.value
-            if (webAppUrl.isNotBlank() && (webAppUrl.startsWith("http://") || webAppUrl.startsWith("https://"))) {
-                addLog("Phát hiện Web App Proxy. Đang kết nối API Google...")
-                try {
-                    val root = org.json.JSONObject()
-                    root.put("type", type)
-                    root.put("sheetUrl", _googleSheetUrl.value)
-                    root.put("docUrl", _googleDocUrl.value)
-                    
-                    val txArray = org.json.JSONArray()
-                    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("vi", "VN"))
-                    txs.forEach { tx ->
-                        val obj = org.json.JSONObject()
-                        obj.put("id", tx.id)
-                        obj.put("walletName", tx.walletName)
-                        obj.put("type", tx.type)
-                        obj.put("amount", tx.amount)
-                        obj.put("categoryName", tx.categoryName)
-                        obj.put("note", tx.note ?: "")
-                        obj.put("formattedDate", sdf.format(Date(tx.timestamp)))
-                        txArray.put(obj)
-                    }
-                    root.put("transactions", txArray)
+                // Wallets
+                val walletsArray = org.json.JSONArray()
+                walletsList.forEach { w ->
+                    val obj = org.json.JSONObject()
+                    obj.put("id", w.id)
+                    obj.put("name", w.name)
+                    obj.put("type", w.type)
+                    obj.put("balance", w.balance)
+                    obj.put("colorHex", w.colorHex)
+                    obj.put("iconName", w.iconName)
+                    obj.put("displayOrder", w.displayOrder)
+                    walletsArray.put(obj)
+                }
+                root.put("wallets", walletsArray)
 
-                    // Execute request with okhttp
-                    val okHttpClient = okhttp3.OkHttpClient.Builder()
-                        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                        .build()
+                // Transactions
+                val transactionsArray = org.json.JSONArray()
+                transactionsList.forEach { t ->
+                    val obj = org.json.JSONObject()
+                    obj.put("id", t.id)
+                    obj.put("walletId", t.walletId)
+                    obj.put("walletName", t.walletName)
+                    obj.put("type", t.type)
+                    obj.put("amount", t.amount)
+                    obj.put("categoryName", t.categoryName)
+                    obj.put("categoryIcon", t.categoryIcon)
+                    obj.put("categoryColor", t.categoryColor)
+                    obj.put("note", t.note)
+                    obj.put("timestamp", t.timestamp)
+                    obj.put("isRecurring", t.isRecurring)
+                    obj.put("recurrencePeriod", t.recurrencePeriod)
+                    transactionsArray.put(obj)
+                }
+                root.put("transactions", transactionsArray)
 
-                    val body = okhttp3.RequestBody.create(
-                        "application/json; charset=utf-8".toMediaTypeOrNull(),
-                        root.toString()
-                    )
+                // Budgets
+                val budgetsArray = org.json.JSONArray()
+                budgetsList.forEach { b ->
+                    val obj = org.json.JSONObject()
+                    obj.put("id", b.id)
+                    obj.put("categoryName", b.categoryName)
+                    obj.put("categoryIcon", b.categoryIcon)
+                    obj.put("categoryColor", b.categoryColor)
+                    obj.put("limitAmount", b.limitAmount)
+                    obj.put("spentAmount", b.spentAmount)
+                    obj.put("month", b.month)
+                    budgetsArray.put(obj)
+                }
+                root.put("budgets", budgetsArray)
 
-                    val request = okhttp3.Request.Builder()
-                        .url(webAppUrl)
-                        .post(body)
-                        .build()
+                // Savings Goals
+                val savingsGoalsArray = org.json.JSONArray()
+                savingsGoalsList.forEach { s ->
+                    val obj = org.json.JSONObject()
+                    obj.put("id", s.id)
+                    obj.put("name", s.name)
+                    obj.put("targetAmount", s.targetAmount)
+                    obj.put("currentAmount", s.currentAmount)
+                    obj.put("targetDate", s.targetDate)
+                    obj.put("note", s.note ?: "")
+                    savingsGoalsArray.put(obj)
+                }
+                root.put("savingsGoals", savingsGoalsArray)
 
-                    addLog("Đang tải dữ liệu lên Máy chủ Cloud của bạn...")
-                    withContext(Dispatchers.IO) {
-                        okHttpClient.newCall(request).execute().use { response ->
-                            if (response.isSuccessful) {
-                                val bodyStr = response.body?.string() ?: "{}"
-                                val respObj = org.json.JSONObject(bodyStr)
-                                val successResult = respObj.optBoolean("success", false)
-                                if (successResult) {
-                                    val nowStr = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date())
-                                    if (type == "SHEETS") {
-                                        repository.saveSetting("google_sheet_last_sync", nowStr)
-                                        _googleSheetLastSync.value = nowStr
-                                    } else {
-                                        repository.saveSetting("google_doc_last_sync", nowStr)
-                                        _googleDocLastSync.value = nowStr
-                                    }
-                                    withContext(Dispatchers.Main) {
-                                        addLog("Thành công: " + respObj.optString("message", "Đồng bộ thành công!"))
-                                        _syncStatus.value = "SUCCESS"
-                                    }
-                                } else {
-                                    val errorMsg = respObj.optString("error", "Lỗi từ Apps Script của bạn")
-                                    withContext(Dispatchers.Main) {
-                                        addLog("Lỗi Sync Cloud: $errorMsg")
-                                        _syncStatus.value = "ERROR"
-                                    }
-                                }
-                            } else {
-                                withContext(Dispatchers.Main) {
-                                    addLog("Phản hồi lỗi cổng API: HTTP ${response.code}")
-                                    _syncStatus.value = "ERROR"
-                                }
-                            }
+                // Custom Categories
+                val categoriesSetting = repository.getSetting("custom_categories")?.value ?: ""
+                root.put("customCategories", categoriesSetting)
+
+                val jsonString = root.toString(2)
+
+                // Save to context.getExternalFilesDir("Backups")
+                val backupDir = context.getExternalFilesDir("Backups") ?: context.filesDir
+                if (!backupDir.exists()) {
+                    backupDir.mkdirs()
+                }
+
+                val formatSdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                val filename = "SoChiTieu_Backup_${formatSdf.format(Date())}.json"
+                val file = java.io.File(backupDir, filename)
+
+                withContext(Dispatchers.IO) {
+                    file.writeText(jsonString)
+                }
+
+                addLog("Đã viết file thành công: $filename")
+                addLog("Đường dẫn file: ${file.absolutePath}")
+
+                val nowStr = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date())
+                repository.saveSetting("local_backup_last_time", nowStr)
+                _localBackupLastTime.value = nowStr
+
+                val filesList = backupDir.listFiles { _, name -> name.endsWith(".json") }
+                _localBackupCount.value = filesList?.size ?: 0
+
+                addLog("🎉 SAO LƯU THÀNH CÔNG!")
+                _syncStatus.value = "SUCCESS"
+
+                // Launch Share intent
+                withContext(Dispatchers.Main) {
+                    try {
+                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            file
+                        )
+                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(android.content.Intent.EXTRA_STREAM, fileUri)
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Sổ Chi Tiêu Backup File")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
+                        val chooserIntent = android.content.Intent.createChooser(shareIntent, "Chia sẻ & Sao lưu dữ liệu JSON")
+                        chooserIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(chooserIntent)
+                    } catch (e: Exception) {
+                        // Fallback
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Sổ Chi Tiêu JSON Backup", jsonString)
+                        clipboard.setPrimaryClip(clip)
+                        addLog("⚠️ Không thể khởi chạy trình FileProvider. Dữ liệu JSON đã được copy vào bộ nhớ tạm để thay thế.")
+                        android.widget.Toast.makeText(context, "Đã sao chép nội dung JSON vào Clipboard!", android.widget.Toast.LENGTH_LONG).show()
                     }
-                } catch (e: Exception) {
-                    addLog("Lỗi đường truyền hoặc phản hồi: ${e.message}")
-                    _syncStatus.value = "ERROR"
                 }
-            } else {
-                // FALLBACK: Offline format copy-paste helper
-                addLog("Chế độ: Đồng bộ Thông minh (Không dùng Web Script).")
-                addLog("Đang xây dựng báo cáo chuyên sâu...")
-                
-                val content = StringBuilder()
-                if (type == "SHEETS") {
-                    content.append("ID,Ví,Loại,Số tiền (vnđ),Hạng mục,Ghi chú,Thời gian\n")
-                    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("vi", "VN"))
-                    txs.forEach { tx ->
-                        val cleanNote = (tx.note ?: "").replace("\"", "\"\"")
-                        content.append("${tx.id},\"${tx.walletName}\",${if (tx.type == "EXPENSE") "Chi" else "Thu"},${tx.amount},\"${tx.categoryName}\",\"$cleanNote\",\"${sdf.format(Date(tx.timestamp))}\"\n")
-                    }
-                } else {
-                    content.append("==========================================\n")
-                    content.append("BÁO CÁO GIAO DỊCH TỪ SỔ CHI TIÊU\n")
-                    content.append("Mốc thời gian tải: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}\n")
-                    content.append("==========================================\n\n")
-                    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("vi", "VN"))
-                    var totalIn = 0.0
-                    var totalOut = 0.0
-                    txs.forEach { tx ->
-                        val sign = if (tx.type == "EXPENSE") { totalOut += tx.amount; "-" } else { totalIn += tx.amount; "+" }
-                        content.append("${sdf.format(Date(tx.timestamp))} | $sign${FormatHelper.formatVND(tx.amount)} | [${tx.walletName}] | ${tx.categoryName} ${if (tx.note.isNullOrBlank()) "" else "| " + tx.note}\n")
-                    }
-                    content.append("------------------------------------------\n")
-                    content.append("TỔNG THU: +${FormatHelper.formatVND(totalIn)}\n")
-                    content.append("TỔNG CHI: -${FormatHelper.formatVND(totalOut)}\n")
-                    content.append("SỐ DỰ DỰ KIẾN: ${FormatHelper.formatVND(totalIn - totalOut)}\n")
+            } catch (e: Exception) {
+                addLog("Sao lưu lỗi: ${e.localizedMessage ?: "Lỗi không xác định"}")
+                _syncStatus.value = "ERROR"
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun openBackupFolder(context: android.content.Context) {
+        viewModelScope.launch {
+            _syncStatus.value = "SYNCING"
+            val logs = mutableListOf<String>()
+            fun addLog(msg: String) {
+                logs.add("[${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())}] $msg")
+                _syncProgressLogs.value = logs.toList()
+            }
+
+            try {
+                addLog("Đang kết nối đến thư mục lưu trữ...")
+                val backupDir = context.getExternalFilesDir("Backups") ?: context.filesDir
+                if (!backupDir.exists()) {
+                    backupDir.mkdirs()
                 }
 
+                val absolutePath = backupDir.absolutePath
+                addLog("Đường dẫn hệ thống: $absolutePath")
+
+                // Copy path to clipboard as backup option
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("Đường dẫn sao lưu Sổ Chi Tiêu", absolutePath)
+                clipboard.setPrimaryClip(clip)
+                addLog("📋 ĐÃ COPY ĐƯỜNG DẪN THƯ MỤC VÀO CLIPBOARD.")
+
+                addLog("Đang kích hoạt trình quản lý tệp trên thiết bị...")
+
                 try {
-                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("Sổ Chi Tiêu Sync Data", content.toString())
-                    clipboard.setPrimaryClip(clip)
-                    addLog("Đã định dạng thành công dữ liệu báo cáo!")
-                    addLog("Đã tự động sao chép (Copy) toàn bộ nội dung vào Clipboard của bạn!")
-                    addLog("HƯỚNG DẪN: Hãy nhấn nút mở link Tài liệu, dán vào tài liệu của bạn. Dữ liệu sẽ lập tức xuất hiện.")
-                    
-                    val nowStr = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(Date())
-                    if (type == "SHEETS") {
-                        repository.saveSetting("google_sheet_last_sync", nowStr)
-                        _googleSheetLastSync.value = nowStr
-                    } else {
-                        repository.saveSetting("google_doc_last_sync", nowStr)
-                        _googleDocLastSync.value = nowStr
+                    // Start an intent to view the file provider uri folder path or storage directory
+                    val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        backupDir
+                    )
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(fileUri, "resource/folder")
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    _syncStatus.value = "SUCCESS"
+                    context.startActivity(intent)
+                    addLog("🚀 Mở thư mục thành công!")
                 } catch (e: Exception) {
-                    addLog("Lỗi chuyển dịch Clipboard: ${e.message}")
-                    _syncStatus.value = "ERROR"
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"
+                            addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                        addLog("🚀 Mở trình chọn tệp hệ thống thành công!")
+                    } catch (ex: Exception) {
+                        addLog("⚠️ Thiết bị thiếu ứng dụng File Manager tương thích.")
+                    }
                 }
+
+                addLog("\n💡 HƯỚNG DẪN TÌM THỦ CÔNG:")
+                addLog("1. Mở ứng dụng 'Tệp' (Files) có sẵn trên điện thoại của bạn.")
+                addLog("2. Điều hướng theo đường dẫn: Bộ nhớ trong > Android > data > ${context.packageName} > files > Backups")
+                addLog("3. Tại đây bạn sẽ thấy tất cả các file dạng .json đã sao lưu trước đó.")
+                
+                _syncStatus.value = "SUCCESS"
+            } catch (e: Exception) {
+                addLog("Mở thư mục lỗi: ${e.localizedMessage ?: "Lỗi không xác định"}")
+                _syncStatus.value = "ERROR"
+                e.printStackTrace()
             }
         }
     }
