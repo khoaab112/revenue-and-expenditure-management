@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +14,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
@@ -1438,6 +1441,7 @@ fun PinSetupDialog(
     onDismiss: () -> Unit,
     onSavePin: (String) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     var enteredText by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
 
@@ -1446,7 +1450,13 @@ fun PinSetupDialog(
         title = { Text("THIẾT LẬP MÃ PIN MỚI") },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {
+                            focusManager.clearFocus()
+                        })
+                    },
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("Vui lòng mã hóa mã PIN mới của bạn (đúng 4 ký tự số):", fontSize = 13.sp)
@@ -1499,6 +1509,7 @@ fun WalletManagementDialog(
     viewModel: FinanceViewModel,
     onDismiss: () -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     val wallets by viewModel.allWallets.collectAsState()
     
     // New Wallet Form States
@@ -1510,9 +1521,60 @@ fun WalletManagementDialog(
     var selectedIcon by remember { mutableStateOf("AccountBalanceWallet") }
     var isCustomColorActive by remember { mutableStateOf(false) }
     var customColorHex by remember { mutableStateOf("#9C27B0") }
+    var walletToDelete by remember { mutableStateOf<com.example.data.Wallet?>(null) }
+
+    if (walletToDelete != null) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        AlertDialog(
+            onDismissRequest = { walletToDelete = null },
+            title = { Text("Xác nhận xóa ví?", fontWeight = FontWeight.Bold) },
+            text = { Text("Bạn có chắc chắn muốn xóa ví '${walletToDelete?.name}'? Hành động này cũng sẽ ảnh hưởng đến các dữ liệu liên quan và không thể hoàn tác.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        walletToDelete?.let { wallet ->
+                            viewModel.deleteWallet(wallet)
+                            android.widget.Toast.makeText(context, "Xóa ví thành công", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        walletToDelete = null
+                    }
+                ) {
+                    Text("XÓA", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { walletToDelete = null }) {
+                    Text("HỦY")
+                }
+            }
+        )
+    }
     
-    val colorPalette = listOf("#F44336", "#2196F3", "#4CAF50", "#FFC107", "#9C27B0", "#009688", "#455A64")
-    val iconPalette = listOf("AccountBalanceWallet", "AccountBalance", "Payments", "Savings")
+    val colorPalette = listOf(
+        "#F44336", "#E91E63", "#9C27B0", "#673AB7",
+        "#3F51B5", "#2196F3", "#03A9F4", "#00BCD4",
+        "#009688", "#4CAF50", "#8BC34A", "#FFEB3B",
+        "#FF9800", "#795548", "#607D8B", "#455A64"
+    )
+    val bankIcons = listOf("AccountBalance", "Business", "Domain", "CurrencyExchange", "AssuredWorkload", "SwapHoriz", "CorporateFare", "CreditCard")
+    val cashIcons = listOf("Payments", "AccountBalanceWallet", "Money", "AttachMoney", "Wallet", "PriceCheck", "LocalAtm", "PointOfSale")
+    val walletIcons = listOf("PhonelinkRing", "Contactless", "QrCode", "PhoneAndroid", "Security", "TapAndPlay", "Nfc", "MobileScreenShare")
+    val savingsIcons = listOf("Savings", "Inventory", "CurrencyBitcoin", "MonetizationOn", "Star", "WorkspacePremium", "Redeem", "CardGiftcard")
+
+    val iconPalette = when (walletType) {
+        "BANK" -> bankIcons
+        "CASH" -> cashIcons
+        "WALLET" -> walletIcons
+        "SAVINGS" -> savingsIcons
+        else -> cashIcons
+    }
+    
+    LaunchedEffect(iconPalette) {
+        if (!iconPalette.contains(selectedIcon)) {
+            selectedIcon = iconPalette.first()
+        }
+    }
+
     val typeDisplayName = mapOf("CASH" to "Tiền mặt", "BANK" to "Ngân hàng", "WALLET" to "Ví điện tử", "SAVINGS" to "Tích lũy")
 
     AlertDialog(
@@ -1528,7 +1590,30 @@ fun WalletManagementDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("QUẢN LÝ VÍ & TÀI KHOẢN", fontSize = 18.sp, fontWeight = FontWeight.Black)
+                if (showAddForm) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(onClick = { showAddForm = false }) {
+                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Trở lại")
+                        }
+                        Text("THÊM VÍ MỚI", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalanceWallet,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text("QUẢN LÝ VÍ & TÀI KHOẢN", fontSize = 16.sp, fontWeight = FontWeight.Black)
+                    }
+                }
                 IconButton(onClick = { if (showAddForm) showAddForm = false else onDismiss() }) {
                     Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
                 }
@@ -1538,179 +1623,313 @@ fun WalletManagementDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(rememberScrollState())
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {
+                            focusManager.clearFocus()
+                        })
+                    },
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (!showAddForm) {
                     Button(
                         onClick = { showAddForm = true },
-                        modifier = Modifier.fillMaxWidth().testTag("add_wallet_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("add_wallet_btn"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
+                        Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Add", modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Thêm ví mới")
+                        Text("Thêm ví tài khoản mới", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
-                } else {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Text("THÊM VÍ MỚI", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            
-                            OutlinedTextField(
-                                value = name,
-                                onValueChange = { name = it },
-                                label = { Text("Tên ví/tài khoản") },
-                                modifier = Modifier.fillMaxWidth().testTag("wallet_name_input")
-                            )
 
-                            // Type selection (Displayed in a 2x2 grid)
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Loại tài khoản", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                val items = listOf("CASH", "BANK", "WALLET", "SAVINGS")
-                                val chunked = items.chunked(2)
-                                chunked.forEach { rowItems ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Danh sách ví (Kéo ☰ để sắp xếp thứ tự ưu tiên)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    SortableWalletList(
+                        wallets = wallets,
+                        viewModel = viewModel,
+                        typeDisplayName = typeDisplayName,
+                        onDeleteRequest = { walletToDelete = it }
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            label = { Text("Tên ví/tài khoản (ví dụ: VCB, Ví ăn uống...)") },
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("wallet_name_input")
+                        )
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Phân loại tài khoản", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            
+                            val types = listOf(
+                                Triple("CASH", "Tiền mặt", Icons.Default.Payments),
+                                Triple("BANK", "Ngân hàng", Icons.Default.AccountBalance),
+                                Triple("WALLET", "Ví điện tử", Icons.Default.AccountBalanceWallet),
+                                Triple("SAVINGS", "Tích lũy", Icons.Default.Savings)
+                            )
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                types.forEach { (typeKey, label, icon) ->
+                                    val isSelected = walletType == typeKey
+                                    Card(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(72.dp)
+                                            .clickable { walletType = typeKey },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
                                     ) {
-                                        rowItems.forEach { t ->
-                                            FilterChip(
-                                                selected = walletType == t,
-                                                onClick = { walletType = t },
-                                                label = { Text(typeDisplayName[t] ?: t, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
-                                                modifier = Modifier.weight(1f)
-                                            )
+                                        Column(
+                                            modifier = Modifier.fillMaxSize().padding(8.dp),
+                                            verticalArrangement = Arrangement.Center,
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Icon(imageVector = icon, contentDescription = label, modifier = Modifier.size(24.dp))
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                                         }
                                     }
                                 }
                             }
+                        }
 
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             OutlinedTextField(
                                 value = initialBalanceStr,
                                 onValueChange = { initialBalanceStr = it },
-                                label = { Text("Số dư khởi tạo") },
+                                label = { Text("Số dư khởi tạo (VND)") },
+                                shape = RoundedCornerShape(12.dp),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
                                 modifier = Modifier.fillMaxWidth().testTag("wallet_balance_input")
                             )
+                            if (initialBalanceStr.isNotBlank()) {
+                                val formatted = FormatHelper.formatInputNumber(initialBalanceStr)
+                                Text(
+                                    text = "$formatted đ",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                                )
+                            }
+                        }
 
-                            // Color selection grid & custom color support
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Mã màu hiển thị", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Màu chủ đạo hiển thị", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    // Predefined colors
-                                    colorPalette.forEach { colorStr ->
-                                        val isSelected = !isCustomColorActive && selectedColor == colorStr
+                                    // Row 1: First 8 colors
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        colorPalette.take(8).forEach { colorStr ->
+                                            val isSelected = !isCustomColorActive && selectedColor == colorStr
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(CircleShape)
+                                                    .background(FormatHelper.parseColor(colorStr))
+                                                    .clickable { 
+                                                        isCustomColorActive = false
+                                                        selectedColor = colorStr
+                                                    }
+                                                    .border(
+                                                        BorderStroke(
+                                                            width = if (isSelected) 3.dp else 0.dp,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        ),
+                                                        shape = CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isSelected) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Row 2: Next 7 colors + Custom color circle (8th item)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        colorPalette.drop(8).take(7).forEach { colorStr ->
+                                            val isSelected = !isCustomColorActive && selectedColor == colorStr
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(CircleShape)
+                                                    .background(FormatHelper.parseColor(colorStr))
+                                                    .clickable { 
+                                                        isCustomColorActive = false
+                                                        selectedColor = colorStr
+                                                    }
+                                                    .border(
+                                                        BorderStroke(
+                                                            width = if (isSelected) 3.dp else 0.dp,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        ),
+                                                        shape = CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isSelected) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        val currentCustColor = try {
+                                            FormatHelper.parseColor(customColorHex)
+                                        } catch (e: Exception) {
+                                            Color.Gray
+                                        }
                                         Box(
                                             modifier = Modifier
                                                 .size(32.dp)
                                                 .clip(CircleShape)
-                                                .background(FormatHelper.parseColor(colorStr))
+                                                .background(currentCustColor)
                                                 .clickable { 
-                                                    isCustomColorActive = false
-                                                    selectedColor = colorStr
+                                                    isCustomColorActive = true
+                                                    selectedColor = customColorHex
                                                 }
                                                 .border(
                                                     BorderStroke(
-                                                        width = if (isSelected) 3.dp else 0.dp,
+                                                        width = if (isCustomColorActive) 3.dp else 0.dp,
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     ),
                                                     shape = CircleShape
-                                                )
-                                        )
-                                    }
-                                    
-                                    // Custom color circle option
-                                    val currentCustColor = try {
-                                        FormatHelper.parseColor(customColorHex)
-                                    } catch (e: Exception) {
-                                        Color.Gray
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(CircleShape)
-                                            .background(currentCustColor)
-                                            .clickable { 
-                                                isCustomColorActive = true
-                                                selectedColor = customColorHex
-                                            }
-                                            .border(
-                                                BorderStroke(
-                                                    width = if (isCustomColorActive) 3.dp else 0.dp,
-                                                    color = MaterialTheme.colorScheme.onSurface
                                                 ),
-                                                shape = CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Palette,
-                                            contentDescription = "Custom color",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-
-                                if (isCustomColorActive) {
-                                    com.example.ui.components.ColorSliderPicker(
-                                        initialColorHex = selectedColor,
-                                        onColorChanged = { newHex ->
-                                            selectedColor = newHex
-                                            customColorHex = newHex
-                                        }
-                                    )
-                                }
-                            }
-
-                            // Icon selection
-                            Column {
-                                Text("Biểu tượng ví", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    iconPalette.forEach { iconName ->
-                                        val isSelected = selectedIcon == iconName
-                                        IconButton(
-                                            onClick = { selectedIcon = iconName },
-                                            modifier = Modifier
-                                                .background(
-                                                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                                    shape = RoundedCornerShape(8.dp)
-                                                )
+                                            contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
-                                                imageVector = IconMapper.getIconByName(iconName),
-                                                contentDescription = iconName,
-                                                tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                                imageVector = Icons.Default.Palette,
+                                                contentDescription = "Custom color",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
                                             )
                                         }
                                     }
+
+                                    if (isCustomColorActive) {
+                                        com.example.ui.components.ColorSliderPicker(
+                                            initialColorHex = selectedColor,
+                                            onColorChanged = { newHex ->
+                                                selectedColor = newHex
+                                                customColorHex = newHex
+                                            }
+                                        )
+                                    }
                                 }
                             }
+                        }
 
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Biểu tượng ví", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    iconPalette.chunked(4).forEach { rowIcons ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceEvenly,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            rowIcons.forEach { iconName ->
+                                                val isSelected = selectedIcon == iconName
+                                                IconButton(
+                                                    onClick = { selectedIcon = iconName },
+                                                    modifier = Modifier
+                                                        .size(48.dp)
+                                                        .background(
+                                                            if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                                            shape = CircleShape
+                                                        )
+                                                ) {
+                                                    Icon(
+                                                        imageVector = IconMapper.getIconByName(iconName),
+                                                        contentDescription = iconName,
+                                                        tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-
-                Text("TÀI KHOẢN HIỆN TẠI (Giữ và kéo biểu tượng ☰ để thay đổi vị trí)", fontSize = 12.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-                
-                SortableWalletList(
-                    wallets = wallets,
-                    viewModel = viewModel,
-                    typeDisplayName = typeDisplayName
-                )
             }
         },
         confirmButton = {
@@ -1721,6 +1940,7 @@ fun WalletManagementDialog(
                         if (name.isNotBlank()) {
                             val balance = initialBalanceStr.toDoubleOrNull() ?: 0.0
                             viewModel.addWallet(name, walletType, balance, selectedColor, selectedIcon)
+                            android.widget.Toast.makeText(localContext, "Thêm ví/tài khoản thành công!", android.widget.Toast.LENGTH_SHORT).show()
                             name = ""
                             initialBalanceStr = ""
                             showAddForm = false
@@ -1738,22 +1958,9 @@ fun WalletManagementDialog(
                     ),
                     shape = RoundedCornerShape(24.dp)
                 ) {
-                    Text("Lưu", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
-            } else {
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("close_wallet_management_btn"),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text("Đóng", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Lưu ví tài khoản", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
         }
@@ -1764,7 +1971,8 @@ fun WalletManagementDialog(
 fun SortableWalletList(
     wallets: List<Wallet>,
     viewModel: FinanceViewModel,
-    typeDisplayName: Map<String, String>
+    typeDisplayName: Map<String, String>,
+    onDeleteRequest: (Wallet) -> Unit
 ) {
     val listState = remember(wallets) { mutableStateListOf<Wallet>().apply { addAll(wallets) } }
     var draggedIndex by remember { mutableStateOf<Int?>(null) }
@@ -1778,7 +1986,7 @@ fun SortableWalletList(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         listState.forEachIndexed { index, wt ->
             val isDragged = draggedIndex == index
@@ -1792,34 +2000,103 @@ fun SortableWalletList(
                 MaterialTheme.colorScheme.primary
             }
 
-            ListItem(
-                headlineContent = { Text(wt.name, fontWeight = FontWeight.Bold) },
-                supportingContent = {
-                    Text(
-                        text = "${typeDisplayName[wt.type] ?: wt.type} • ${FormatHelper.formatVND(wt.balance)}",
-                        color = colorValue,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                },
-                leadingContent = {
-                    Icon(
-                        imageVector = IconMapper.getIconByName(wt.iconName),
-                        contentDescription = wt.name,
-                        tint = colorValue
-                    )
-                },
-                trailingContent = {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(zIndexValue)
+                    .graphicsLayer {
+                        translationY = verticalOffset
+                        scaleX = scaleValue
+                        scaleY = scaleValue
+                    }
+                    .background(Color.Transparent)
+                    .border(
+                        width = if (isDragged) 2.dp else 1.dp,
+                        color = if (isDragged) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(16.dp)
+                    ),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isDragged) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f) 
+                                     else MaterialTheme.colorScheme.surface
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(colorValue.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = IconMapper.getIconByName(wt.iconName),
+                                contentDescription = wt.name,
+                                tint = colorValue,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = wt.name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(colorValue.copy(alpha = 0.1f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = typeDisplayName[wt.type] ?: wt.type,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = colorValue
+                                    )
+                                }
+                            }
+                            
+                            Text(
+                                text = FormatHelper.formatVND(wt.balance),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (listState.size > 1) {
-                            IconButton(onClick = { viewModel.deleteWallet(wt) }) {
+                            IconButton(
+                                onClick = { onDeleteRequest(wt) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
                                     contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -1827,7 +2104,7 @@ fun SortableWalletList(
                         Icon(
                             imageVector = Icons.Default.Menu,
                             contentDescription = "Kéo để sắp xếp",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             modifier = Modifier
                                 .size(36.dp)
                                 .padding(4.dp)
@@ -1842,7 +2119,7 @@ fun SortableWalletList(
                                         onDrag = { change, dragAmount ->
                                             change.consume()
                                             driftY += dragAmount.y
-                                            val itemHeightPx = 64.dp.toPx()
+                                            val itemHeightPx = 76.dp.toPx()
                                             val targetIdx = draggedIndex
                                             if (targetIdx != null) {
                                                 if (driftY > itemHeightPx * 0.8f && targetIdx < listState.lastIndex) {
@@ -1864,27 +2141,8 @@ fun SortableWalletList(
                                 }
                         )
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .zIndex(zIndexValue)
-                    .graphicsLayer {
-                        translationY = verticalOffset
-                        scaleX = scaleValue
-                        scaleY = scaleValue
-                    }
-                    .background(
-                        if (isDragged) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f) 
-                        else MaterialTheme.colorScheme.surface,
-                        RoundedCornerShape(12.dp)
-                    )
-                    .border(
-                        1.dp, 
-                        if (isDragged) MaterialTheme.colorScheme.primary 
-                        else MaterialTheme.colorScheme.outlineVariant, 
-                        RoundedCornerShape(12.dp)
-                    )
-            )
+                }
+            }
         }
     }
 }
@@ -1897,6 +2155,7 @@ fun CategoryManagementDialog(
     viewModel: FinanceViewModel,
     onDismiss: () -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     val categoriesList by viewModel.categoriesList.collectAsState()
     
     // New Category Form States
@@ -1909,15 +2168,20 @@ fun CategoryManagementDialog(
     var selectedIcon by remember { mutableStateOf("ShoppingCart") }
     var isCustomColorActive by remember { mutableStateOf(false) }
     var customColorHex by remember { mutableStateOf("#9C27B0") }
+    var categoryToDelete by remember { mutableStateOf<FinanceCategory?>(null) }
     
-    val colorPalette = listOf("#F44336", "#2196F3", "#4CAF50", "#FFC107", "#9C27B0", "#009688", "#E91E63", "#795548")
+    val colorPalette = listOf(
+        "#F44336", "#E91E63", "#9C27B0", "#673AB7",
+        "#3F51B5", "#2196F3", "#03A9F4", "#00BCD4",
+        "#009688", "#4CAF50", "#8BC34A", "#FFEB3B",
+        "#FF9800", "#795548", "#607D8B", "#455A64"
+    )
     val iconPalette = listOf(
         "Restaurant", "DirectionsCar", "ShoppingBag", "Receipt", 
         "SportsEsports", "School", "LocalHospital", "Home", 
         "Work", "CardGiftcard", "Storefront", "Payments", 
         "AccountBalance", "AccountBalanceWallet", "Savings", 
         "TrendingUp", "TrendingDown", "Lock", "Settings",
-        // New icons
         "Coffee", "LocalBar", "Flight", "Checkroom", "FitnessCenter",
         "Pets", "ChildCare", "FaceRetouchingNatural", "Spa", "Movie",
         "Theaters", "LibraryMusic", "Headphones", "VideogameAsset",
@@ -1927,217 +2191,433 @@ fun CategoryManagementDialog(
         "Favorite", "Mood", "SelfImprovement", "EmojiObjects", "RocketLaunch"
     )
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight(0.9f)
-            .testTag("category_management_dialog"),
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("QUẢN LÝ DANH MỤC LƯỚI", fontSize = 18.sp, fontWeight = FontWeight.Black)
-                IconButton(onClick = onDismiss) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
+    // Delete Confirmation Dialog
+    if (categoryToDelete != null) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        AlertDialog(
+            onDismissRequest = { categoryToDelete = null },
+            title = { Text("Xác nhận xóa?", fontWeight = FontWeight.Bold) },
+            text = { Text("Bạn có chắc chắn muốn xóa danh mục '${categoryToDelete?.name}'? Hành động này không thể hoàn tác.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        categoryToDelete?.let { cat ->
+                            viewModel.deleteCategory(cat)
+                            android.widget.Toast.makeText(context, "Xóa danh mục thành công", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        categoryToDelete = null
+                    }
+                ) {
+                    Text("XÓA", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryToDelete = null }) {
+                    Text("HỦY")
                 }
             }
-        },
-        text = {
+        )
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = { if (showAddForm) showAddForm = false else onDismiss() },
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .padding(16.dp)
+                .testTag("category_management_dialog"),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                // Expenses / Incomes tab
-                TabRow(
-                    selectedTabIndex = if (selectedTypeTab == "EXPENSE") 0 else 1,
-                    containerColor = Color.Transparent,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                // Header (Pinned)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Tab(
-                        selected = selectedTypeTab == "EXPENSE",
-                        onClick = { selectedTypeTab = "EXPENSE"; type = "EXPENSE" },
-                        text = { Text("Khoản Chi", fontWeight = FontWeight.Bold) }
-                    )
-                    Tab(
-                        selected = selectedTypeTab == "INCOME",
-                        onClick = { selectedTypeTab = "INCOME"; type = "INCOME" },
-                        text = { Text("Khoản Thu", fontWeight = FontWeight.Bold) }
-                    )
+                    if (showAddForm) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            IconButton(onClick = { showAddForm = false }) {
+                                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Trở lại")
+                            }
+                            Text("THÊM DANH MỤC MỚI", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text("QUẢN LÝ DANH MỤC LƯỚI", fontSize = 16.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                    IconButton(onClick = { if (showAddForm) showAddForm = false else onDismiss() }) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
+                    }
                 }
 
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Scrollable Content
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = {
+                                focusManager.clearFocus()
+                            })
+                        },
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                 if (!showAddForm) {
+                    // Modern Tab selection segment
+                    TabRow(
+                        selectedTabIndex = if (selectedTypeTab == "EXPENSE") 0 else 1,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp)),
+                        indicator = { tabPositions ->
+                            TabRowDefaults.SecondaryIndicator(
+                                modifier = Modifier.then(
+                                    with(TabRowDefaults) {
+                                        Modifier.tabIndicatorOffset(tabPositions[if (selectedTypeTab == "EXPENSE") 0 else 1])
+                                    }
+                                ),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    ) {
+                        Tab(
+                            selected = selectedTypeTab == "EXPENSE",
+                            onClick = { selectedTypeTab = "EXPENSE"; type = "EXPENSE" },
+                            text = { 
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(Icons.Default.TrendingDown, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                    Text("KHOẢN CHI", fontWeight = FontWeight.Black, fontSize = 12.sp) 
+                                }
+                            }
+                        )
+                        Tab(
+                            selected = selectedTypeTab == "INCOME",
+                            onClick = { selectedTypeTab = "INCOME"; type = "INCOME" },
+                            text = { 
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(Icons.Default.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    Text("KHOẢN THU", fontWeight = FontWeight.Black, fontSize = 12.sp) 
+                                }
+                            }
+                        )
+                    }
+
                     Button(
                         onClick = { showAddForm = true },
-                        modifier = Modifier.fillMaxWidth().testTag("add_category_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("add_category_btn"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Add")
+                        Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Add", modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Thêm danh mục mới")
+                        Text("Tạo danh mục mới", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Hạng mục hiển thị (Sắp xếp theo thứ tự ưu tiên)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    val currentFilterList = categoriesList.filter { it.type == selectedTypeTab || it.type == "BOTH" }
+                    
+                    if (currentFilterList.isEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text("Chưa có danh mục nào được lưu.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Hãy chạm nút phía trên để thêm mới!", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                            }
+                        }
+                    } else {
+                        SortableCategoryList(
+                            categories = currentFilterList,
+                            viewModel = viewModel,
+                            typeTab = selectedTypeTab,
+                            onAddSubcategory = { parentNameValue ->
+                                parentName = parentNameValue
+                                showAddForm = true
+                            },
+                            onDeleteRequest = { cat ->
+                                categoryToDelete = cat
+                            }
+                        )
                     }
                 } else {
-                    Card(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Text("TẠO DANH MỤC MỚI", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            label = { Text("Tên danh mục (ví dụ: Mua sắm, Lương...)") },
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("category_name_input")
+                        )
+
+                        var categoryDropdownExpanded by remember { mutableStateOf(false) }
+                        Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedTextField(
-                                value = name,
-                                onValueChange = { name = it },
-                                label = { Text("Tên danh mục") },
-                                modifier = Modifier.fillMaxWidth().testTag("category_name_input")
+                                value = parentName ?: "Không thuộc mục cha (Hạng mục chính)",
+                                onValueChange = {},
+                                readOnly = true,
+                                shape = RoundedCornerShape(12.dp),
+                                label = { Text("Danh mục trực thuộc") },
+                                trailingIcon = {
+                                    IconButton(onClick = { categoryDropdownExpanded = !categoryDropdownExpanded }) {
+                                        Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { categoryDropdownExpanded = true }
                             )
 
-                            var categoryDropdownExpanded by remember { mutableStateOf(false) }
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                OutlinedTextField(
-                                    value = parentName ?: "Không có (Danh mục gốc)",
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Trực thuộc (Mục cha)") },
-                                    trailingIcon = {
-                                        IconButton(onClick = { categoryDropdownExpanded = !categoryDropdownExpanded }) {
-                                            Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { categoryDropdownExpanded = true }
+                            DropdownMenu(
+                                expanded = categoryDropdownExpanded,
+                                onDismissRequest = { categoryDropdownExpanded = false },
+                                modifier = Modifier.fillMaxWidth(0.85f)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Không thuộc mục cha (Hạng mục chính)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        parentName = null
+                                        categoryDropdownExpanded = false
+                                    }
                                 )
-
-                                DropdownMenu(
-                                    expanded = categoryDropdownExpanded,
-                                    onDismissRequest = { categoryDropdownExpanded = false },
-                                    modifier = Modifier.fillMaxWidth(0.9f)
-                                ) {
+                                val parentCandidates = categoriesList.filter { (it.type == type || it.type == "BOTH") && it.parentName == null }
+                                parentCandidates.forEach { p ->
                                     DropdownMenuItem(
-                                        text = { Text("Không có (Danh mục gốc)") },
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                val colorValue = try { FormatHelper.parseColor(p.colorHex) } catch(e:Exception){ Color.Gray }
+                                                Icon(IconMapper.getIconByName(p.iconName), contentDescription = p.name, tint = colorValue, modifier = Modifier.size(20.dp))
+                                                Text(p.name, fontSize = 14.sp)
+                                            }
+                                        },
                                         onClick = {
-                                            parentName = null
+                                            parentName = p.name
                                             categoryDropdownExpanded = false
                                         }
                                     )
-                                    val parentCandidates = categoriesList.filter { (it.type == type || it.type == "BOTH") && it.parentName == null }
-                                    parentCandidates.forEach { p ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                                ) {
-                                                    val colorValue = try { FormatHelper.parseColor(p.colorHex) } catch(e:Exception){ Color.Gray }
-                                                    Icon(IconMapper.getIconByName(p.iconName), contentDescription = p.name, tint = colorValue, modifier = Modifier.size(20.dp))
-                                                    Text(p.name, fontSize = 14.sp)
-                                                }
-                                            },
-                                            onClick = {
-                                                parentName = p.name
-                                                categoryDropdownExpanded = false
-                                            }
-                                        )
-                                    }
                                 }
                             }
+                        }
 
-                            // Type select description
-                            Text("Áp dụng cho: ${if (selectedTypeTab == "EXPENSE") "Hóa đơn & Chi tiêu" else "Thu nhập & Tiền vào"}", fontSize = 13.sp)
-
-                            // Color grid with custom color support
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Mã màu đại diện", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Mã màu đại diện", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    // Predefined colors
-                                    colorPalette.forEach { colorStr ->
-                                        val isSelected = !isCustomColorActive && selectedColor == colorStr
+                                    // Row 1: First 8 colors
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        colorPalette.take(8).forEach { colorStr ->
+                                            val isSelected = !isCustomColorActive && selectedColor == colorStr
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(CircleShape)
+                                                    .background(FormatHelper.parseColor(colorStr))
+                                                    .clickable { 
+                                                        isCustomColorActive = false
+                                                        selectedColor = colorStr
+                                                    }
+                                                    .border(
+                                                        BorderStroke(
+                                                            width = if (isSelected) 3.dp else 0.dp,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        ),
+                                                        shape = CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isSelected) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Row 2: Next 7 colors + Custom color circle (8th item)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        colorPalette.drop(8).take(7).forEach { colorStr ->
+                                            val isSelected = !isCustomColorActive && selectedColor == colorStr
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(CircleShape)
+                                                    .background(FormatHelper.parseColor(colorStr))
+                                                    .clickable { 
+                                                        isCustomColorActive = false
+                                                        selectedColor = colorStr
+                                                    }
+                                                    .border(
+                                                        BorderStroke(
+                                                            width = if (isSelected) 3.dp else 0.dp,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        ),
+                                                        shape = CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isSelected) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        val currentCustColor = try {
+                                            FormatHelper.parseColor(customColorHex)
+                                        } catch (e: Exception) {
+                                            Color.Gray
+                                        }
                                         Box(
                                             modifier = Modifier
                                                 .size(32.dp)
                                                 .clip(CircleShape)
-                                                .background(FormatHelper.parseColor(colorStr))
+                                                .background(currentCustColor)
                                                 .clickable { 
-                                                    isCustomColorActive = false
-                                                    selectedColor = colorStr
+                                                    isCustomColorActive = true
+                                                    selectedColor = customColorHex
                                                 }
                                                 .border(
                                                     BorderStroke(
-                                                        width = if (isSelected) 3.dp else 0.dp,
+                                                        width = if (isCustomColorActive) 3.dp else 0.dp,
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     ),
                                                     shape = CircleShape
-                                                )
-                                        )
-                                    }
-
-                                    // Custom color circle option
-                                    val currentCustColor = try {
-                                        FormatHelper.parseColor(customColorHex)
-                                    } catch (e: Exception) {
-                                        Color.Gray
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(CircleShape)
-                                            .background(currentCustColor)
-                                            .clickable { 
-                                                isCustomColorActive = true
-                                                selectedColor = customColorHex
-                                            }
-                                            .border(
-                                                BorderStroke(
-                                                    width = if (isCustomColorActive) 3.dp else 0.dp,
-                                                    color = MaterialTheme.colorScheme.onSurface
                                                 ),
-                                                shape = CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Palette,
-                                            contentDescription = "Custom color",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp)
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Palette,
+                                                contentDescription = "Custom color",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    if (isCustomColorActive) {
+                                        com.example.ui.components.ColorSliderPicker(
+                                            initialColorHex = selectedColor,
+                                            onColorChanged = { newHex ->
+                                                selectedColor = newHex
+                                                customColorHex = newHex
+                                            }
                                         )
                                     }
-                                }
-
-                                if (isCustomColorActive) {
-                                    com.example.ui.components.ColorSliderPicker(
-                                        initialColorHex = selectedColor,
-                                        onColorChanged = { newHex ->
-                                            selectedColor = newHex
-                                            customColorHex = newHex
-                                        }
-                                    )
                                 }
                             }
+                        }
 
-                            // Icons grid
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Biểu tượng hiển thị (Lưới biểu tượng)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Biểu tượng hiển thị", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                                        .padding(8.dp),
+                                        .padding(10.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    iconPalette.chunked(6).forEach { rowIcons ->
+                                    iconPalette.chunked(7).forEach { rowIcons ->
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start)
@@ -2149,22 +2629,17 @@ fun CategoryManagementDialog(
                                                     modifier = Modifier
                                                         .size(44.dp)
                                                         .background(
-                                                            if (isSelected) MaterialTheme.colorScheme.primaryContainer 
-                                                            else MaterialTheme.colorScheme.surface,
-                                                            shape = RoundedCornerShape(8.dp)
-                                                        )
-                                                        .border(
-                                                            width = 1.dp,
-                                                            color = if (isSelected) MaterialTheme.colorScheme.primary 
-                                                                    else MaterialTheme.colorScheme.outlineVariant,
+                                                            if (isSelected) MaterialTheme.colorScheme.primary 
+                                                            else Color.Transparent,
                                                             shape = RoundedCornerShape(8.dp)
                                                         )
                                                 ) {
                                                     Icon(
                                                         imageVector = IconMapper.getIconByName(iconName),
                                                         contentDescription = iconName,
-                                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer 
-                                                               else MaterialTheme.colorScheme.onSurfaceVariant
+                                                        tint = if (isSelected) Color.White 
+                                                               else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(20.dp)
                                                     )
                                                 }
                                             }
@@ -2172,71 +2647,45 @@ fun CategoryManagementDialog(
                                     }
                                 }
                             }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                TextButton(
-                                    onClick = { showAddForm = false },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Hủy")
-                                }
-                                Button(
-                                    onClick = {
-                                        if (name.isNotBlank()) {
-                                            viewModel.addCategory(name, selectedIcon, selectedColor, type, parentName)
-                                            name = ""
-                                            parentName = null
-                                            showAddForm = false
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f).testTag("save_category_confirm")
-                                ) {
-                                    Text("Lưu")
-                                }
-                            }
                         }
                     }
                 }
+            }
 
-                Text("DANH SÁCH DANH MỤC (Giữ và kéo biểu tượng ☰ để thay đổi vị trí)", fontSize = 12.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-                
-                val currentFilterList = categoriesList.filter { it.type == selectedTypeTab || it.type == "BOTH" }
-                
-                if (currentFilterList.isEmpty()) {
-                    Text("Không có danh mục nào. Hãy thêm danh mục mới!", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    SortableCategoryList(
-                        categories = currentFilterList,
-                        viewModel = viewModel,
-                        typeTab = selectedTypeTab,
-                        onAddSubcategory = { parentNameValue ->
-                            parentName = parentNameValue
-                            showAddForm = true
-                        }
-                    )
+        // Footer (Pinned at bottom)
+                if (showAddForm) {
+                    val localContext = androidx.compose.ui.platform.LocalContext.current
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            if (name.isNotBlank()) {
+                                viewModel.addCategory(name, selectedIcon, selectedColor, type, parentName)
+                                name = ""
+                                parentName = null
+                                showAddForm = false
+                            } else {
+                                android.widget.Toast.makeText(localContext, "Vui lòng nhập tên danh mục!", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("save_category_confirm"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Lưu", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("close_category_management_btn"),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Text("Đóng", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
         }
-    )
+    }
 }
 
 @Composable
@@ -2244,7 +2693,8 @@ fun SortableCategoryList(
     categories: List<FinanceCategory>,
     viewModel: FinanceViewModel,
     typeTab: String,
-    onAddSubcategory: (parentName: String) -> Unit
+    onAddSubcategory: (parentName: String) -> Unit,
+    onDeleteRequest: (FinanceCategory) -> Unit
 ) {
     val roots = remember(categories) { categories.filter { it.parentName == null } }
     val listState = remember(roots) { mutableStateListOf<FinanceCategory>().apply { addAll(roots) } }
@@ -2259,7 +2709,7 @@ fun SortableCategoryList(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         listState.forEachIndexed { index, cat ->
             val isDragged = draggedIndex == index
@@ -2274,6 +2724,7 @@ fun SortableCategoryList(
             }
 
             var isExpanded by remember { mutableStateOf(false) }
+            val subcats = categories.filter { it.parentName == cat.name }
 
             Column(
                 modifier = Modifier
@@ -2284,206 +2735,305 @@ fun SortableCategoryList(
                         scaleX = scaleValue
                         scaleY = scaleValue
                     }
-                    .background(
-                        if (isDragged) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f) 
-                        else MaterialTheme.colorScheme.surface,
-                        RoundedCornerShape(12.dp)
-                    )
+                    .background(Color.Transparent)
                     .border(
-                        1.dp, 
-                        if (isDragged) MaterialTheme.colorScheme.primary 
-                        else MaterialTheme.colorScheme.outlineVariant, 
-                        RoundedCornerShape(12.dp)
+                        width = if (isDragged) 2.dp else 1.dp,
+                        color = if (isDragged) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp)
                     )
             ) {
-                ListItem(
-                    modifier = Modifier.clickable { isExpanded = !isExpanded },
-                    headlineContent = { Text(cat.name, fontWeight = FontWeight.Bold) },
-                    leadingContent = {
-                        Icon(
-                            imageVector = IconMapper.getIconByName(cat.iconName),
-                            contentDescription = cat.name,
-                            tint = colorValue
-                        )
-                    },
-                    trailingContent = {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isDragged) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f) 
+                                         else MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            if (listState.size > 1) {
-                                IconButton(onClick = { viewModel.deleteCategory(cat) }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "Kéo để sắp xếp",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .padding(4.dp)
-                                    .pointerInput(index) {
-                                        detectDragGestures(
-                                            onDragStart = {
-                                                draggedIndex = index
-                                                driftY = 0f
-                                            },
-                                            onDragEnd = { onDragReleased() },
-                                            onDragCancel = { onDragReleased() },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                driftY += dragAmount.y
-                                                val itemHeightPx = 56.dp.toPx()
-                                                val targetIdx = draggedIndex
-                                                if (targetIdx != null) {
-                                                    if (driftY > itemHeightPx * 0.8f && targetIdx < listState.lastIndex) {
-                                                        val next = listState[targetIdx + 1]
-                                                        listState[targetIdx + 1] = listState[targetIdx]
-                                                        listState[targetIdx] = next
-                                                        draggedIndex = targetIdx + 1
-                                                        driftY -= itemHeightPx
-                                                    } else if (driftY < -itemHeightPx * 0.8f && targetIdx > 0) {
-                                                        val prev = listState[targetIdx - 1]
-                                                        listState[targetIdx - 1] = listState[targetIdx]
-                                                        listState[targetIdx] = prev
-                                                        draggedIndex = targetIdx - 1
-                                                        driftY += itemHeightPx
-                                                    }
-                                                }
-                                            }
-                                        )
-                                    }
-                            )
-                        }
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-
-                // Subcategories
-                if (isExpanded) {
-                    val subcats = categories.filter { it.parentName == cat.name }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(end = 16.dp, bottom = 12.dp, start = 56.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        subcats.forEach { subCat ->
-                            val subColor = try { FormatHelper.parseColor(subCat.colorHex) } catch(e: Exception) { Color.Gray }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = IconMapper.getIconByName(subCat.iconName),
-                                        contentDescription = subCat.name,
-                                        tint = subColor,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Text(
-                                        text = subCat.name,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { viewModel.deleteCategory(subCat) },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Delete subcategory",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Dotted add subcategory button
-                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onAddSubcategory(cat.name) }
-                                .drawBehind {
-                                    drawRoundRect(
-                                        color = colorValue.copy(alpha = 0.6f),
-                                        style = Stroke(
-                                            width = 1.5.dp.toPx(),
-                                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)
-                                        ),
-                                        cornerRadius = CornerRadius(8.dp.toPx())
-                                    )
-                                },
-                            contentAlignment = Alignment.Center
+                                .clickable { isExpanded = !isExpanded }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = "Kéo để sắp xếp",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .padding(4.dp)
+                                        .pointerInput(index) {
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    draggedIndex = index
+                                                    driftY = 0f
+                                                },
+                                                onDragEnd = { onDragReleased() },
+                                                onDragCancel = { onDragReleased() },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    driftY += dragAmount.y
+                                                    val itemHeightPx = 56.dp.toPx()
+                                                    val targetIdx = draggedIndex
+                                                    if (targetIdx != null) {
+                                                        if (driftY > itemHeightPx * 0.8f && targetIdx < listState.lastIndex) {
+                                                            val next = listState[targetIdx + 1]
+                                                            listState[targetIdx + 1] = listState[targetIdx]
+                                                            listState[targetIdx] = next
+                                                            draggedIndex = targetIdx + 1
+                                                            driftY -= itemHeightPx
+                                                        } else if (driftY < -itemHeightPx * 0.8f && targetIdx > 0) {
+                                                            val prev = listState[targetIdx - 1]
+                                                            listState[targetIdx - 1] = listState[targetIdx]
+                                                            listState[targetIdx] = prev
+                                                            draggedIndex = targetIdx - 1
+                                                            driftY += itemHeightPx
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                        }
+                                )
+
+                                // Decorative left-side color block
+                                Box(
+                                    modifier = Modifier
+                                        .width(4.dp)
+                                        .height(32.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(colorValue)
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(colorValue.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = IconMapper.getIconByName(cat.iconName),
+                                        contentDescription = cat.name,
+                                        tint = colorValue,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Text(
+                                        text = cat.name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (subcats.isNotEmpty()) {
+                                        Text(
+                                            text = "${subcats.size} mục con",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Add subcategory",
-                                    tint = colorValue.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(16.dp)
+                                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = "Mở rộng",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Text(
-                                    text = "Thêm mục con",
-                                    color = colorValue.copy(alpha = 0.8f),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+
+                                if (listState.size > 1) {
+                                    IconButton(
+                                        onClick = { onDeleteRequest(cat) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Xóa danh mục",
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-            }
-        }
-    }
-}
 
-// ==========================================
-// 3. SAVINGS MANAGEMENT DIALOG
-// ==========================================
-@Composable
-fun SavingsManagementDialog(
-    viewModel: FinanceViewModel,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val dailyWallets by viewModel.dailyWallets.collectAsState()
-    val savingsWallets by viewModel.savingsWallets.collectAsState()
-    val savingsTransactions by viewModel.savingsTransactions.collectAsState()
-    
-    // Quick Add Savings Wallet State
-    var showQuickAddWallet by remember { mutableStateOf(false) }
-    var newSavingsWalletName by remember { mutableStateOf("") }
-    var newSavingsWalletGoalStr by remember { mutableStateOf("") }
-    
-    // Transaction Panel State
-    var selectedWalletId by remember { mutableStateOf<Int?>(null) }
-    var isDeposit by remember { mutableStateOf(true) } // true for Deposit (Gửi), false for withdraw (Rút)
-    var amountStr by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var selectedDailyWalletId by remember { mutableStateOf<Int?>(null) } // Everyday transaction source / target
+                        // Subcategories
+                        if (isExpanded) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f))
+                                    .padding(start = 24.dp, end = 14.dp, top = 8.dp, bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                subcats.forEach { subCat ->
+                                    val subColor = try { FormatHelper.parseColor(subCat.colorHex) } catch(e: Exception) { Color.Gray }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
+                                            .border(
+                                                width = 1.dp,
+                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                                shape = RoundedCornerShape(10.dp)
+                                            )
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .clip(CircleShape)
+                                                    .background(subColor.copy(alpha = 0.12f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = IconMapper.getIconByName(subCat.iconName),
+                                                    contentDescription = subCat.name,
+                                                    tint = subColor,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                            Text(
+                                                text = subCat.name,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { onDeleteRequest(subCat) },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Delete subcategory",
+                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Dotted add subcategory option card
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(40.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable { onAddSubcategory(cat.name) }
+                                        .drawBehind {
+                                            drawRoundRect(
+                                                color = colorValue.copy(alpha = 0.6f),
+                                                style = Stroke(
+                                                    width = 1.5.dp.toPx(),
+                                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)
+                                                ),
+                                                cornerRadius = CornerRadius(10.dp.toPx())
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Add subcategory",
+                                            tint = colorValue,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "Thêm mục con cho ${cat.name}",
+                                            color = colorValue,
+                                            fontSize = 12.sp,
+                                             fontWeight = FontWeight.Bold
+                                         )
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+         }
+     }
+ }
+ 
+ // ==========================================
+ // 3. SAVINGS MANAGEMENT DIALOG
+ // ==========================================
+ @Composable
+ fun SavingsManagementDialog(
+     viewModel: FinanceViewModel,
+     onDismiss: () -> Unit
+ ) {
+     val focusManager = LocalFocusManager.current
+     val context = LocalContext.current
+     val dailyWallets by viewModel.dailyWallets.collectAsState()
+     val savingsWallets by viewModel.savingsWallets.collectAsState()
+     val savingsTransactions by viewModel.savingsTransactions.collectAsState()
+     
+     // Quick Add Savings Wallet State
+     var showQuickAddWallet by remember { mutableStateOf(false) }
+     var newSavingsWalletName by remember { mutableStateOf("") }
+     var newSavingsWalletGoalStr by remember { mutableStateOf("") }
+     
+     // Transaction Panel State
+     var selectedWalletId by remember { mutableStateOf<Int?>(null) }
+     var isDeposit by remember { mutableStateOf(true) } // true for Deposit (Gửi), false for withdraw (Rút)
+     var amountStr by remember { mutableStateOf("") }
+     var note by remember { mutableStateOf("") }
+     var selectedDailyWalletId by remember { mutableStateOf<Int?>(null) } // Everyday transaction source / target
+     
+     var savingsWalletToDelete by remember { mutableStateOf<com.example.data.Wallet?>(null) }
+
+     if (savingsWalletToDelete != null) {
+         AlertDialog(
+             onDismissRequest = { savingsWalletToDelete = null },
+             title = { Text("Xác nhận xóa hũ tiết kiệm?", fontWeight = FontWeight.Bold) },
+             text = { Text("Bạn có chắc chắn muốn xóa hũ tiết kiệm '${savingsWalletToDelete?.name}'? Hành động này cũng sẽ xóa lịch sử tích lũy liên quan và không thể phục hồi.") },
+             confirmButton = {
+                 TextButton(
+                     onClick = {
+                         savingsWalletToDelete?.let { wallet ->
+                             viewModel.deleteWallet(wallet)
+                             android.widget.Toast.makeText(context, "Xóa hũ tiết kiệm thành công", android.widget.Toast.LENGTH_SHORT).show()
+                         }
+                         savingsWalletToDelete = null
+                     }
+                 ) {
+                     Text("XÓA", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                 }
+             },
+             dismissButton = {
+                 TextButton(onClick = { savingsWalletToDelete = null }) {
+                     Text("HỦY")
+                 }
+             }
+         )
+     }
     
     val totalSavings = remember(savingsWallets) { savingsWallets.sumOf { it.balance } }
 
@@ -2500,7 +3050,7 @@ fun SavingsManagementDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("QUẢN LỸ SỔ & HŨ TIẾT KIỆM", fontSize = 18.sp, fontWeight = FontWeight.Black)
+                Text("QUẢN LÝ SỔ & HŨ TIẾT KIỆM", fontSize = 18.sp, fontWeight = FontWeight.Black)
                 IconButton(onClick = onDismiss) {
                     Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
                 }
@@ -2510,7 +3060,12 @@ fun SavingsManagementDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(rememberScrollState())
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {
+                            focusManager.clearFocus()
+                        })
+                    },
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // SAVINGS KPI TOTAL ACCUMULATOR
@@ -2546,6 +3101,7 @@ fun SavingsManagementDialog(
                 }
 
                 if (showQuickAddWallet) {
+                    val context = androidx.compose.ui.platform.LocalContext.current
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
@@ -2561,11 +3117,10 @@ fun SavingsManagementDialog(
                                 label = { Text("Tên hũ tích lũy") },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            OutlinedTextField(
+                            com.example.ui.components.CustomMoneyInputField(
                                 value = newSavingsWalletGoalStr,
                                 onValueChange = { newSavingsWalletGoalStr = it },
-                                label = { Text("Số dư tích lũy ban đầu (đ)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                label = "Số dư tích lũy ban đầu (đ)",
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Button(
@@ -2579,6 +3134,7 @@ fun SavingsManagementDialog(
                                             colorHex = "#9C27B0", // Savings Purple standard
                                             iconName = "Savings"
                                         )
+                                        android.widget.Toast.makeText(context, "Khởi tạo hũ tích lũy thành công!", android.widget.Toast.LENGTH_SHORT).show()
                                         newSavingsWalletName = ""
                                         newSavingsWalletGoalStr = ""
                                         showQuickAddWallet = false
@@ -2587,7 +3143,7 @@ fun SavingsManagementDialog(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("Khởi tạo hũ")
-                             }
+                            }
                         }
                     }
                 }
@@ -2603,7 +3159,7 @@ fun SavingsManagementDialog(
                                 Icon(imageVector = Icons.Default.Savings, contentDescription = "Savings", tint = FormatHelper.parseColor(wt.colorHex))
                             },
                             trailingContent = {
-                                IconButton(onClick = { viewModel.deleteWallet(wt) }) {
+                                IconButton(onClick = { savingsWalletToDelete = wt }) {
                                     Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                                 }
                             },

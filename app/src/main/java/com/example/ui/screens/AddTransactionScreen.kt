@@ -71,6 +71,10 @@ fun AddTransactionScreen(
     // Smart Select State Management
     var hasManuallySelected by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        scrollState.scrollTo(0)
+    }
+
     LaunchedEffect(selectedType) {
         hasManuallySelected = false
     }

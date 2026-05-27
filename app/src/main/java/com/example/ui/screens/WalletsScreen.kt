@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -35,6 +39,35 @@ fun WalletsScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedWalletForTransactions by remember { mutableStateOf<Wallet?>(null) }
+    var walletToDelete by remember { mutableStateOf<Wallet?>(null) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    if (walletToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { walletToDelete = null },
+            title = { Text("Xác nhận xóa ví?", fontWeight = FontWeight.Bold) },
+            text = { Text("Bạn có chắc chắn muốn xóa ví '${walletToDelete?.name}'? Hành động này cũng sẽ ảnh hưởng đến các dữ liệu liên quan và không thể hoàn tác.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        walletToDelete?.let { wallet ->
+                            viewModel.deleteWallet(wallet)
+                            android.widget.Toast.makeText(context, "Xóa ví thành công", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        walletToDelete = null
+                    }
+                ) {
+                    Text("XÓA", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { walletToDelete = null }) {
+                    Text("HỦY")
+                }
+            }
+        )
+    }
 
     // Select the first wallet by default if not set
     LaunchedEffect(wallets) {
@@ -109,7 +142,7 @@ fun WalletsScreen(
                             wallet = wallet,
                             isSelected = isSelected,
                             onSelect = { selectedWalletForTransactions = wallet },
-                            onDelete = { viewModel.deleteWallet(wallet) }
+                            onDelete = { walletToDelete = wallet }
                         )
                     }
                 }
@@ -161,11 +194,13 @@ fun WalletsScreen(
         }
 
         // Add Wallet Dialog
+        val context = androidx.compose.ui.platform.LocalContext.current
         if (showAddDialog) {
             AddWalletDialog(
                 onDismiss = { showAddDialog = false },
                 onAddWallet = { name, type, startingBalance, color, icon ->
                     viewModel.addWallet(name, type, startingBalance, color, icon)
+                    android.widget.Toast.makeText(context, "Thêm ví/tài khoản thành công!", android.widget.Toast.LENGTH_SHORT).show()
                     showAddDialog = false
                 }
             )
@@ -283,17 +318,40 @@ fun AddWalletDialog(
     onDismiss: () -> Unit,
     onAddWallet: (String, String, Double, String, String) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     var walletName by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("CASH") }
     var startingBalanceStr by remember { mutableStateOf("") }
 
-    val colors = listOf("#FF5722", "#2196F3", "#E91E63", "#4CAF50", "#9C27B0", "#FFC107", "#009688", "#607D8B")
+    val colors = listOf(
+        "#F44336", "#E91E63", "#9C27B0", "#673AB7",
+        "#3F51B5", "#2196F3", "#03A9F4", "#00BCD4",
+        "#009688", "#4CAF50", "#8BC34A", "#FFEB3B",
+        "#FF9800", "#795548", "#607D8B", "#455A64"
+    )
     var selectedColor by remember { mutableStateOf(colors.first()) }
     var isCustomColorActive by remember { mutableStateOf(false) }
     var customColorHex by remember { mutableStateOf("#9C27B0") }
 
-    val icons = listOf("Payments", "AccountBalance", "AccountBalanceWallet", "Savings")
+    val bankIcons = listOf("AccountBalance", "Business", "Domain", "CurrencyExchange", "AssuredWorkload", "SwapHoriz", "CorporateFare", "CreditCard")
+    val cashIcons = listOf("Payments", "AccountBalanceWallet", "Money", "AttachMoney", "Wallet", "PriceCheck", "LocalAtm", "PointOfSale")
+    val walletIcons = listOf("PhonelinkRing", "Contactless", "QrCode", "PhoneAndroid", "Security", "TapAndPlay", "Nfc", "MobileScreenShare")
+    val savingsIcons = listOf("Savings", "Inventory", "CurrencyBitcoin", "MonetizationOn", "Star", "WorkspacePremium", "Redeem", "CardGiftcard")
+
+    val icons = when (selectedType) {
+        "BANK" -> bankIcons
+        "CASH" -> cashIcons
+        "WALLET" -> walletIcons
+        "SAVINGS" -> savingsIcons
+        else -> cashIcons
+    }
     var selectedIcon by remember { mutableStateOf(icons.first()) }
+
+    LaunchedEffect(icons) {
+        if (!icons.contains(selectedIcon)) {
+            selectedIcon = icons.first()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -302,7 +360,12 @@ fun AddWalletDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(rememberScrollState())
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {
+                            focusManager.clearFocus()
+                        })
+                    },
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 OutlinedTextField(
@@ -349,62 +412,95 @@ fun AddWalletDialog(
                 // Color picker & custom color support
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Màu Sắc Đại Diện", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Row(
+                    
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Predefined colors
-                        colors.forEach { colHex ->
-                            val isSelected = !isCustomColorActive && selectedColor == colHex
-                            val col = FormatHelper.parseColor(colHex)
+                        // Row 1: First 8 colors
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            colors.take(8).forEach { colHex ->
+                                val isSelected = !isCustomColorActive && selectedColor == colHex
+                                val col = FormatHelper.parseColor(colHex)
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(col)
+                                        .border(
+                                            width = if (isSelected) 3.dp else 0.dp,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            shape = CircleShape
+                                        )
+                                        .clickable { 
+                                            isCustomColorActive = false
+                                            selectedColor = colHex
+                                        }
+                                )
+                            }
+                        }
+
+                        // Row 2: Next 7 colors + Custom color circle (the 8th element)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            colors.drop(8).take(7).forEach { colHex ->
+                                val isSelected = !isCustomColorActive && selectedColor == colHex
+                                val col = FormatHelper.parseColor(colHex)
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(col)
+                                        .border(
+                                            width = if (isSelected) 3.dp else 0.dp,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            shape = CircleShape
+                                        )
+                                        .clickable { 
+                                            isCustomColorActive = false
+                                            selectedColor = colHex
+                                        }
+                                )
+                            }
+
+                            // Custom color circle option (ends Row 2)
+                            val currentCustColor = try {
+                                FormatHelper.parseColor(customColorHex)
+                            } catch (e: Exception) {
+                                Color.Gray
+                            }
                             Box(
                                 modifier = Modifier
                                     .size(32.dp)
                                     .clip(CircleShape)
-                                    .background(col)
-                                    .border(
-                                        width = if (isSelected) 3.dp else 0.dp,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        shape = CircleShape
-                                    )
+                                    .background(currentCustColor)
                                     .clickable { 
-                                        isCustomColorActive = false
-                                        selectedColor = colHex
+                                        isCustomColorActive = true
+                                        selectedColor = customColorHex
                                     }
-                            )
-                        }
-
-                        // Custom color circle option
-                        val currentCustColor = try {
-                            FormatHelper.parseColor(customColorHex)
-                        } catch (e: Exception) {
-                            Color.Gray
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(currentCustColor)
-                                .clickable { 
-                                    isCustomColorActive = true
-                                    selectedColor = customColorHex
-                                }
-                                .border(
-                                    BorderStroke(
-                                        width = if (isCustomColorActive) 3.dp else 0.dp,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                    .border(
+                                        BorderStroke(
+                                            width = if (isCustomColorActive) 3.dp else 0.dp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        shape = CircleShape
                                     ),
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Palette,
-                                contentDescription = "Custom color",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = "Custom color",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
 
@@ -422,29 +518,36 @@ fun AddWalletDialog(
                 // Icon picker
                 Column {
                     Text("Biểu Tượng", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        icons.forEach { iconName ->
-                            val isSelected = selectedIcon == iconName
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                                        else MaterialTheme.colorScheme.surfaceVariant
-                                    )
-                                    .clickable { selectedIcon = iconName },
-                                contentAlignment = Alignment.Center
+                        icons.chunked(4).forEach { rowIcons ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(
-                                    imageVector = IconMapper.getIconByName(iconName),
-                                    contentDescription = iconName,
-                                    tint = if (isSelected) MaterialTheme.colorScheme.primary
-                                           else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                rowIcons.forEach { iconName ->
+                                    val isSelected = selectedIcon == iconName
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surfaceVariant
+                                            )
+                                            .clickable { selectedIcon = iconName },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = IconMapper.getIconByName(iconName),
+                                            contentDescription = iconName,
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary
+                                                   else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

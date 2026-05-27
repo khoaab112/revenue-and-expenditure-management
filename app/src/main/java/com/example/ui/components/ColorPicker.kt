@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +82,7 @@ fun ColorSliderPicker(
                     }
                     .pointerInput(Unit) {
                         detectDragGestures { change, _ ->
+                            change.consume()
                             val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
                             hue = fraction * 360f
                         }
@@ -133,6 +136,7 @@ fun ColorSliderPicker(
                     }
                     .pointerInput(hue) {
                         detectDragGestures { change, _ ->
+                            change.consume()
                             val fracX = (change.position.x / size.width).coerceIn(0f, 1f)
                             val fracY = (change.position.y / size.height).coerceIn(0f, 1f)
                             saturation = fracX
@@ -173,6 +177,16 @@ fun ColorSliderPicker(
             }
         }
 
+        val argb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, value))
+        val hexString = String.format("#%06X", 0xFFFFFF and argb)
+
+        var hexInput by remember { mutableStateOf(hexString) }
+        LaunchedEffect(hexString) {
+            if (hexInput != hexString) {
+                hexInput = hexString
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -190,8 +204,6 @@ fun ColorSliderPicker(
             )
 
             Column {
-                val argb = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, value))
-                val hexString = String.format("#%06X", 0xFFFFFF and argb)
                 Text("Mã màu chọn", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Text(hexString, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

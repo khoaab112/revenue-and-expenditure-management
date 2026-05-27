@@ -27,6 +27,41 @@ object IconMapper {
             "Lock" -> Icons.Default.Lock
             "Settings" -> Icons.Default.Settings
             
+            // Bank
+            "Business" -> Icons.Default.Business
+            "Domain" -> Icons.Default.Domain
+            "CurrencyExchange" -> Icons.Default.CurrencyExchange
+            "AssuredWorkload" -> Icons.Default.AssuredWorkload
+            "SwapHoriz" -> Icons.Default.SwapHoriz
+            "CorporateFare" -> Icons.Default.CorporateFare
+            "CreditCard" -> Icons.Default.CreditCard
+
+            // Cash
+            "Money" -> Icons.Default.Money
+            "AttachMoney" -> Icons.Default.AttachMoney
+            "Wallet" -> Icons.Default.Wallet
+            "PriceCheck" -> Icons.Default.PriceCheck
+            "LocalAtm" -> Icons.Default.LocalAtm
+            "PointOfSale" -> Icons.Default.PointOfSale
+
+            // E-Wallet
+            "PhonelinkRing" -> Icons.Default.PhonelinkRing
+            "Contactless" -> Icons.Default.Contactless
+            "QrCode" -> Icons.Default.QrCode
+            "PhoneAndroid" -> Icons.Default.PhoneAndroid
+            "Security" -> Icons.Default.Security
+            "TapAndPlay" -> Icons.Default.TapAndPlay
+            "Nfc" -> Icons.Default.Nfc
+            "MobileScreenShare" -> Icons.Default.MobileScreenShare
+
+            // Savings
+            "Inventory" -> Icons.Default.Inventory
+            "CurrencyBitcoin" -> Icons.Default.CurrencyBitcoin
+            "MonetizationOn" -> Icons.Default.MonetizationOn
+            "Star" -> Icons.Default.Star
+            "WorkspacePremium" -> Icons.Default.WorkspacePremium
+            "Redeem" -> Icons.Default.Redeem
+            
             // New modern & attractive icons
             "Coffee" -> Icons.Default.Coffee
             "LocalBar" -> Icons.Default.LocalBar

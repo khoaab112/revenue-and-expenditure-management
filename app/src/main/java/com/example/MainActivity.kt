@@ -68,6 +68,7 @@ fun MainContent(
 ) {
     val navController = rememberNavController()
     val isAppUnlocked by viewModel.isAppUnlocked.collectAsState()
+    val isLoadingSettings by viewModel.isLoadingSettings.collectAsState()
 
     // Observe active routes
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -93,7 +94,16 @@ fun MainContent(
         MainNavigationItem(Routes.SETTINGS, "Cài đặt", Icons.Default.Settings)
     )
 
-    if (!isAppUnlocked) {
+    if (isLoadingSettings) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+    } else if (!isAppUnlocked) {
         // App is locked by PIN protection -> display overlay lock screen gate
         Box(
             modifier = Modifier

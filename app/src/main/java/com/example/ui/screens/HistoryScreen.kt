@@ -33,8 +33,15 @@ import com.example.data.Transaction
 import com.example.data.Wallet
 import com.example.data.FinanceCategory
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import com.example.ui.FinanceViewModel
@@ -58,6 +65,35 @@ fun HistoryScreen(
     val categoriesList by viewModel.categoriesList.collectAsState()
     val walletsList by viewModel.allWallets.collectAsState()
     var editingTransaction by remember { mutableStateOf<Transaction?>(null) }
+    var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    if (transactionToDelete != null) {
+        val typeTag = if (transactionToDelete!!.type == "EXPENSE") "khoản chi" else "khoản thu/chuyển"
+        AlertDialog(
+            onDismissRequest = { transactionToDelete = null },
+            title = { Text("Xác nhận xóa giao dịch?", fontWeight = FontWeight.Bold) },
+            text = { Text("Bạn có chắc chắn muốn xóa $typeTag '${FormatHelper.formatVND(transactionToDelete!!.amount)}' (${transactionToDelete!!.note})? Hành động này không thể hoàn tác.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        transactionToDelete?.let { tx ->
+                            viewModel.deleteTransaction(tx)
+                            android.widget.Toast.makeText(context, "Xóa giao dịch thành công", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        transactionToDelete = null
+                    }
+                ) {
+                    Text("XÓA", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { transactionToDelete = null }) {
+                    Text("HỦY")
+                }
+            }
+        )
+    }
 
     // --- DISPLAY MODE STATES ---
     var displayMode by remember { mutableStateOf("LIST") } // LIST, CALENDAR
@@ -95,8 +131,6 @@ fun HistoryScreen(
             }
         }
     }
-
-    val context = androidx.compose.ui.platform.LocalContext.current
 
     val showDatePicker = {
         val currentCal = selectedCustomDate ?: Calendar.getInstance()
@@ -866,7 +900,7 @@ fun HistoryScreen(
                         items(txList, key = { it.id }) { tx ->
                             RemovableTransactionItem(
                                 tx = tx,
-                                onDelete = { viewModel.deleteTransaction(tx) },
+                                onDelete = { transactionToDelete = tx },
                                 onEdit = { editingTransaction = tx }
                             )
                         }
@@ -917,7 +951,7 @@ fun HistoryScreen(
                             editingTransaction = tx
                         },
                         onDeleteTransaction = { tx ->
-                            viewModel.deleteTransaction(tx)
+                            transactionToDelete = tx
                         }
                     )
                 }
@@ -1093,6 +1127,19 @@ fun EditTransactionDialog(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     
+    val scope = rememberCoroutineScope()
+    var isVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+    val dismissWithAnimation = {
+        scope.launch {
+            isVisible = false
+            delay(220)
+            onDismiss()
+        }
+    }
+
     var amountText by remember { mutableStateOf(tx.amount.toLong().toString()) }
     var selectedType by remember { mutableStateOf(tx.type) } // EXPENSE, INCOME
     var selectedCategoryName by remember { mutableStateOf(tx.categoryName) }
@@ -1160,396 +1207,428 @@ fun EditTransactionDialog(
         datePicker.show()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
+    Dialog(
+        onDismissRequest = { dismissWithAnimation() },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.35f))
+                .clickable { dismissWithAnimation() },
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it }),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.9f)
+                        .clickable(enabled = false) {}, // Prevent clicks outside from propagating
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 6.dp
                 ) {
-                    Text(
-                        text = "Sửa Giao Dịch",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close Edit")
-                    }
-                }
-
-                // 1. Transaction Type (Income / Expense Selector)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf(
-                        "EXPENSE" to "Khoản Chi",
-                        "INCOME" to "Khoản Thu"
-                    ).forEach { (typeVal, label) ->
-                        val isSelected = selectedType == typeVal
-                        val targetBgColor = if (isSelected) {
-                            if (typeVal == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        }
-                        val targetContentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-
-                        Button(
-                            onClick = { selectedType = typeVal },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = targetBgColor,
-                                contentColor = targetContentColor
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .testTag("edit_tx_type_$typeVal")
-                        ) {
-                            Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-
-                // 2. Amount Input field
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Số tiền *",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    OutlinedTextField(
-                        value = amountText,
-                        onValueChange = { amountText = it },
-                        placeholder = { Text("0") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(14.dp),
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("edit_tx_amount_input")
-                    )
-                    // Real-time currency preview helper
-                    val expressionValue = FormatHelper.evaluateExpression(amountText)
-                    if (expressionValue > 0.0) {
-                        Text(
-                            text = "= " + FormatHelper.formatVND(expressionValue),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (selectedType == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
-                    }
-                }
-
-                // 3. Note Field
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Ghi chú",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    OutlinedTextField(
-                        value = noteText,
-                        onValueChange = { noteText = it },
-                        placeholder = { Text("Mô tả chi tiết giao dịch...") },
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("edit_tx_note_input")
-                    )
-                }
-
-                // 4. Category Selector Dropdown Button
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Danh mục *",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        val currentCategoryObject = categoriesList.find { it.name == selectedCategoryName }
-                        
-                        OutlinedTextField(
-                            value = selectedCategoryName,
-                            onValueChange = {},
-                            readOnly = true,
-                            leadingIcon = currentCategoryObject?.let { cat ->
-                                {
-                                    Icon(
-                                        imageVector = IconMapper.getIconByName(cat.iconName),
-                                        contentDescription = cat.name,
-                                        tint = FormatHelper.parseColor(cat.colorHex),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { categoryDropdownExpanded = !categoryDropdownExpanded }) {
-                                    Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
-                                }
-                            },
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { categoryDropdownExpanded = true }
-                                .testTag("edit_tx_category_selector")
-                        )
-
-                        DropdownMenu(
-                            expanded = categoryDropdownExpanded,
-                            onDismissRequest = { categoryDropdownExpanded = false },
-                            modifier = Modifier.fillMaxWidth(0.9f)
-                        ) {
-                            filteredCategories.forEach { cat ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = IconMapper.getIconByName(cat.iconName),
-                                                contentDescription = cat.name,
-                                                tint = FormatHelper.parseColor(cat.colorHex),
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Text(cat.name, fontSize = 14.sp)
-                                        }
-                                    },
-                                    onClick = {
-                                        selectedCategoryName = cat.name
-                                        categoryDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 5. Wallet Dropdown Selector
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Chọn tài khoản / Ví *",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        val currentWalletObject = walletsList.find { it.id == selectedWalletId }
-                        
-                        OutlinedTextField(
-                            value = currentWalletObject?.name ?: "Chưa chọn tài khoản",
-                            onValueChange = {},
-                            readOnly = true,
-                            leadingIcon = currentWalletObject?.let { w ->
-                                {
-                                    Icon(
-                                        imageVector = IconMapper.getIconByName(w.iconName),
-                                        contentDescription = w.name,
-                                        tint = FormatHelper.parseColor(w.colorHex),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { walletDropdownExpanded = !walletDropdownExpanded }) {
-                                    Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
-                                }
-                            },
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { walletDropdownExpanded = true }
-                                .testTag("edit_tx_wallet_selector")
-                        )
-
-                        DropdownMenu(
-                            expanded = walletDropdownExpanded,
-                            onDismissRequest = { walletDropdownExpanded = false },
-                            modifier = Modifier.fillMaxWidth(0.9f)
-                        ) {
-                            walletsList.forEach { w ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = IconMapper.getIconByName(w.iconName),
-                                                contentDescription = w.name,
-                                                tint = FormatHelper.parseColor(w.colorHex),
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Text(w.name, fontSize = 14.sp)
-                                        }
-                                    },
-                                    onClick = {
-                                        selectedWalletId = w.id
-                                        walletDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 6. Time and Date Selector
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Thời gian giao dịch",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Button(
-                        onClick = showDateTimePicker,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .testTag("edit_tx_datetime_btn")
+                            .fillMaxSize()
+                            .navigationBarsPadding()
+                            .padding(top = 16.dp, start = 20.dp, end = 20.dp, bottom = 54.dp)
                     ) {
+                        // Header
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "Thời gian: $dateLabel", fontSize = 14.sp)
-                            Icon(imageVector = Icons.Default.CalendarToday, contentDescription = "Pick DateTime", modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-
-                // 7. Recurring Switch
-                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Repeat, contentDescription = "Is recurring", tint = MaterialTheme.colorScheme.outline)
-                        Text(
-                            text = "Đặt làm giao dịch định kỳ",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Switch(
-                        checked = isRecurring,
-                        onCheckedChange = { isRecurring = it },
-                        modifier = Modifier.testTag("edit_tx_recurrence_switch")
-                    )
-                }
-
-                AnimatedVisibility(visible = isRecurring) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Chu kỳ giao dịch",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf(
-                                "DAILY" to "Hàng ngày",
-                                "WEEKLY" to "Hàng tuần",
-                                "MONTHLY" to "Hàng tháng"
-                            ).forEach { (freq, label) ->
-                                FilterChip(
-                                    selected = recurrencePeriod == freq,
-                                    onClick = { recurrencePeriod = freq },
-                                    label = { Text(label, fontSize = 11.sp) },
-                                    modifier = Modifier.testTag("edit_tx_recurrence_chip_$freq")
-                                )
+                            Text(
+                                text = "Sửa Giao Dịch",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            IconButton(onClick = { dismissWithAnimation() }) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = "Close Edit")
                             }
                         }
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                        // Scrollable Content Column (takes up screen but keeps actions pinned)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // 1. Transaction Type (Income / Expense Selector)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(
+                                    "EXPENSE" to "Khoản Chi",
+                                    "INCOME" to "Khoản Thu"
+                                ).forEach { (typeVal, label) ->
+                                    val isSelected = selectedType == typeVal
+                                    val targetBgColor = if (isSelected) {
+                                        if (typeVal == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    }
+                                    val targetContentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
 
-                // Bottom Action buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                    ) {
-                        Text("HỦY BỎ")
-                    }
+                                    Button(
+                                        onClick = { selectedType = typeVal },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = targetBgColor,
+                                            contentColor = targetContentColor
+                                        ),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(44.dp)
+                                            .testTag("edit_tx_type_$typeVal")
+                                    ) {
+                                        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
 
-                    val finalAmount = FormatHelper.evaluateExpression(amountText)
-                    Button(
-                        onClick = {
-                            val targetCat = categoriesList.find { it.name == selectedCategoryName } ?: categoriesList.first()
-                            val targetWallet = walletsList.find { it.id == selectedWalletId } ?: walletsList.first()
+                            // 2. Amount Input field
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Số tiền *",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                OutlinedTextField(
+                                    value = amountText,
+                                    onValueChange = { amountText = it },
+                                    placeholder = { Text("0") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("edit_tx_amount_input")
+                                )
+                                // Real-time currency preview helper
+                                val expressionValue = FormatHelper.evaluateExpression(amountText)
+                                if (expressionValue > 0.0) {
+                                    Text(
+                                        text = "= " + FormatHelper.formatVND(expressionValue),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (selectedType == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                }
+                            }
+
+                            // 3. Note Field
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Ghi chú",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                OutlinedTextField(
+                                    value = noteText,
+                                    onValueChange = { noteText = it },
+                                    placeholder = { Text("Mô tả chi tiết giao dịch...") },
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("edit_tx_note_input")
+                                )
+                            }
+
+                            // 4. Category Selector Dropdown Button
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Danh mục *",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    val currentCategoryObject = categoriesList.find { it.name == selectedCategoryName }
+                                    
+                                    OutlinedTextField(
+                                        value = selectedCategoryName,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        leadingIcon = currentCategoryObject?.let { cat ->
+                                            {
+                                                Icon(
+                                                    imageVector = IconMapper.getIconByName(cat.iconName),
+                                                    contentDescription = cat.name,
+                                                    tint = FormatHelper.parseColor(cat.colorHex),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        },
+                                        trailingIcon = {
+                                            IconButton(onClick = { categoryDropdownExpanded = !categoryDropdownExpanded }) {
+                                                Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { categoryDropdownExpanded = true }
+                                            .testTag("edit_tx_category_selector")
+                                    )
+
+                                    DropdownMenu(
+                                        expanded = categoryDropdownExpanded,
+                                        onDismissRequest = { categoryDropdownExpanded = false },
+                                        modifier = Modifier.fillMaxWidth(0.9f)
+                                    ) {
+                                        filteredCategories.forEach { cat ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = IconMapper.getIconByName(cat.iconName),
+                                                            contentDescription = cat.name,
+                                                            tint = FormatHelper.parseColor(cat.colorHex),
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                        Text(cat.name, fontSize = 14.sp)
+                                                    }
+                                                },
+                                                onClick = {
+                                                    selectedCategoryName = cat.name
+                                                    categoryDropdownExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 5. Wallet Dropdown Selector
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Chọn tài khoản / Ví *",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    val currentWalletObject = walletsList.find { it.id == selectedWalletId }
+                                    
+                                    OutlinedTextField(
+                                        value = currentWalletObject?.name ?: "Chưa chọn tài khoản",
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        leadingIcon = currentWalletObject?.let { w ->
+                                            {
+                                                Icon(
+                                                    imageVector = IconMapper.getIconByName(w.iconName),
+                                                    contentDescription = w.name,
+                                                    tint = FormatHelper.parseColor(w.colorHex),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        },
+                                        trailingIcon = {
+                                            IconButton(onClick = { walletDropdownExpanded = !walletDropdownExpanded }) {
+                                                Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { walletDropdownExpanded = true }
+                                            .testTag("edit_tx_wallet_selector")
+                                    )
+
+                                    DropdownMenu(
+                                        expanded = walletDropdownExpanded,
+                                        onDismissRequest = { walletDropdownExpanded = false },
+                                        modifier = Modifier.fillMaxWidth(0.9f)
+                                    ) {
+                                        walletsList.forEach { w ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = IconMapper.getIconByName(w.iconName),
+                                                            contentDescription = w.name,
+                                                            tint = FormatHelper.parseColor(w.colorHex),
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                        Text(w.name, fontSize = 14.sp)
+                                                    }
+                                                },
+                                                onClick = {
+                                                    selectedWalletId = w.id
+                                                    walletDropdownExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 6. Time and Date Selector
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Thời gian giao dịch",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Button(
+                                    onClick = showDateTimePicker,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ),
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp)
+                                        .testTag("edit_tx_datetime_btn")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(text = "Thời gian: $dateLabel", fontSize = 14.sp)
+                                        Icon(imageVector = Icons.Default.CalendarToday, contentDescription = "Pick DateTime", modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+
+                            // 7. Recurring Switch
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             
-                            val updatedTx = tx.copy(
-                                walletId = targetWallet.id,
-                                walletName = targetWallet.name,
-                                type = selectedType,
-                                amount = finalAmount,
-                                categoryName = targetCat.name,
-                                categoryIcon = targetCat.iconName,
-                                categoryColor = targetCat.colorHex,
-                                note = noteText.ifEmpty { targetCat.name },
-                                timestamp = selectedTimestamp,
-                                isRecurring = isRecurring,
-                                recurrencePeriod = if (isRecurring) recurrencePeriod else "NONE"
-                            )
-                            onSave(updatedTx)
-                        },
-                        enabled = finalAmount > 0.0 && selectedWalletId != null,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1.5f)
-                            .height(48.dp)
-                            .testTag("edit_tx_save_btn")
-                    ) {
-                        Text("LƯU", fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Repeat, contentDescription = "Is recurring", tint = MaterialTheme.colorScheme.outline)
+                                    Text(
+                                        text = "Đặt làm giao dịch định kỳ",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Switch(
+                                    checked = isRecurring,
+                                    onCheckedChange = { isRecurring = it },
+                                    modifier = Modifier.testTag("edit_tx_recurrence_switch")
+                                )
+                            }
+
+                            AnimatedVisibility(visible = isRecurring) {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "Chu kỳ giao dịch",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        listOf(
+                                            "DAILY" to "Hàng ngày",
+                                            "WEEKLY" to "Hàng tuần",
+                                            "MONTHLY" to "Hàng tháng"
+                                        ).forEach { (freq, label) ->
+                                            FilterChip(
+                                                selected = recurrencePeriod == freq,
+                                                onClick = { recurrencePeriod = freq },
+                                                label = { Text(label, fontSize = 11.sp) },
+                                                modifier = Modifier.testTag("edit_tx_recurrence_chip_$freq")
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Bottom Action buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            TextButton(
+                                onClick = { dismissWithAnimation() },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                            ) {
+                                Text("HỦY BỎ")
+                            }
+
+                            val finalAmount = FormatHelper.evaluateExpression(amountText)
+                            Button(
+                                onClick = {
+                                    val targetCat = categoriesList.find { it.name == selectedCategoryName } ?: categoriesList.first()
+                                    val targetWallet = walletsList.find { it.id == selectedWalletId } ?: walletsList.first()
+                                    
+                                    val updatedTx = tx.copy(
+                                        walletId = targetWallet.id,
+                                        walletName = targetWallet.name,
+                                        type = selectedType,
+                                        amount = finalAmount,
+                                        categoryName = targetCat.name,
+                                        categoryIcon = targetCat.iconName,
+                                        categoryColor = targetCat.colorHex,
+                                        note = noteText.ifEmpty { targetCat.name },
+                                        timestamp = selectedTimestamp,
+                                        isRecurring = isRecurring,
+                                        recurrencePeriod = if (isRecurring) recurrencePeriod else "NONE"
+                                    )
+                                    onSave(updatedTx)
+                                },
+                                enabled = finalAmount > 0.0 && selectedWalletId != null,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1.5f)
+                                    .height(48.dp)
+                                    .testTag("edit_tx_save_btn")
+                            ) {
+                                Text("Thay đổi", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
@@ -2275,7 +2354,8 @@ fun QuickAddTransactionDialog(
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
                     )
                     val expressionValue = FormatHelper.evaluateExpression(amountText)
                     if (expressionValue > 0.0) {

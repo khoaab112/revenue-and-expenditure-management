@@ -82,6 +82,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isAppUnlocked = MutableStateFlow(false)
     val isAppUnlocked: StateFlow<Boolean> = _isAppUnlocked.asStateFlow()
 
+    private val _isLoadingSettings = MutableStateFlow(true)
+    val isLoadingSettings: StateFlow<Boolean> = _isLoadingSettings.asStateFlow()
+
     private val _savedPinHash = MutableStateFlow("")
     val savedPinHash: StateFlow<String> = _savedPinHash.asStateFlow()
 
@@ -183,6 +186,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             loadSecuritySettings()
             loadNotificationSettings()
             processRecurringTransactions()
+            _isLoadingSettings.value = false
         }
     }
 
@@ -1098,7 +1102,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 repository.saveSetting("local_backup_last_time", nowStr)
                 _localBackupLastTime.value = nowStr
 
-                // Dọn dẹp các bản sao lưu cũ, chỉ giữ lại tối đa 3 bản gần đây nhất (bao gồm cả bản hiện tại)
+                // Dọn dẹp các bản sao lưu cũ trong thư mục riêng của app
                 val allBackupFiles = backupDir.listFiles { _, name -> name.endsWith(".json") }
                 if (allBackupFiles != null && allBackupFiles.size > 3) {
                     val sortedFiles = allBackupFiles.sortedByDescending { it.lastModified() }
@@ -1107,10 +1111,67 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             val fileToDelete = sortedFiles[i]
                             val deleted = fileToDelete.delete()
                             if (deleted) {
-                                addLog("🗑️ Đã xóa bản sao lưu cũ thừa: ${fileToDelete.name}")
+                                addLog("🗑️ Đã xóa bản sao lưu cũ thừa ở thư mục app: ${fileToDelete.name}")
                             }
                         } catch (ex: Exception) {
-                            addLog("⚠️ Lỗi khi tự động xóa file cũ: ${ex.message}")
+                            addLog("⚠️ Lỗi khi tự động xóa file cũ (app): ${ex.message}")
+                        }
+                    }
+                }
+                
+                // Dọn dẹp các bản sao lưu cũ trong thư mục Public Downloads
+                withContext(Dispatchers.IO) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        try {
+                            val resolver = context.contentResolver
+                            val collection = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                            val projection = arrayOf(
+                                android.provider.MediaStore.MediaColumns._ID,
+                                android.provider.MediaStore.MediaColumns.DATE_MODIFIED
+                            )
+                            val selection = "${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+                            val selectionArgs = arrayOf("%SoChiTieuBackups%")
+                            
+                            resolver.query(collection, projection, selection, selectionArgs, "${android.provider.MediaStore.MediaColumns.DATE_MODIFIED} DESC")?.use { cursor ->
+                                val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID)
+                                var count = 0
+                                while (cursor.moveToNext()) {
+                                    count++
+                                    if (count > 3) {
+                                        val id = cursor.getLong(idColumn)
+                                        val uri = android.content.ContentUris.withAppendedId(collection, id)
+                                        try {
+                                            val deleted = resolver.delete(uri, null, null)
+                                            if (deleted > 0) addLog("🗑️ Đã dọn file public cũ.")
+                                        } catch (e: Exception) {
+                                            // Ignored
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            addLog("⚠️ Cảnh báo: Không thể dọn dẹp file public cũ (Android 10+).")
+                        }
+                    } else {
+                        try {
+                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                            val subDir = java.io.File(downloadsDir, "SoChiTieuBackups")
+                            if (subDir.exists()) {
+                                val publicBackupFiles = subDir.listFiles { _, name -> name.endsWith(".json") }
+                                if (publicBackupFiles != null && publicBackupFiles.size > 3) {
+                                    val sortedPublicFiles = publicBackupFiles.sortedByDescending { it.lastModified() }
+                                    for (i in 3 until sortedPublicFiles.size) {
+                                        try {
+                                            val deleted = sortedPublicFiles[i].delete()
+                                            if (deleted) addLog("🗑️ Đã dọn file public cũ.")
+                                        } catch (e: Exception) {
+                                            // Ignored
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            addLog("⚠️ Cảnh báo: Không thể dọn dẹp file public cũ do thiếu quyền hệ thống.")
                         }
                     }
                 }
