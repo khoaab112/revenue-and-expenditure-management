@@ -10,6 +10,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,6 +30,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import com.example.ui.FinanceViewModel
+import com.example.ui.FormatHelper
 import com.example.ui.screens.*
 import com.example.ui.theme.MyApplicationTheme
 
@@ -36,6 +40,7 @@ object Routes {
     const val HISTORY = "history"
     const val STATS = "stats"
     const val BUDGET_GOAL = "budget_goal"
+    const val SAVINGS_VAULT = "savings_vault"
     const val SETTINGS = "settings"
     const val ADD_TRANSACTION = "add_transaction"
     const val BANK_NOTIFICATION_HISTORY = "bank_notification_history"
@@ -78,8 +83,44 @@ fun MainContent(
     // Keep track of the last primary route to keep bottom bar item selected even when in "add_transaction"
     var lastPrimaryRoute by remember(startScreen) { mutableStateOf(startScreen) }
     LaunchedEffect(currentRoute) {
-        if (currentRoute in listOf(Routes.DASHBOARD, Routes.HISTORY, Routes.BUDGET_GOAL, Routes.STATS, Routes.SETTINGS)) {
-            lastPrimaryRoute = currentRoute
+        val baseRoute = currentRoute.substringBefore("?")
+        if (baseRoute in listOf(Routes.DASHBOARD, Routes.HISTORY, Routes.BUDGET_GOAL, Routes.SAVINGS_VAULT, Routes.STATS, Routes.SETTINGS, Routes.BANK_NOTIFICATION_HISTORY)) {
+            lastPrimaryRoute = baseRoute
+        }
+    }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val notificationLogs by viewModel.notificationLogs.collectAsState()
+    val notificationReaderEnabled by viewModel.notificationReaderEnabled.collectAsState()
+
+    val pendingCount = remember(notificationLogs) {
+        notificationLogs.count { it.status == "PENDING" }
+    }
+
+    var showScanResultPopup by remember { mutableStateOf(false) }
+    var scannedLogsList by remember { mutableStateOf<List<com.example.ui.NotificationLog>>(emptyList()) }
+    var showPermissionErrorPopup by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isAppUnlocked, notificationReaderEnabled) {
+        if (isAppUnlocked && notificationReaderEnabled) {
+            val isPermitted = com.example.ui.screens.isNotificationServiceEnabled(context)
+            if (!isPermitted) {
+                showPermissionErrorPopup = true
+            } else {
+                viewModel.scanNotificationsManual(
+                    context = context,
+                    onSuccess = { count ->
+                        if (count > 0) {
+                            val activePending = viewModel.notificationLogs.value.filter { it.status == "PENDING" }.take(count)
+                            scannedLogsList = activePending
+                            showScanResultPopup = true
+                        }
+                    },
+                    onError = { err ->
+                        // Silent or ignored
+                    }
+                )
+            }
         }
     }
 
@@ -91,7 +132,7 @@ fun MainContent(
         MainNavigationItem(Routes.DASHBOARD, "Tổng quan", Icons.Default.GridView),
         MainNavigationItem(Routes.HISTORY, "Lịch sử", Icons.Default.History),
         MainNavigationItem(Routes.ADD_TRANSACTION, "Giao dịch", Icons.Default.Add),
-        MainNavigationItem(Routes.STATS, "Thống kê", Icons.Default.PieChart),
+        MainNavigationItem(Routes.BANK_NOTIFICATION_HISTORY, "Thông báo", Icons.Default.Notifications),
         MainNavigationItem(Routes.SETTINGS, "Cài đặt", Icons.Default.Settings)
     )
 
@@ -138,7 +179,7 @@ fun MainContent(
                             Routes.DASHBOARD -> currentRoute == Routes.DASHBOARD || currentRoute == Routes.WALLETS
                             Routes.HISTORY -> currentRoute == Routes.HISTORY
                             Routes.ADD_TRANSACTION -> currentRoute == Routes.ADD_TRANSACTION
-                            Routes.STATS -> currentRoute == Routes.STATS
+                            Routes.BANK_NOTIFICATION_HISTORY -> currentRoute == Routes.BANK_NOTIFICATION_HISTORY
                             Routes.SETTINGS -> currentRoute == Routes.SETTINGS
                             else -> false
                         }
@@ -180,7 +221,21 @@ fun MainContent(
                                         }
                                     }
                                 },
-                                icon = { Icon(imageVector = item.icon, contentDescription = item.label) },
+                                icon = {
+                                    if (item.route == Routes.BANK_NOTIFICATION_HISTORY && pendingCount > 0) {
+                                        BadgedBox(
+                                            badge = {
+                                                Badge {
+                                                    Text(text = pendingCount.toString())
+                                                }
+                                            }
+                                        ) {
+                                            Icon(imageVector = item.icon, contentDescription = item.label)
+                                        }
+                                    } else {
+                                        Icon(imageVector = item.icon, contentDescription = item.label)
+                                    }
+                                },
                                 label = { Text(item.label) },
                                 modifier = Modifier.testTag("nav_rail_item_${item.route}")
                             )
@@ -210,7 +265,7 @@ fun MainContent(
                                 Routes.DASHBOARD -> currentRoute == Routes.DASHBOARD || currentRoute == Routes.WALLETS
                                 Routes.HISTORY -> currentRoute == Routes.HISTORY
                                 Routes.ADD_TRANSACTION -> currentRoute == Routes.ADD_TRANSACTION
-                                Routes.STATS -> currentRoute == Routes.STATS
+                                Routes.BANK_NOTIFICATION_HISTORY -> currentRoute == Routes.BANK_NOTIFICATION_HISTORY
                                 Routes.SETTINGS -> currentRoute == Routes.SETTINGS
                                 else -> false
                             }
@@ -269,7 +324,21 @@ fun MainContent(
                                             }
                                         }
                                     },
-                                    icon = { Icon(imageVector = item.icon, contentDescription = item.label) },
+                                    icon = {
+                                        if (item.route == Routes.BANK_NOTIFICATION_HISTORY && pendingCount > 0) {
+                                            BadgedBox(
+                                                badge = {
+                                                    Badge {
+                                                        Text(text = pendingCount.toString(), modifier = Modifier.testTag("notification_badge_count"))
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(imageVector = item.icon, contentDescription = item.label)
+                                            }
+                                        } else {
+                                            Icon(imageVector = item.icon, contentDescription = item.label)
+                                        }
+                                    },
                                     label = { Text(item.label, fontSize = 11.sp, maxLines = 1) },
                                     modifier = Modifier.testTag("nav_bar_item_${item.route}")
                                 )
@@ -288,6 +357,167 @@ fun MainContent(
                         viewModel = viewModel,
                         modifier = Modifier
                     )
+
+                    // -------------------- POPUPS AND DIALOGS --------------------
+                    if (showPermissionErrorPopup) {
+                        AlertDialog(
+                            onDismissRequest = { showPermissionErrorPopup = false },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            title = {
+                                Text(
+                                    text = "Lỗi cấp quyền đọc thông báo",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                )
+                            },
+                            text = {
+                                Text(
+                                    text = "Tính năng đọc tin nhắn ngân hàng tự động đang bật, nhưng ứng dụng chưa được cấp quyền truy cập thông báo hệ thống. Vui lòng cấp quyền trong cài đặt.",
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showPermissionErrorPopup = false
+                                        try {
+                                            val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            android.widget.Toast.makeText(context, "Không thể mở cài đặt", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                ) {
+                                    Text("Cấp quyền")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(
+                                    onClick = { showPermissionErrorPopup = false }
+                                ) {
+                                    Text("Đóng")
+                                }
+                            }
+                        )
+                    }
+
+                    if (showScanResultPopup) {
+                        AlertDialog(
+                            onDismissRequest = { showScanResultPopup = false },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.NotificationsActive,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            },
+                            title = {
+                                Text(
+                                    text = "Phát hiện giao dịch mới!",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                )
+                            },
+                            text = {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        text = "Hệ thống đã tự động quét được ${scannedLogsList.size} thông báo ngân hàng mới cần phê duyệt:",
+                                        fontSize = 14.sp
+                                    )
+                                    
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 200.dp)
+                                            .verticalScroll(rememberScrollState()),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        scannedLogsList.forEach { log ->
+                                            Card(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                ),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Column(modifier = Modifier.padding(10.dp)) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = log.bankName.ifEmpty { "Giao dịch" },
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 12.sp,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                        Text(
+                                                            text = "${if (log.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(log.amount)}",
+                                                            fontWeight = FontWeight.Black,
+                                                            fontSize = 12.sp,
+                                                            color = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(
+                                                        text = log.text,
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 2,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showScanResultPopup = false
+                                        navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) {
+                                            popUpTo(navController.graph.startDestinationId)
+                                            launchSingleTop = true
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text("Xem chi tiết")
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowForward,
+                                            contentDescription = "Navigate to bank notifications",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(
+                                    onClick = { showScanResultPopup = false }
+                                ) {
+                                    Text("Đóng")
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -325,7 +555,9 @@ fun NavHostContainer(
                 onNavigateToWallets = { navController.navigate(Routes.WALLETS) },
                 onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
                 onNavigateToStats = { navController.navigate(Routes.STATS) },
-                onNavigateToBudget = { navController.navigate(Routes.BUDGET_GOAL) }
+                onNavigateToBudget = { navController.navigate(Routes.BUDGET_GOAL) },
+                onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
+                onNavigateToBankNotifications = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) }
             )
         }
 
@@ -345,10 +577,16 @@ fun NavHostContainer(
             BudgetGoalScreen(viewModel = viewModel)
         }
 
+        composable(Routes.SAVINGS_VAULT) {
+            com.example.ui.screens.SavingsVaultScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
+        }
+
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 viewModel = viewModel,
-                onNavigateToBankNotificationHistory = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) }
+                onNavigateToBankNotificationHistory = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
+                onNavigateToStats = { navController.navigate(Routes.STATS) },
+                onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) }
             )
         }
 

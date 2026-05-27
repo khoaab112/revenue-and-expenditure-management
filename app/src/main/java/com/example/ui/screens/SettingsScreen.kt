@@ -70,6 +70,8 @@ fun isNotificationServiceEnabled(context: android.content.Context): Boolean {
 fun SettingsScreen(
     viewModel: FinanceViewModel,
     onNavigateToBankNotificationHistory: () -> Unit = {},
+    onNavigateToStats: () -> Unit = {},
+    onNavigateToSavings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -80,7 +82,6 @@ fun SettingsScreen(
     var showPinSetupDialog by remember { mutableStateOf(false) }
     var showWalletManagement by remember { mutableStateOf(false) }
     var showCategoryManagement by remember { mutableStateOf(false) }
-    var showSavingsManagement by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
 
     val localBackupLastTime by viewModel.localBackupLastTime.collectAsState()
@@ -88,34 +89,8 @@ fun SettingsScreen(
     val syncStatus by viewModel.syncStatus.collectAsState()
     val syncProgressLogs by viewModel.syncProgressLogs.collectAsState()
 
-    val notificationReaderEnabled by viewModel.notificationReaderEnabled.collectAsState()
-    val notificationLogs by viewModel.notificationLogs.collectAsState()
     val wallets by viewModel.allWallets.collectAsState()
     val categories by viewModel.categoriesList.collectAsState()
-    var expandedPendingTimestamp by remember { mutableStateOf<Long?>(null) }
-    val pendingLogs = remember(notificationLogs) {
-        notificationLogs.filter { it.status == "PENDING" }
-    }
-    var showBulkApproveDialog by remember { mutableStateOf(false) }
-    var showBulkDeleteDialog by remember { mutableStateOf(false) }
-    var bulkSelectedWalletId by remember { mutableStateOf<Int?>(null) }
-
-    val isServiceEnabled = remember(context) { isNotificationServiceEnabled(context) }
-    var isPermitted by remember { mutableStateOf(isServiceEnabled) }
-    var showSimulationDetails by remember { mutableStateOf(false) }
-
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                isPermitted = isNotificationServiceEnabled(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     val backupFilePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
@@ -133,7 +108,7 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Hệ Thống Cài Đặt",
+            text = "Cài đặt & Chuyên sâu",
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
@@ -227,7 +202,7 @@ fun SettingsScreen(
                                 val screenLabel = when (preferredStartScreen) {
                                     "dashboard" -> "Tổng quan"
                                     "history" -> "Lịch sử"
-                                    "stats" -> "Thống kê"
+                                    "bank_notification_history" -> "Thông báo"
                                     "add_transaction" -> "Giao dịch"
                                     "settings" -> "Cài đặt"
                                     else -> "Giao dịch"
@@ -261,7 +236,7 @@ fun SettingsScreen(
                             val options = listOf(
                                 Triple("dashboard", "Tổng quan", Icons.Default.GridView),
                                 Triple("history", "Lịch sử", Icons.Default.History),
-                                Triple("stats", "Thống kê", Icons.Default.PieChart),
+                                Triple("bank_notification_history", "Thông báo", Icons.Default.Notifications),
                                 Triple("add_transaction", "Giao dịch", Icons.Default.AddCircle),
                                 Triple("settings", "Cài đặt", Icons.Default.Settings)
                             )
@@ -364,710 +339,29 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.Default.Savings, contentDescription = "Savings", tint = MaterialTheme.colorScheme.primary)
                     },
                     modifier = Modifier
-                        .clickable { showSavingsManagement = true }
+                        .clickable { onNavigateToSavings() }
                         .testTag("manage_savings_item")
+                )
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Statistics & Analytical Reports
+                ListItem(
+                    headlineContent = { Text("Thống kê & Báo cáo", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Xem biểu đồ phân tích thu chi và báo cáo tài chính trực quan") },
+                    leadingContent = {
+                        Icon(imageVector = Icons.Default.PieChart, contentDescription = "Statistics", tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier
+                        .clickable { onNavigateToStats() }
+                        .testTag("navigate_stats_item")
                 )
             }
         }
 
-        // 3. TỰ ĐỘNG GHI QUA THÔNG BÁO
-        Text(
-            text = "TỰ ĐỘNG GHI QUA THÔNG BÁO",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 8.dp)
-        )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Header & Toggle Switch
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = "Notification Reader",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = "Đọc tin ngân hàng tự động",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Tự ghi chép khi nổ thông báo app ngân hàng, MoMo...",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
 
-                    Switch(
-                        checked = notificationReaderEnabled,
-                        onCheckedChange = { viewModel.setNotificationReaderEnabled(it) },
-                        modifier = Modifier.testTag("notification_reader_switch")
-                    )
-                }
 
-                // Permission Warning Banner if not enabled
-                if (!isPermitted) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Warning,
-                                contentDescription = "Permission Needed",
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Yêu cầu quyền hệ thống",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                                Text(
-                                    text = "Để đọc tự động, vui lòng bật quyền truy cập thông báo trong cài đặt Android.",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                            Button(
-                                onClick = {
-                                    try {
-                                        val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "Không thể mở cài đặt", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text("Cấp quyền", fontSize = 11.sp)
-                            }
-                        }
-                    }
-                } else if (notificationReaderEnabled) {
-                    // Success Banner show status
-                    Surface(
-                        color = Color(0xFFE8F5E9),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Ready Status",
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "TRẠNG THÁI: Đã kích hoạt & Đang lắng nghe thông báo biến động số dư!",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32)
-                            )
-                        }
-                    }
-                }
-
-                // Simulator Section
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showSimulationDetails = !showSimulationDetails }
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BugReport,
-                            contentDescription = "Simulate icon",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "MÔ PHỎNG THÔNG BÁO THỬ NGHIỆM",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Icon(
-                        imageVector = if (showSimulationDetails) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = "Toggle Simulation",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (showSimulationDetails) {
-                    var testMessageText by remember { mutableStateOf("Vietcombank SD TK 0451 thay doi +500,000 VND luc 12:30. GD: Chuyen khoan luong thang 5") }
-                    var selectedBankPreset by remember { mutableStateOf("Vietcombank") }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val presets = listOf(
-                            Pair("Vietcombank", "Vietcombank SD TK 0451 thay doi +500,000 VND luc 12:30. GD: Chuyen khoan luong thang 5"),
-                            Pair("Techcombank", "Techcombank: TK 1903 bien dong -150,000 VND. Noi dung: Mua tra sua HighTea"),
-                            Pair("MoMo", "Ban da thanh toan thanh cong so tien -50,000 d cho dich vu GrabFood qua vi MoMo"),
-                            Pair("MB Bank", "MB_BANK: GD +200,000 VND luc 15:40. ND: Tien mung sinh nhat")
-                        )
-                        presets.forEach { (bankName, presetText) ->
-                            FilterChip(
-                                selected = selectedBankPreset == bankName,
-                                onClick = {
-                                    selectedBankPreset = bankName
-                                    testMessageText = presetText
-                                },
-                                label = { Text(bankName) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = testMessageText,
-                        onValueChange = { testMessageText = it },
-                        label = { Text("Nội dung tin nhắn giả định") },
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 3
-                    )
-
-                    Button(
-                        onClick = {
-                            val pkg = when(selectedBankPreset) {
-                                "Vietcombank" -> "com.vietcombank.restyle"
-                                "Techcombank" -> "vn.com.techcombank"
-                                "MoMo" -> "com.mservice.momo"
-                                else -> "com.mbmobile"
-                            }
-                            viewModel.simulateBankNotification(selectedBankPreset, testMessageText, pkg)
-                            android.widget.Toast.makeText(context, "Mô phỏng thành công! Kiểm tra nhật ký bên dưới.", android.widget.Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.fillMaxWidth().height(40.dp).testTag("simulate_notification_button"),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.BugReport, contentDescription = "Simulate", modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Chạy thử mô phỏng", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // Link button to go to full history log screen (Danh sách nhật ký)
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "History",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "Lịch sử nhật ký đọc thông báo",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Button(
-                        onClick = onNavigateToBankNotificationHistory,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp)
-                    ) {
-                        Text("Mở danh sách", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // Manual Notification Scan Button
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                
-                Button(
-                    onClick = {
-                        viewModel.scanNotificationsManual(
-                            context = context,
-                            onSuccess = { count ->
-                                if (count > 0) {
-                                    android.widget.Toast.makeText(context, "Quét thành công! Đã tự động thêm $count giao dịch mới.", android.widget.Toast.LENGTH_LONG).show()
-                                } else {
-                                    android.widget.Toast.makeText(context, "Quét xong! Không tìm thấy thông báo giao dịch mới nào trên thanh trạng thái.", android.widget.Toast.LENGTH_LONG).show()
-                                }
-                            },
-                            onError = { errorMessage ->
-                                android.widget.Toast.makeText(context, errorMessage, android.widget.Toast.LENGTH_LONG).show()
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth().height(44.dp).testTag("manual_scan_notifications_button"),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                ) {
-                    Icon(imageVector = Icons.Default.Search, contentDescription = "Scan", modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Quét thông báo ngân hàng mới (Thủ công)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // 3B. GIAO DỊCH CHỜ PHÊ DUYỆT
-        Text(
-            text = "GIAO DỊCH QUÉT ĐƯỢC CHỜ PHÊ DUYỆT (${pendingLogs.size})",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Black,
-            color = Color(0xFFE65100),
-            modifier = Modifier.padding(top = 8.dp)
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(
-                width = 1.dp,
-                color = if (pendingLogs.isNotEmpty()) Color(0xFFE65100).copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (pendingLogs.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.FactCheck,
-                                contentDescription = "No Pending Logs",
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(36.dp)
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Sạch sẽ! Không có giao dịch chờ duyệt nào",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                if (wallets.isEmpty()) {
-                                    android.widget.Toast.makeText(context, "Vui lòng tạo ví tài khoản trước!", android.widget.Toast.LENGTH_SHORT).show()
-                                } else {
-                                    bulkSelectedWalletId = wallets.firstOrNull()?.id ?: 0
-                                    showBulkApproveDialog = true
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                            modifier = Modifier.weight(1f).height(38.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Duyệt hàng loạt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { showBulkDeleteDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                            modifier = Modifier.weight(1f).height(38.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Xóa hàng loạt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    pendingLogs.forEach { log ->
-                        val isExpanded = expandedPendingTimestamp == log.timestamp
-
-                        val matchedWallet = remember(log, wallets) {
-                            wallets.find { it.name.lowercase().contains(log.bankName.lowercase()) }
-                                ?: wallets.find { it.name.lowercase().contains(log.walletName.lowercase()) }
-                                ?: wallets.find { it.type == "BANK" }
-                                ?: wallets.find { it.type == "CASH" }
-                                ?: wallets.firstOrNull()
-                        }
-
-                        var selectedWalletId by remember(log, matchedWallet) {
-                            mutableStateOf(matchedWallet?.id ?: 0)
-                        }
-
-                        val matchedCategory = remember(log, categories) {
-                            categories.find { it.name.lowercase() == log.note.lowercase() }
-                                ?: categories.find { it.type == log.type }
-                                ?: categories.firstOrNull()
-                        }
-
-                        var selectedCategoryName by remember(log, matchedCategory) {
-                            mutableStateOf(matchedCategory?.name ?: "")
-                        }
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    expandedPendingTimestamp = if (isExpanded) null else log.timestamp
-                                },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-                                else MaterialTheme.colorScheme.surface
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(
-                                width = if (isExpanded) 1.5.dp else 1.dp,
-                                color = if (isExpanded) Color(0xFFE65100).copy(alpha = 0.7f) else MaterialTheme.colorScheme.outlineVariant
-                            )
-                        ) {
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                // Underneath Layer: Normal item content
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    // Header
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(30.dp)
-                                                    .background(
-                                                        if (log.type == "INCOME") Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
-                                                        CircleShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (log.type == "INCOME") Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                                                    contentDescription = log.type,
-                                                    tint = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828),
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                            Column {
-                                                Text(
-                                                    text = log.bankName.ifEmpty { "Ngân hàng" },
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 12.sp
-                                                )
-                                                val timeStr = remember(log.timestamp) {
-                                                    SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp))
-                                                }
-                                                Text(
-                                                    text = timeStr,
-                                                    fontSize = 10.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-
-                                        Surface(
-                                            color = Color(0xFFFFF3E0),
-                                            shape = RoundedCornerShape(4.dp)
-                                        ) {
-                                            Text(
-                                                text = "CHỜ DUYỆT",
-                                                color = Color(0xFFE65100),
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    // Raw SMS Text
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = log.text,
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(8.dp)
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    // Amount & Notes Summary
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column {
-                                            Text(
-                                                text = "Khoản tiền phát hiện",
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Text(
-                                                text = "${if (log.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(log.amount)}",
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
-                                            )
-                                        }
-
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            Text(
-                                                text = "Nội dung tóm tắt",
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Text(
-                                                text = log.note.ifEmpty { "Giao dịch" },
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Overlay with a semi-transparent shroud / lớp mờ nhẹ on top
-                                if (isExpanded) {
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .background(Color.Black.copy(alpha = 0.7f))
-                                            .clickable {
-                                                // click outside to collapse
-                                                expandedPendingTimestamp = null
-                                            }
-                                    )
-
-                                    // Foreground card to select and click confirm/delete
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .align(Alignment.Center)
-                                            .padding(10.dp)
-                                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
-                                            .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp))
-                                            .clickable(
-                                                enabled = true,
-                                                onClick = {} // intercepts clicks
-                                            )
-                                            .padding(10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "Phê duyệt nhanh: ${if (log.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(log.amount)}",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            IconButton(
-                                                onClick = { expandedPendingTimestamp = null },
-                                                modifier = Modifier.size(40.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Close,
-                                                    contentDescription = "Đóng",
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(24.dp)
-                                                )
-                                            }
-                                        }
-
-                                        // Choose wallet
-                                        Text(
-                                            text = "Chọn ví tiền:",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .horizontalScroll(rememberScrollState()),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            wallets.forEach { w ->
-                                                val selected = selectedWalletId == w.id
-                                                FilterChip(
-                                                    selected = selected,
-                                                    onClick = { selectedWalletId = w.id },
-                                                    label = { Text(w.name, fontSize = 10.sp) },
-                                                    colors = FilterChipDefaults.filterChipColors(
-                                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                        selectedLabelColor = MaterialTheme.colorScheme.primary
-                                                    )
-                                                )
-                                            }
-                                        }
-
-                                        // Choose category
-                                        Text(
-                                            text = "Chọn danh mục:",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .horizontalScroll(rememberScrollState()),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            categories.filter { it.type == log.type || it.type == "BOTH" }.forEach { cat ->
-                                                val selected = selectedCategoryName == cat.name
-                                                FilterChip(
-                                                    selected = selected,
-                                                    onClick = { selectedCategoryName = cat.name },
-                                                    label = { Text(cat.name, fontSize = 10.sp) },
-                                                    colors = FilterChipDefaults.filterChipColors(
-                                                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                        selectedLabelColor = MaterialTheme.colorScheme.secondary
-                                                    )
-                                                )
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(2.dp))
-
-                                        // Row containing action buttons
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Button(
-                                                onClick = {
-                                                    if (selectedWalletId == 0) {
-                                                        android.widget.Toast.makeText(context, "Vui lòng chọn ví!", android.widget.Toast.LENGTH_SHORT).show()
-                                                        return@Button
-                                                    }
-                                                    if (selectedCategoryName.isEmpty()) {
-                                                        android.widget.Toast.makeText(context, "Vui lòng chọn danh mục!", android.widget.Toast.LENGTH_SHORT).show()
-                                                        return@Button
-                                                    }
-                                                    viewModel.confirmPendingNotificationLog(log, selectedWalletId, selectedCategoryName)
-                                                    android.widget.Toast.makeText(context, "Phê duyệt thành công!", android.widget.Toast.LENGTH_SHORT).show()
-                                                    expandedPendingTimestamp = null
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                                                shape = RoundedCornerShape(6.dp),
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                                            ) {
-                                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Xác nhận", fontSize = 11.sp)
-                                            }
-
-                                            Button(
-                                                onClick = {
-                                                    viewModel.deleteNotificationLog(log)
-                                                    android.widget.Toast.makeText(context, "Đã xóa tin!", android.widget.Toast.LENGTH_SHORT).show()
-                                                    expandedPendingTimestamp = null
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                                                shape = RoundedCornerShape(6.dp),
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                                            ) {
-                                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Xóa", fontSize = 11.sp)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         // 4. SAO LƯU CỰC BỘ
         Text(
@@ -1283,58 +577,8 @@ fun SettingsScreen(
                     },
                     modifier = Modifier
                         .clickable {
-                            // Seed multiple transactions for beautiful stats!
-                            val now = System.currentTimeMillis()
-                            val oneDay = 24L * 60L * 60L * 1000L
-                            
-                            viewModel.addTransaction(
-                                walletId = 1, // Cash
-                                type = "EXPENSE",
-                                amount = 150000.0,
-                                categoryName = "Ăn uống",
-                                note = "Ăn tối lẩu cua",
-                                timestamp = now - oneDay * 2
-                            )
-                            viewModel.addTransaction(
-                                walletId = 2, // Bank
-                                type = "EXPENSE",
-                                amount = 450000.0,
-                                categoryName = "Mua sắm",
-                                note = "Mua giày thể thao",
-                                timestamp = now - oneDay * 3
-                            )
-                            viewModel.addTransaction(
-                                walletId = 1,
-                                type = "EXPENSE",
-                                amount = 50000.0,
-                                categoryName = "Di chuyển",
-                                note = "GrabBike đi làm",
-                                timestamp = now - oneDay
-                            )
-                            viewModel.addTransaction(
-                                walletId = 2,
-                                type = "INCOME",
-                                amount = 8000000.0,
-                                categoryName = "Lương",
-                                note = "Nhận lương dự án ngoài",
-                                timestamp = now - oneDay * 4
-                            )
-                            viewModel.addTransaction(
-                                walletId = 2,
-                                type = "EXPENSE",
-                                amount = 1500000.0,
-                                categoryName = "Hóa đơn",
-                                note = "Thanh toán hoá điện nước",
-                                timestamp = now - oneDay
-                            )
-                            viewModel.addTransaction(
-                                walletId = 1,
-                                type = "EXPENSE",
-                                amount = 120000.0,
-                                categoryName = "Giải trí",
-                                note = "Vé xem phim CGV",
-                                timestamp = now
-                            )
+                            viewModel.seedSampleData()
+                            android.widget.Toast.makeText(context, "Đã nạp dữ liệu mẫu thành công!", android.widget.Toast.LENGTH_SHORT).show()
                         }
                         .testTag("seed_database_item")
                 )
@@ -1525,88 +769,6 @@ fun SettingsScreen(
         )
     }
 
-    // Bulk approval dialog
-    if (showBulkApproveDialog) {
-        val targetWalletId = bulkSelectedWalletId
-        AlertDialog(
-            onDismissRequest = { showBulkApproveDialog = false },
-            title = { Text("Duyệt hàng loạt (${pendingLogs.size} giao dịch)") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Tất cả giao dịch chờ sẽ được tự động phân loại theo danh mục tối ưu nhất và nạp vào ví bạn chọn dưới đây:")
-                    
-                    Text("Chọn ví thụ hưởng:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        wallets.forEach { w ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { bulkSelectedWalletId = w.id }
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                RadioButton(
-                                    selected = targetWalletId == w.id,
-                                    onClick = { bulkSelectedWalletId = w.id }
-                                )
-                                Text(w.name, fontSize = 13.sp)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val finalWalletId = bulkSelectedWalletId
-                        if (finalWalletId != null && finalWalletId != 0) {
-                            viewModel.confirmPendingNotificationLogsBulk(pendingLogs, finalWalletId)
-                            android.widget.Toast.makeText(context, "Đã phê duyệt hàng loạt thành công!", android.widget.Toast.LENGTH_SHORT).show()
-                            showBulkApproveDialog = false
-                        } else {
-                            android.widget.Toast.makeText(context, "Vui lòng chọn một ví tài khoản!", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) {
-                    Text("Xác nhận duyệt")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBulkApproveDialog = false }) {
-                    Text("Hủy bỏ")
-                }
-            }
-        )
-    }
-
-    // Bulk delete dialog
-    if (showBulkDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showBulkDeleteDialog = false },
-            title = { Text("Xóa hàng loạt (${pendingLogs.size} giao dịch)") },
-            text = { Text("Các giao dịch chờ duyệt này sẽ được dọn dẹp sạch khỏi danh sách phê duyệt. Vì lựa chọn dọn dẹp hoàn toàn, bạn hoàn toàn có thể quét lại những thông báo này trên thanh trạng thái sau này nếu cần thiết.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deleteNotificationLogsBulk(pendingLogs, deleteCompletely = true)
-                        android.widget.Toast.makeText(context, "Đã dọn dẹp hàng loạt giao dịch chờ!", android.widget.Toast.LENGTH_SHORT).show()
-                        showBulkDeleteDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Xác nhận xóa")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBulkDeleteDialog = false }) {
-                    Text("Hủy bỏ")
-                }
-            }
-        )
-    }
-
     // Secure PIN Setup Dialog
     if (showPinSetupDialog) {
         PinSetupDialog(
@@ -1631,14 +793,6 @@ fun SettingsScreen(
         CategoryManagementDialog(
             viewModel = viewModel,
             onDismiss = { showCategoryManagement = false }
-        )
-    }
-
-    // Savings Management Dialog
-    if (showSavingsManagement) {
-        SavingsManagementDialog(
-            viewModel = viewModel,
-            onDismiss = { showSavingsManagement = false }
         )
     }
 }

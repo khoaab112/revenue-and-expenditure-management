@@ -90,4 +90,7 @@ interface FinanceDao {
 
     @Query("DELETE FROM savings_goals")
     suspend fun deleteAllSavingsGoals()
+
+    @Query("DELETE FROM settings")
+    suspend fun deleteAllSettings()
 }

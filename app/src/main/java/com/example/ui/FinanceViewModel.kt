@@ -34,6 +34,15 @@ data class NotificationLog(
     val status: String // "AUTO_ADDED", "FAILED_PARSE", "NO_WALLET"
 )
 
+data class SmartWalletMapping(
+    val bankName: String,
+    val refKey: String,
+    val walletId: Int,
+    val walletName: String,
+    val confidenceScore: Int,
+    val lastConfirmed: Long
+)
+
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
@@ -44,6 +53,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     private val _notificationLogs = MutableStateFlow<List<NotificationLog>>(emptyList())
     val notificationLogs: StateFlow<List<NotificationLog>> = _notificationLogs.asStateFlow()
+
+    private val _smartMappings = MutableStateFlow<List<SmartWalletMapping>>(emptyList())
+    val smartMappings: StateFlow<List<SmartWalletMapping>> = _smartMappings.asStateFlow()
 
     private val _widgetsEnabled = MutableStateFlow(false)
     val widgetsEnabled: StateFlow<Boolean> = _widgetsEnabled.asStateFlow()
@@ -190,9 +202,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-        // Check and Seed default data
+        // Check settings and default data
         viewModelScope.launch {
-            repository.checkAndSeedDatabase()
             loadCategories()
             loadSecuritySettings()
             loadNotificationSettings()
@@ -244,12 +255,114 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private suspend fun loadNotificationSettings() {
         val enabledSetting = repository.getSetting("notification_reader_enabled")
         _notificationReaderEnabled.value = enabledSetting?.value == "true"
+        loadSmartMappings()
         loadNotificationLogs()
+    }
+
+    fun loadSmartMappings() {
+        viewModelScope.launch {
+            val mappingsSetting = repository.getSetting("smart_wallet_mappings")?.value ?: "[]"
+            val list = mutableListOf<SmartWalletMapping>()
+            try {
+                val array = org.json.JSONArray(mappingsSetting)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    list.add(
+                        SmartWalletMapping(
+                            bankName = obj.optString("bankName", ""),
+                            refKey = obj.optString("refKey", ""),
+                            walletId = obj.optInt("walletId", 0),
+                            walletName = obj.optString("walletName", ""),
+                            confidenceScore = obj.optInt("confidenceScore", 1),
+                            lastConfirmed = obj.optLong("lastConfirmed", System.currentTimeMillis())
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            _smartMappings.value = list
+        }
+    }
+
+    fun saveSmartMappings(list: List<SmartWalletMapping>) {
+        viewModelScope.launch {
+            val array = org.json.JSONArray()
+            for (item in list) {
+                val obj = org.json.JSONObject()
+                obj.put("bankName", item.bankName)
+                obj.put("refKey", item.refKey)
+                obj.put("walletId", item.walletId)
+                obj.put("walletName", item.walletName)
+                obj.put("confidenceScore", item.confidenceScore)
+                obj.put("lastConfirmed", item.lastConfirmed)
+                array.put(obj)
+            }
+            repository.saveSetting("smart_wallet_mappings", array.toString())
+            _smartMappings.value = list
+        }
+    }
+
+    fun extractRefKey(title: String, text: String): String {
+        val combined = "$title $text"
+        val regex = Regex("""\b(?:tk|stk|tai\s*khoan|tài\s*khoản|account|so\s*tk|sotk|card|the|thẻ)\s*([a-zA-Z0-9]{3,16})\b""", RegexOption.IGNORE_CASE)
+        val match = regex.find(combined)
+        if (match != null) {
+            return match.groupValues[1].uppercase()
+        }
+        val digitsRegex = Regex("""\b\d{4,16}\b""")
+        val digitsMatch = digitsRegex.find(text)
+        if (digitsMatch != null) {
+            return digitsMatch.value
+        }
+        return ""
+    }
+
+    fun getSmartWalletRecommendation(log: NotificationLog, wallets: List<Wallet>): Pair<Wallet?, Int> {
+        val mappings = _smartMappings.value
+        val refKey = extractRefKey(log.title, log.text)
+        
+        if (refKey.isNotEmpty()) {
+            val specificMatch = mappings.filter { 
+                it.bankName.equals(log.bankName, ignoreCase = true) && 
+                it.refKey.equals(refKey, ignoreCase = true) 
+            }.maxByOrNull { it.confidenceScore }
+            
+            if (specificMatch != null) {
+                val foundWallet = wallets.find { it.id == specificMatch.walletId }
+                if (foundWallet != null) {
+                    return Pair(foundWallet, specificMatch.confidenceScore)
+                }
+            }
+        }
+        
+        val generalMatch = mappings.filter {
+            it.bankName.equals(log.bankName, ignoreCase = true) && 
+            it.refKey.isEmpty()
+        }.maxByOrNull { it.confidenceScore }
+        
+        if (generalMatch != null) {
+            val foundWallet = wallets.find { it.id == generalMatch.walletId }
+            if (foundWallet != null) {
+                return Pair(foundWallet, generalMatch.confidenceScore)
+            }
+        }
+        
+        val fallbackWallet = wallets.find { it.name.lowercase().contains(log.bankName.lowercase()) }
+            ?: wallets.find { it.name.lowercase().contains(log.walletName.lowercase()) }
+            ?: wallets.find { it.type == "BANK" }
+            ?: wallets.firstOrNull()
+            
+        return Pair(fallbackWallet, 0)
     }
 
     fun loadNotificationLogs() {
         viewModelScope.launch {
-            val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+            var logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+            if (logsSetting.trim().isEmpty()) {
+                logsSetting = "[]"
+            }
+
             val list = mutableListOf<NotificationLog>()
             var modified = false
             val now = System.currentTimeMillis()
@@ -289,6 +402,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 e.printStackTrace()
             }
             _notificationLogs.value = list
+        }
+    }
+
+    fun resetSamplePendingLogs() {
+        viewModelScope.launch {
+            repository.saveSetting("notification_logs", "[]")
+            loadNotificationLogs()
         }
     }
 
@@ -444,6 +564,70 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
             val catDetails = getCategoryByName(categoryName)
+            
+            val walletsList = repository.allWallets.firstOrNull() ?: emptyList()
+            val (suggestedWallet, _) = getSmartWalletRecommendation(log, walletsList)
+            val suggestedWalletId = suggestedWallet?.id ?: 0
+            
+            val refKey = extractRefKey(log.title, log.text)
+            val currentMappings = _smartMappings.value.toMutableList()
+            
+            val existingIndex = if (refKey.isNotEmpty()) {
+                currentMappings.indexOfFirst { 
+                    it.bankName.equals(log.bankName, ignoreCase = true) && 
+                    it.refKey.equals(refKey, ignoreCase = true) 
+                }
+            } else {
+                currentMappings.indexOfFirst { 
+                    it.bankName.equals(log.bankName, ignoreCase = true) && 
+                    it.refKey.isEmpty() 
+                }
+            }
+            
+            if (walletId == suggestedWalletId) {
+                if (existingIndex != -1) {
+                    val existing = currentMappings[existingIndex]
+                    currentMappings[existingIndex] = existing.copy(
+                        confidenceScore = existing.confidenceScore + 1,
+                        lastConfirmed = System.currentTimeMillis()
+                    )
+                } else {
+                    currentMappings.add(
+                        SmartWalletMapping(
+                            bankName = log.bankName,
+                            refKey = refKey,
+                            walletId = walletId,
+                            walletName = wallet.name,
+                            confidenceScore = 1,
+                            lastConfirmed = System.currentTimeMillis()
+                        )
+                    )
+                }
+            } else {
+                if (existingIndex != -1) {
+                    val existing = currentMappings[existingIndex]
+                    currentMappings[existingIndex] = existing.copy(
+                        walletId = walletId,
+                        walletName = wallet.name,
+                        confidenceScore = 1,
+                        lastConfirmed = System.currentTimeMillis()
+                    )
+                } else {
+                    currentMappings.add(
+                        SmartWalletMapping(
+                            bankName = log.bankName,
+                            refKey = refKey,
+                            walletId = walletId,
+                            walletName = wallet.name,
+                            confidenceScore = 1,
+                            lastConfirmed = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+            
+            saveSmartMappings(currentMappings)
+            
             val tx = Transaction(
                 walletId = walletId,
                 walletName = wallet.name,
@@ -470,6 +654,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             
             val targetKeys = logs.map { Pair(it.timestamp, it.text) }.toSet()
             
+            val walletsList = repository.allWallets.firstOrNull() ?: emptyList()
+            val currentMappings = _smartMappings.value.toMutableList()
+            
             for (log in logs) {
                 val matchedCategory = currentCategories.find { it.name.lowercase() == log.note.lowercase() }
                     ?: currentCategories.find { it.type == "BOTH" || it.type == log.type }
@@ -477,6 +664,64 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 val categoryName = matchedCategory?.name ?: "Khác"
                 val categoryIcon = matchedCategory?.iconName ?: "category"
                 val categoryColor = matchedCategory?.colorHex ?: "#9E9E9E"
+                
+                val (suggestedWallet, _) = getSmartWalletRecommendation(log, walletsList)
+                val suggestedWalletId = suggestedWallet?.id ?: 0
+                val refKey = extractRefKey(log.title, log.text)
+                
+                val existingIndex = if (refKey.isNotEmpty()) {
+                    currentMappings.indexOfFirst { 
+                        it.bankName.equals(log.bankName, ignoreCase = true) && 
+                        it.refKey.equals(refKey, ignoreCase = true) 
+                    }
+                } else {
+                    currentMappings.indexOfFirst { 
+                        it.bankName.equals(log.bankName, ignoreCase = true) && 
+                        it.refKey.isEmpty() 
+                    }
+                }
+                
+                if (walletId == suggestedWalletId) {
+                    if (existingIndex != -1) {
+                        val existing = currentMappings[existingIndex]
+                        currentMappings[existingIndex] = existing.copy(
+                            confidenceScore = existing.confidenceScore + 1,
+                            lastConfirmed = System.currentTimeMillis()
+                        )
+                    } else {
+                        currentMappings.add(
+                            SmartWalletMapping(
+                                bankName = log.bankName,
+                                refKey = refKey,
+                                walletId = walletId,
+                                walletName = wallet.name,
+                                confidenceScore = 1,
+                                lastConfirmed = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                } else {
+                    if (existingIndex != -1) {
+                        val existing = currentMappings[existingIndex]
+                        currentMappings[existingIndex] = existing.copy(
+                            walletId = walletId,
+                            walletName = wallet.name,
+                            confidenceScore = 1,
+                            lastConfirmed = System.currentTimeMillis()
+                        )
+                    } else {
+                        currentMappings.add(
+                            SmartWalletMapping(
+                                bankName = log.bankName,
+                                refKey = refKey,
+                                walletId = walletId,
+                                walletName = wallet.name,
+                                confidenceScore = 1,
+                                lastConfirmed = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
                 
                 val tx = Transaction(
                     walletId = walletId,
@@ -491,6 +736,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 )
                 repository.insertTransaction(tx)
             }
+            
+            saveSmartMappings(currentMappings)
             
             val newList = org.json.JSONArray()
             for (i in 0 until jsonArray.length()) {
@@ -982,15 +1229,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             try {
                 addLog("Bắt đầu tạo bản sao lưu cục bộ...")
 
-                val walletsList = allWallets.value
-                val transactionsList = allTransactions.value
-                val budgetsList = allBudgets.value
-                val savingsGoalsList = allSavingsGoals.value
+                val walletsList = repository.allWallets.first()
+                val transactionsList = repository.allTransactions.first()
+                val budgetsList = repository.getAllBudgets().first()
+                val savingsGoalsList = repository.allSavingsGoals.first()
 
                 addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy.")
 
                 val root = org.json.JSONObject()
-                root.put("version", 1)
+                root.put("version", 2)
                 root.put("backup_timestamp", System.currentTimeMillis())
 
                 // Wallets
@@ -1057,12 +1304,25 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 }
                 root.put("savingsGoals", savingsGoalsArray)
 
-                // Custom Categories
+                // Application & Protection Settings
+                val settingsObj = org.json.JSONObject()
+                settingsObj.put("widgets_enabled", repository.getSetting("widgets_enabled")?.value ?: "false")
+                settingsObj.put("smart_wallet_mappings", repository.getSetting("smart_wallet_mappings")?.value ?: "[]")
+                settingsObj.put("notification_reader_enabled", repository.getSetting("notification_reader_enabled")?.value ?: "false")
+                settingsObj.put("pin_enabled", repository.getSetting("pin_enabled")?.value ?: "false")
+                settingsObj.put("pin_hash", repository.getSetting("pin_hash")?.value ?: "")
+                settingsObj.put("start_screen", repository.getSetting("start_screen")?.value ?: "add_transaction")
+                
+                // Set the default backup category/notification logs values also in settings object for integrity
                 val categoriesSetting = repository.getSetting("custom_categories")?.value ?: ""
-                root.put("customCategories", categoriesSetting)
-
-                // Notification Logs
+                settingsObj.put("custom_categories", categoriesSetting)
                 val notificationLogsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+                settingsObj.put("notification_logs", notificationLogsSetting)
+                
+                root.put("app_settings", settingsObj)
+
+                // Legacy fields for backward compatibility
+                root.put("customCategories", categoriesSetting)
                 root.put("notificationLogs", notificationLogsSetting)
 
                 val jsonString = root.toString(2)
@@ -1325,6 +1585,30 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun seedSampleData() {
+        viewModelScope.launch {
+            // 1. Check and create default wallets and budgets
+            repository.checkAndSeedDatabase()
+            
+            // 2. Add some demo transactions
+            val now = System.currentTimeMillis()
+            val oneDay = 24L * 60L * 60L * 1000L
+            
+            // For Tiền mặt (Assuming ID 1 is created by checkAndSeedDatabase)
+            addTransaction(walletId = 1, type = "EXPENSE", amount = 150000.0, categoryName = "Ăn uống", note = "Ăn tối lẩu cua", timestamp = now - oneDay * 2)
+            addTransaction(walletId = 1, type = "EXPENSE", amount = 50000.0, categoryName = "Di chuyển", note = "GrabBike đi làm", timestamp = now - oneDay)
+            addTransaction(walletId = 1, type = "EXPENSE", amount = 120000.0, categoryName = "Giải trí", note = "Vé xem phim CGV", timestamp = now)
+            
+            // For Tài khoản ngân hàng (Assuming ID 2)
+            addTransaction(walletId = 2, type = "EXPENSE", amount = 450000.0, categoryName = "Mua sắm", note = "Mua giày thể thao", timestamp = now - oneDay * 3)
+            addTransaction(walletId = 2, type = "INCOME", amount = 8000000.0, categoryName = "Lương", note = "Nhận lương dự án ngoài", timestamp = now - oneDay * 4)
+            addTransaction(walletId = 2, type = "EXPENSE", amount = 1500000.0, categoryName = "Hóa đơn", note = "Thanh toán hoá điện nước", timestamp = now - oneDay)
+            
+            // Refresh
+            loadCategories()
+        }
+    }
+
     fun clearAllData(context: android.content.Context) {
         viewModelScope.launch {
             try {
@@ -1336,13 +1620,19 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 }
                 addLog("Khởi chạy tiến trình xóa sạch dữ liệu...")
                 repository.clearAllData()
-                // Clear bank notification logs too
-                repository.saveSetting("notification_logs", "[]")
-                _notificationLogs.value = emptyList()
-                addLog("Xóa sạch toàn bộ lịch sử đọc thông báo...")
-                addLog("Xóa sạch toàn bộ giao dịch, ví, ngân sách thành công!")
+                addLog("Dọn dẹp các giao dịch, ví, ngân sách, mục tiêu tích lũy...")
+                
+                repository.deleteAllSettings()
+                addLog("Xóa sạch toàn bộ cấu hình cài đặt và mã khóa PIN bảo vệ...")
+                
+                // Reload in-memory livedata states
+                loadCategories()
+                loadSecuritySettings()
+                loadNotificationSettings()
+                
+                addLog("Đã xóa hoàn tất và khôi phục cài đặt gốc thành công!")
                 _syncStatus.value = "SUCCESS_CLEAR"
-                android.widget.Toast.makeText(context, "Xóa dữ liệu thành công", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, "Xóa toàn bộ dữ liệu & thiết lập lại thành công", android.widget.Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 _syncStatus.value = "ERROR"
                 e.printStackTrace()
@@ -1379,6 +1669,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 // Start clear databases first
                 addLog("Khởi tạo tiến trình dọn dẹp cơ sở dữ liệu...")
                 repository.clearAllData()
+                repository.deleteAllSettings()
 
                 // 1. Wallets
                 val walletsArray = root.optJSONArray("wallets")
@@ -1460,21 +1751,57 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
-                // 5. Custom Categories
-                val customCategories = root.optString("customCategories", "")
-                if (customCategories.isNotEmpty()) {
-                    repository.saveSetting("custom_categories", customCategories)
+                // 5. Restore Settings (app settings, PIN, configurations)
+                val settingsObj = root.optJSONObject("app_settings")
+                if (settingsObj != null) {
+                    addLog("Đang khôi phục cài đặt và cấu hình ứng dụng...")
+                    val widgetsEnabled = settingsObj.optString("widgets_enabled", "false")
+                    repository.saveSetting("widgets_enabled", widgetsEnabled)
+                    
+                    val smartWalletMappings = settingsObj.optString("smart_wallet_mappings", "[]")
+                    repository.saveSetting("smart_wallet_mappings", smartWalletMappings)
+                    
+                    val notificationReaderEnabled = settingsObj.optString("notification_reader_enabled", "false")
+                    repository.saveSetting("notification_reader_enabled", notificationReaderEnabled)
+                    
+                    val pinEnabled = settingsObj.optString("pin_enabled", "false")
+                    repository.saveSetting("pin_enabled", pinEnabled)
+                    
+                    val pinHash = settingsObj.optString("pin_hash", "")
+                    repository.saveSetting("pin_hash", pinHash)
+                    
+                    val startScreen = settingsObj.optString("start_screen", "add_transaction")
+                    repository.saveSetting("start_screen", startScreen)
+                    
+                    val customCategories = settingsObj.optString("custom_categories", "")
+                    if (customCategories.isNotEmpty()) {
+                        repository.saveSetting("custom_categories", customCategories)
+                    }
+                    
+                    val notificationLogsRestore = settingsObj.optString("notification_logs", "[]")
+                    if (notificationLogsRestore.isNotEmpty()) {
+                        repository.saveSetting("notification_logs", notificationLogsRestore)
+                    }
+                } else {
+                    // Fallback to format v1
+                    addLog("Đang khôi phục cài đặt định dạng cũ (V1)...")
+                    val customCategories = root.optString("customCategories", "")
+                    if (customCategories.isNotEmpty()) {
+                        repository.saveSetting("custom_categories", customCategories)
+                    }
+                    val notificationLogsRestore = root.optString("notificationLogs", "")
+                    if (notificationLogsRestore.isNotEmpty()) {
+                        repository.saveSetting("notification_logs", notificationLogsRestore)
+                    }
                 }
 
-                // 6. Notification Logs
-                val notificationLogsRestore = root.optString("notificationLogs", "")
-                if (notificationLogsRestore.isNotEmpty()) {
-                    repository.saveSetting("notification_logs", notificationLogsRestore)
-                }
+                // 6. Reload Settings & Cache flows inside memory
+                loadCategories()
+                loadSecuritySettings()
+                loadNotificationSettings()
 
                 addLog("🎉 KHÔI PHỤC DỮ LIỆU THÀNH CÔNG HOÀN TOÀN!")
                 _syncStatus.value = "SUCCESS"
-                loadNotificationLogs()
                 android.widget.Toast.makeText(context, "Khôi phục dữ liệu từ bản sao lưu thành công!", android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 addLog("Lỗi khôi phục: ${e.localizedMessage ?: "File JSON lỗi cấu trúc."}")

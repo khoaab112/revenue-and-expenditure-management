@@ -185,6 +185,8 @@ class FinanceRepository(private val dao: FinanceDao) {
         dao.deleteAllSavingsGoals()
     }
 
+    suspend fun deleteAllSettings() = dao.deleteAllSettings()
+
     suspend fun insertWalletDirect(wallet: Wallet) = dao.insertWallet(wallet)
     suspend fun insertTransactionDirect(transaction: Transaction) = dao.insertTransaction(transaction)
     suspend fun insertBudgetDirect(budget: Budget) = dao.insertBudget(budget)

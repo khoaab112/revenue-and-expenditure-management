@@ -517,6 +517,13 @@ fun HistoryScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Text(
+            text = "Lịch Sử Giao Dịch",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
         // Mode Switcher (Danh sách / Lịch)
         Row(
             modifier = Modifier

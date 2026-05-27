@@ -36,6 +36,8 @@ fun DashboardScreen(
     onNavigateToHistory: () -> Unit,
     onNavigateToStats: () -> Unit,
     onNavigateToBudget: () -> Unit,
+    onNavigateToSavings: () -> Unit = {},
+    onNavigateToBankNotifications: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val wallets by viewModel.dailyWallets.collectAsState()
@@ -172,6 +174,66 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFF44336)
                         )
+                    }
+                }
+            }
+        }
+
+        // --- Pending Notifications Banner Alert ---
+        val notificationLogs by viewModel.notificationLogs.collectAsState()
+        val pendingCount = remember(notificationLogs) { notificationLogs.count { it.status == "PENDING" } }
+        if (pendingCount > 0) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToBankNotifications() }
+                    .testTag("dashboard_pending_notifications_banner"),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0xFFE65100).copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFFFFE0B2), shape = CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = "Pending Notifications",
+                            tint = Color(0xFFE65100),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Giao dịch chờ duyệt mới!",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE65100)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Phát hiện $pendingCount giao dịch mới từ tin ngân hàng cần bạn xác nhận.",
+                            fontSize = 12.sp,
+                            color = Color(0xFF5D4037)
+                        )
+                    }
+                    Button(
+                        onClick = onNavigateToBankNotifications,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Text("Duyệt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -354,6 +416,57 @@ fun DashboardScreen(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Đặt giới hạn chi tiêu và theo dõi mức chi dùng hàng tháng.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Detail",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // --- Kho Tiết Kiệm (Savings goals) Component ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onNavigateToSavings() }
+                .testTag("dashboard_savings_vault_card"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(MaterialTheme.colorScheme.tertiaryContainer, shape = CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AccountBalance,
+                        contentDescription = "Kho tiết kiệm",
+                        tint = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Kho tiết kiệm",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Theo dõi và tích lũy để đạt được các mục tiêu tài chính.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

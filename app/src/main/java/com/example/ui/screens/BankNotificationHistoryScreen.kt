@@ -28,9 +28,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
 import com.example.ui.NotificationLog
+import com.example.ui.IconMapper
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -50,6 +53,24 @@ fun BankNotificationHistoryScreen(
     var searchQuery by remember { mutableStateOf("") }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
 
+    // Group "Thông báo" state
+    val notificationReaderEnabled by viewModel.notificationReaderEnabled.collectAsState()
+    val isServiceEnabled = remember(context) { isNotificationServiceEnabled(context) }
+    var isPermitted by remember { mutableStateOf(isServiceEnabled) }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                isPermitted = isNotificationServiceEnabled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     // Section collapsing states
     var showSimulationPanel by remember { mutableStateOf(false) }
     var showHistoryPanel by remember { mutableStateOf(true) }
@@ -65,6 +86,8 @@ fun BankNotificationHistoryScreen(
     var showBulkApproveDialog by remember { mutableStateOf(false) }
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var bulkSelectedWalletId by remember { mutableStateOf<Int?>(null) }
+
+    var activeTab by remember { mutableStateOf(0) }
 
     // Partition logs
     val pendingLogs = remember(notificationLogs) {
@@ -94,23 +117,12 @@ fun BankNotificationHistoryScreen(
                         Text(
                             text = "Tin nhắn ngân hàng",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
+                            fontSize = 22.sp
                         )
                         Text(
                             text = "Duyệt giao dịch từ thông báo biến động số dư",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testTag("bank_history_back_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Quay lại"
                         )
                     }
                 },
@@ -144,17 +156,141 @@ fun BankNotificationHistoryScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             
-            // --- SECTION 1: SIMULATOR TRIGGER (Collapsible Simulation) ---
+            // --- SECTION 1: CÀI ĐẶT THÔNG BÁO THỰC TẾ & MÔ PHỎNG ---
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                    ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Header & Toggle Switch
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.NotificationsActive,
+                                        contentDescription = "Notification Reader",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "Đọc tin ngân hàng tự động",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Tự ghi chép khi nổ thông báo app ngân hàng, MoMo...",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Switch(
+                                checked = notificationReaderEnabled,
+                                onCheckedChange = { viewModel.setNotificationReaderEnabled(it) },
+                                modifier = Modifier.testTag("notification_reader_switch")
+                            )
+                        }
+
+                        // Permission Warning Banner if not enabled/permitted
+                        if (!isPermitted) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = "Permission Needed",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Yêu cầu quyền hệ thống",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Text(
+                                            text = "Để đọc tự động, vui lòng bật quyền truy cập thông báo trong cài đặt Android.",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(context, "Không thể mở cài đặt", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text("Cấp quyền", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        } else if (notificationReaderEnabled) {
+                            // Success Banner show status
+                            Surface(
+                                color = Color(0xFFE8F5E9),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Ready Status",
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "TRẠNG THÁI: Đã kích hoạt & Đang lắng nghe thông báo biến động số dư!",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF2E7D32)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Simulator Section
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                        
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -163,552 +299,826 @@ fun BankNotificationHistoryScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.BugReport,
-                                    contentDescription = "Simulate",
+                                    contentDescription = "Simulate icon",
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Mô phỏng thông báo thử nghiệm",
+                                    text = "MÔ PHỎNG THÔNG BÁO THỬ NGHIỆM",
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
                             Icon(
                                 imageVector = if (showSimulationPanel) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = "Toggle Panel",
-                                tint = MaterialTheme.colorScheme.primary
+                                contentDescription = "Toggle Simulation",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
-                        AnimatedVisibility(
-                            visible = showSimulationPanel,
-                            enter = expandVertically(),
-                            exit = shrinkVertically()
+                        if (showSimulationPanel) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                val presets = listOf(
+                                    Triple("Vietcombank", "Vietcombank SD TK 0451 thay doi +500,000 VND luc 12:30. GD: Chuyen khoan luong thang 5", "com.vietcombank.restyle"),
+                                    Triple("Techcombank", "Techcombank: TK 1903 bien dong -150,000 VND. Noi dung: Mua tra sua HighTea", "vn.com.techcombank"),
+                                    Triple("MoMo", "Ban da thanh toan thanh cong so tien -50,000 d cho dich vu GrabFood qua vi MoMo", "com.mservice.momo"),
+                                    Triple("MB Bank", "MB_BANK: GD +200,000 VND luc 15:40. ND: Tien mung sinh nhat", "com.mbmobile")
+                                )
+                                presets.forEach { (bankName, presetText, pkg) ->
+                                    FilterChip(
+                                        selected = simTitle == bankName,
+                                        onClick = {
+                                            simTitle = bankName
+                                            simText = presetText
+                                            simPackage = pkg
+                                        },
+                                        label = { Text(bankName) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.primary
+                                        )
+                                    )
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = simText,
+                                onValueChange = { simText = it },
+                                label = { Text("Nội dung tin nhắn giả định") },
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 3
+                            )
+
+                            Button(
+                                onClick = {
+                                    viewModel.simulateBankNotification(simTitle, simText, simPackage)
+                                    android.widget.Toast.makeText(context, "Mô phỏng thành công! Kiểm tra nhật ký bên dưới.", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.fillMaxWidth().height(40.dp).testTag("simulate_notification_button"),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.BugReport, contentDescription = "Simulate", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Chạy thử mô phỏng", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Manual Notification Scan Button
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                        
+                        Button(
+                            onClick = {
+                                viewModel.scanNotificationsManual(
+                                    context = context,
+                                    onSuccess = { count ->
+                                        if (count > 0) {
+                                            android.widget.Toast.makeText(context, "Quét thành công! Đã tự động thêm $count giao dịch mới.", android.widget.Toast.LENGTH_LONG).show()
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Quét xong! Không tìm thấy thông báo giao dịch mới nào trên thanh trạng thái.", android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    },
+                                    onError = { errorMessage ->
+                                        android.widget.Toast.makeText(context, errorMessage, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("manual_scan_notifications_button"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) {
+                            Icon(imageVector = Icons.Default.Search, contentDescription = "Scan", modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Quét thông báo (Thủ công)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // --- TAB ROW: CHỜ & DUYỆT ---
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    TabRow(
+                        selectedTabIndex = activeTab,
+                        containerColor = Color.Transparent,
+                        divider = {}
+                    ) {
+                        Tab(
+                            selected = activeTab == 0,
+                            onClick = { activeTab = 0 },
+                            modifier = Modifier.testTag("tab_pending"),
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PendingActions,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = if (activeTab == 0) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "CHỜ DUYỆT",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = if (activeTab == 0) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (pendingLogs.isNotEmpty()) {
+                                        Surface(
+                                            color = Color(0xFFFFF3E0),
+                                            shape = CircleShape
+                                        ) {
+                                            Text(
+                                                text = pendingLogs.size.toString(),
+                                                color = Color(0xFFE65100),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                        Tab(
+                            selected = activeTab == 1,
+                            onClick = { activeTab = 1 },
+                            modifier = Modifier.testTag("tab_approved"),
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DoneAll,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = if (activeTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "ĐÃ DUYỆT",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = if (activeTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (processedLogs.isNotEmpty()) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.primaryContainer,
+                                            shape = CircleShape
+                                        ) {
+                                            Text(
+                                                text = processedLogs.size.toString(),
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (activeTab == 0) {
+                if (pendingLogs.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    .padding(vertical = 24.dp, horizontal = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                OutlinedTextField(
-                                    value = simTitle,
-                                    onValueChange = { simTitle = it },
-                                    label = { Text("Tiêu đề (Ví dụ: Vietcombank, Momo)", fontSize = 12.sp) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
+                                Icon(
+                                    imageVector = Icons.Default.FactCheck,
+                                    contentDescription = "All done",
+                                    tint = Color(0xFF4CAF50),
+                                    modifier = Modifier.size(44.dp)
                                 )
-
-                                OutlinedTextField(
-                                    value = simText,
-                                    onValueChange = { simText = it },
-                                    label = { Text("Nội dung tin nhắn nhận được", fontSize = 12.sp) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
-                                )
-
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Tin mẫu nhanh hoặc ngân hàng khác:",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = "Sạch sẽ! Không có giao dịch nào cần phê duyệt",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    val bankTemplates = listOf(
-                                        Triple("VCB +5Tr", "TK 10129384 +5,000,000 VND luc 14:32. ND: Chuyen khoan luong thang 5", "com.vietcombank.card"),
-                                        Triple("VCB -250k", "TK 10129384 -250,000 VND luc 15:40. ND: Rut tien tai ATM", "com.vietcombank.card"),
-                                        Triple("Momo +20k", "Bạn vừa nhận được 20.000đ từ Nguyễn Văn B.", "com.mservice.momo"),
-                                        Triple("Momo -55k", "Thanh toán thành công 55.000đ cho GrabFood qua Momo.", "com.mservice.momo"),
-                                        Triple("MB Bank +100k", "MB: +100,000 VND vao 12:00. ND: Giao dich chuyen tien don do an", "com.mbbank")
-                                    )
-
-                                    bankTemplates.forEach { (label, content, pkg) ->
-                                        AssistChip(
-                                            onClick = {
-                                                simTitle = label.split(" ")[0]
-                                                simText = content
-                                                simPackage = pkg
-                                            },
-                                            label = { Text(label, fontSize = 11.sp) }
-                                        )
-                                    }
-                                }
-
-                                Button(
-                                    onClick = {
-                                        viewModel.simulateBankNotification(simTitle, simText, simPackage)
-                                        android.widget.Toast.makeText(context, "Đã gửi thông báo mô phỏng dạng PENDING!", android.widget.Toast.LENGTH_SHORT).show()
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    )
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.SendToMobile,
-                                        contentDescription = "Push",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Gửi thông báo mô phỏng", fontSize = 13.sp)
-                                }
+                                Text(
+                                    text = "Lịch sử tin nhắn nhận được sẽ hiển thị tại đây để bạn phê duyệt vào ví nhanh chóng.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp)
+                                )
                             }
                         }
                     }
-                }
-            }
+                } else {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (wallets.isEmpty()) {
+                                        android.widget.Toast.makeText(context, "Vui lòng tạo ví tài khoản trước!", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        bulkSelectedWalletId = wallets.firstOrNull()?.id ?: 0
+                                        showBulkApproveDialog = true
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Duyệt hàng loạt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
 
-            // --- SECTION 2: GIAO DỊCH QUÉT ĐƯỢC (PENDING TRANSACTIONS BLOCK) ---
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PendingActions,
-                        contentDescription = "Pending actions",
-                        tint = Color(0xFFE65100),
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "GIAO DỊCH QUÉT ĐƯỢC CHỜ DUYỆT",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = Color(0xFFE65100)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        color = Color(0xFFFFF3E0),
-                        shape = CircleShape
-                    ) {
-                        Text(
-                            text = pendingLogs.size.toString(),
-                            color = Color(0xFFE65100),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
+                            Button(
+                                onClick = { showBulkDeleteDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Xóa hàng loạt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
-                }
-            }
 
-            if (pendingLogs.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(
+                    items(pendingLogs, key = { it.timestamp }) { log ->
+                        val isExpanded = true
+
+                        // Smart recommendation logic
+                        val recommendation = remember(log, wallets) {
+                            viewModel.getSmartWalletRecommendation(log, wallets)
+                        }
+                        val matchedWallet = recommendation.first
+                        val confidenceScore = recommendation.second
+
+                        var selectedWalletId by remember(log, matchedWallet) {
+                            mutableStateOf(matchedWallet?.id ?: 0)
+                        }
+
+                        val matchedCategory = remember(log, categories) {
+                            categories.find { it.name.lowercase() == log.note.lowercase() }
+                                ?: categories.find { it.type == log.type }
+                                ?: categories.firstOrNull()
+                        }
+
+                        var selectedCategoryName by remember(log, matchedCategory) {
+                            mutableStateOf(matchedCategory?.name ?: "")
+                        }
+
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 24.dp, horizontal = 16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FactCheck,
-                                contentDescription = "All done",
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(44.dp)
+                                .padding(vertical = 6.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = 2.dp
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Sạch sẽ! Không có giao dịch nào cần phê duyệt",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Lịch sử tin nhắn nhận được sẽ hiển thị tại đây để bạn phê duyệt vào ví nhanh chóng.",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp)
-                            )
-                        }
-                    }
-                }
-            } else {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                if (wallets.isEmpty()) {
-                                    android.widget.Toast.makeText(context, "Vui lòng tạo ví tài khoản trước!", android.widget.Toast.LENGTH_SHORT).show()
-                                } else {
-                                    bulkSelectedWalletId = wallets.firstOrNull()?.id ?: 0
-                                    showBulkApproveDialog = true
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                            modifier = Modifier.weight(1f).height(38.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Duyệt hàng loạt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { showBulkDeleteDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                            modifier = Modifier.weight(1f).height(38.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Xóa hàng loạt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                items(pendingLogs, key = { it.timestamp }) { log ->
-                    val isExpanded = expandedPendingTimestamp == log.timestamp
-
-                    // Local state for approval targets
-                    val matchedWallet = remember(log, wallets) {
-                        wallets.find { it.name.lowercase().contains(log.bankName.lowercase()) }
-                            ?: wallets.find { it.name.lowercase().contains(log.walletName.lowercase()) }
-                            ?: wallets.find { it.type == "BANK" }
-                            ?: wallets.firstOrNull()
-                    }
-
-                    var selectedWalletId by remember(log, matchedWallet) {
-                        mutableStateOf(matchedWallet?.id ?: 0)
-                    }
-
-                    val matchedCategory = remember(log, categories) {
-                        categories.find { it.name.lowercase() == log.note.lowercase() }
-                            ?: categories.find { it.type == log.type }
-                            ?: categories.firstOrNull()
-                    }
-
-                    var selectedCategoryName by remember(log, matchedCategory) {
-                        mutableStateOf(matchedCategory?.name ?: "")
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                expandedPendingTimestamp = if (isExpanded) null else log.timestamp
-                            },
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-                            else MaterialTheme.colorScheme.surface
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(
-                            width = if (isExpanded) 1.5.dp else 1.dp,
-                            color = if (isExpanded) Color(0xFFE65100).copy(alpha = 0.7f) else MaterialTheme.colorScheme.outlineVariant
-                        )
-                    ) {
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            // Underneath Layer: Normal item content
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                // Top Row
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(32.dp)
-                                                .background(
-                                                    if (log.type == "INCOME") Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
-                                                    CircleShape
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = if (log.type == "INCOME") Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                                                contentDescription = log.type,
-                                                tint = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                        Column {
-                                            Text(
-                                                text = log.bankName.ifEmpty { "Ngân hàng" },
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp
-                                            )
-                                            val timeStr = remember(log.timestamp) {
-                                                SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp))
-                                            }
-                                            Text(
-                                                text = timeStr,
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-
-                                    Surface(
-                                        color = Color(0xFFFFF3E0),
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "CHỜ DUYỆT",
-                                            color = Color(0xFFE65100),
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                // original text SMS
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = log.text,
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(10.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                // amount & note info
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = "Khoản tiền phát hiện",
-                                            fontSize = 10.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            text = "${if (log.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(log.amount)}",
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
-                                        )
-                                    }
-
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            text = "Nội dung tóm tắt",
-                                            fontSize = 10.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            text = log.note.ifEmpty { "Giao dịch" },
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Interactive Shroud Overlay Layer: "Phủ một lớp mờ nhẹ"
-                            if (isExpanded) {
+                            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                                // Left Color Strip
                                 Box(
                                     modifier = Modifier
-                                        .matchParentSize()
-                                        .background(Color.Black.copy(alpha = 0.7f))
-                                        .clickable {
-                                            // Clicking outside the selection panel returns normal
-                                            expandedPendingTimestamp = null
-                                        }
+                                        .fillMaxHeight()
+                                        .width(6.dp)
+                                        .background(
+                                            if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
+                                        )
                                 )
 
-                                // Foreground focused controls panel
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .align(Alignment.Center)
-                                        .padding(12.dp)
-                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-                                        .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                                        .clickable(
-                                            enabled = true,
-                                            onClick = {} // Intercepts clicks inside selection panel
-                                        )
-                                        .padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
+                                // Card Content
+                                Column(modifier = Modifier.padding(16.dp).weight(1f)) {
+                                    // Top Row: Bank Info and Pending Badge
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = "Phê duyệt giao dịch: ${if (log.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(log.amount)}",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        IconButton(
-                                            onClick = { expandedPendingTimestamp = null },
-                                            modifier = Modifier.size(40.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Đóng",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                    }
-
-                                    // Wallet selection chip scroll
-                                    Text(
-                                        text = "Chọn ví tài chính áp dụng:",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    if (wallets.isEmpty()) {
-                                        Text(
-                                            text = "Hãy tạo ít nhất một ví tài khoản trước khi duyệt!",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    } else {
                                         Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .horizontalScroll(rememberScrollState()),
+                                            verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            wallets.forEach { w ->
-                                                val selected = selectedWalletId == w.id
-                                                FilterChip(
-                                                    selected = selected,
-                                                    onClick = { selectedWalletId = w.id },
-                                                    label = { Text(w.name, fontSize = 11.sp) },
-                                                    colors = FilterChipDefaults.filterChipColors(
-                                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                        selectedLabelColor = MaterialTheme.colorScheme.primary
-                                                    )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .background(
+                                                        if (log.type == "INCOME") Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
+                                                        CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (log.type == "INCOME") Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                                                    contentDescription = log.type,
+                                                    tint = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                            Column {
+                                                Text(
+                                                    text = log.bankName.ifEmpty { "Ngân hàng" },
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 14.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                val timeStr = remember(log.timestamp) {
+                                                    SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp))
+                                                }
+                                                Text(
+                                                    text = timeStr,
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            color = Color(0xFFFFF3E0),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(6.dp)
+                                                        .background(Color(0xFFE65100), CircleShape)
+                                                )
+                                                Text(
+                                                    text = "CHỜ DUYỆT",
+                                                    color = Color(0xFFE65100),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
                                                 )
                                             }
                                         }
                                     }
 
-                                    // Category selection chip scroll
-                                    Text(
-                                        text = "Chọn danh mục:",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Original Message Text with elegant background
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        categories.filter { it.type == log.type || it.type == "BOTH" }.forEach { cat ->
-                                            val selected = selectedCategoryName == cat.name
-                                            FilterChip(
-                                                selected = selected,
-                                                onClick = { selectedCategoryName = cat.name },
-                                                label = { Text(cat.name, fontSize = 11.sp) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                    selectedLabelColor = MaterialTheme.colorScheme.secondary
-                                                )
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Text(
+                                                text = "Chi tiết thông báo:",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = log.text,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                lineHeight = 16.sp
                                             )
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Three Action buttons: Xác nhận, Xóa, Hủy
+                                    // Dynamic amount & Note Info
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // Confirm
-                                        Button(
-                                            onClick = {
-                                                if (selectedWalletId == 0) {
-                                                    android.widget.Toast.makeText(context, "Vui lòng chọn ví tài chính!", android.widget.Toast.LENGTH_SHORT).show()
-                                                    return@Button
-                                                }
-                                                if (selectedCategoryName.isEmpty()) {
-                                                    android.widget.Toast.makeText(context, "Vui lòng chọn danh mục!", android.widget.Toast.LENGTH_SHORT).show()
-                                                    return@Button
-                                                }
-                                                viewModel.confirmPendingNotificationLog(log, selectedWalletId, selectedCategoryName)
-                                                android.widget.Toast.makeText(context, "Đã ghi nhận giao dịch thành công!", android.widget.Toast.LENGTH_SHORT).show()
-                                                expandedPendingTimestamp = null
-                                            },
-                                            modifier = Modifier.weight(1.2f),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color(0xFF2E7D32)
-                                            ),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Icon(Icons.Default.Check, contentDescription = "Confirm", modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Xác nhận", fontSize = 12.sp)
+                                        Column {
+                                            Text(
+                                                text = "Khoản tiền phát hiện",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = "${if (log.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(log.amount)}",
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
+                                            )
                                         }
 
-                                        // Delete / Reject
-                                        OutlinedButton(
-                                            onClick = {
-                                                viewModel.deleteNotificationLog(log)
-                                                android.widget.Toast.makeText(context, "Đã từ chối giao dịch quét!", android.widget.Toast.LENGTH_SHORT).show()
-                                                expandedPendingTimestamp = null
-                                            },
-                                            modifier = Modifier.weight(0.9f),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                contentColor = Color(0xFFC62828)
-                                            ),
-                                            border = BorderStroke(1.dp, Color(0xFFC62828)),
-                                            shape = RoundedCornerShape(8.dp)
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text(
+                                                text = "Nội dung tóm tắt",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = log.note.ifEmpty { "Giao dịch" },
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Smart suggestion panel trigger row
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Delete", modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Xóa", fontSize = 12.sp)
+                                            Icon(
+                                                imageVector = Icons.Default.AutoAwesome,
+                                                contentDescription = "Gợi ý",
+                                                tint = Color(0xFFF9A825),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "Đề xuất ví: ",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = matchedWallet?.name ?: "Chưa rõ",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
                                         }
 
-                                        // Close detail / Hủy
-                                        TextButton(
-                                            onClick = { expandedPendingTimestamp = null },
-                                            modifier = Modifier.weight(0.8f)
+                                        if (confidenceScore > 0) {
+                                            Surface(
+                                                color = if (confidenceScore >= 3) Color(0xFFE8F5E9) else Color(0xFFE3F2FD),
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (confidenceScore >= 3) "🛡️ Tin cậy cao (học $confidenceScore lần)" else "⚡ Đã học ($confidenceScore lần)",
+                                                    color = if (confidenceScore >= 3) Color(0xFF2E7D32) else Color(0xFF1565C0),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Interactive embedded selection board
+                                    AnimatedVisibility(
+                                        visible = isExpanded,
+                                        enter = expandVertically() + androidx.compose.animation.fadeIn(),
+                                        exit = shrinkVertically() + androidx.compose.animation.fadeOut()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 16.dp)
+                                                .background(
+                                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                                                    RoundedCornerShape(16.dp)
+                                                )
+                                                .border(
+                                                    1.dp,
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                                                    RoundedCornerShape(16.dp)
+                                                )
+                                                .padding(14.dp),
+                                            verticalArrangement = Arrangement.spacedBy(14.dp)
                                         ) {
-                                            Text("Hủy", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "Đề xuất",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                                Text(
+                                                    text = "Vui lòng xác nhận thông tin",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                                            // WALLET CHIPS ROW
+                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.AccountBalanceWallet,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.secondary,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Áp dụng cho Ví tài chính:",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+
+                                                if (wallets.isEmpty()) {
+                                                    Text(
+                                                        text = "Hãy tạo ít nhất một ví tài khoản trước khi duyệt!",
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.error,
+                                                        modifier = Modifier.padding(vertical = 4.dp)
+                                                    )
+                                                } else {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .horizontalScroll(rememberScrollState())
+                                                            .padding(vertical = 6.dp),
+                                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        wallets.forEach { w ->
+                                                            val selected = selectedWalletId == w.id
+                                                            val walletColor = try {
+                                                                Color(android.graphics.Color.parseColor(w.colorHex))
+                                                            } catch (e: Exception) {
+                                                                MaterialTheme.colorScheme.primary
+                                                            }
+
+                                                            Card(
+                                                                modifier = Modifier
+                                                                    .width(155.dp)
+                                                                    .height(82.dp)
+                                                                    .clickable { selectedWalletId = w.id }
+                                                                    .border(
+                                                                        width = if (selected) 3.dp else 1.dp,
+                                                                        color = if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.15f),
+                                                                        shape = RoundedCornerShape(12.dp)
+                                                                    ),
+                                                                colors = CardDefaults.cardColors(
+                                                                    containerColor = walletColor
+                                                                ),
+                                                                shape = RoundedCornerShape(12.dp),
+                                                                elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 6.dp else 1.dp)
+                                                            ) {
+                                                                Column(
+                                                                    modifier = Modifier
+                                                                        .padding(10.dp)
+                                                                        .fillMaxSize(),
+                                                                    verticalArrangement = Arrangement.SpaceBetween
+                                                                ) {
+                                                                    Row(
+                                                                        modifier = Modifier.fillMaxWidth(),
+                                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                                        verticalAlignment = Alignment.CenterVertically
+                                                                    ) {
+                                                                        Icon(
+                                                                            imageVector = IconMapper.getIconByName(w.iconName),
+                                                                            contentDescription = "Icon",
+                                                                            tint = Color.White.copy(alpha = 0.9f),
+                                                                            modifier = Modifier.size(16.dp)
+                                                                        )
+                                                                        if (selected) {
+                                                                            Icon(
+                                                                                imageVector = Icons.Default.CheckCircle,
+                                                                                contentDescription = "Selected",
+                                                                                tint = Color.White,
+                                                                                modifier = Modifier.size(16.dp)
+                                                                            )
+                                                                        } else if (w.id == matchedWallet?.id) {
+                                                                            Surface(
+                                                                                color = Color(0xFFFFD54F),
+                                                                                shape = RoundedCornerShape(6.dp)
+                                                                            ) {
+                                                                                Text(
+                                                                                    text = "⚡ Đề xuất",
+                                                                                    color = Color(0xFF5D4037),
+                                                                                    fontSize = 8.sp,
+                                                                                    fontWeight = FontWeight.Bold,
+                                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                                                )
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    Column {
+                                                                        Text(
+                                                                            text = w.name,
+                                                                            fontWeight = FontWeight.Bold,
+                                                                            fontSize = 12.sp,
+                                                                            color = Color.White,
+                                                                            maxLines = 1,
+                                                                            overflow = TextOverflow.Ellipsis
+                                                                        )
+                                                                        Text(
+                                                                            text = FormatHelper.formatVND(w.balance),
+                                                                            fontSize = 10.sp,
+                                                                            color = Color.White.copy(alpha = 0.8f),
+                                                                            maxLines = 1
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // CATEGORIES ROW
+                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Category,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.secondary,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Phân loại Danh Mục:",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .horizontalScroll(rememberScrollState())
+                                                        .padding(vertical = 4.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    categories.filter { it.type == log.type || it.type == "BOTH" }.forEach { cat ->
+                                                        val selected = selectedCategoryName == cat.name
+                                                        val catColor = try {
+                                                            Color(android.graphics.Color.parseColor(cat.colorHex))
+                                                        } catch (e: Exception) {
+                                                            MaterialTheme.colorScheme.primary
+                                                        }
+
+                                                        Card(
+                                                            modifier = Modifier
+                                                                .height(44.dp)
+                                                                .clickable { selectedCategoryName = cat.name }
+                                                                .border(
+                                                                    width = if (selected) 2.5.dp else 1.dp,
+                                                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                                                    shape = RoundedCornerShape(22.dp)
+                                                                ),
+                                                            colors = CardDefaults.cardColors(
+                                                                containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                                                            ),
+                                                            shape = RoundedCornerShape(22.dp)
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier
+                                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                                                    .fillMaxHeight(),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                            ) {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(22.dp)
+                                                                        .background(catColor.copy(alpha = 0.15f), CircleShape),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = IconMapper.getIconByName(cat.iconName),
+                                                                        contentDescription = null,
+                                                                        tint = catColor,
+                                                                        modifier = Modifier.size(12.dp)
+                                                                    )
+                                                                }
+                                                                Text(
+                                                                    text = cat.name,
+                                                                    fontSize = 12.sp,
+                                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.height(4.dp))
+
+                                            // ACTION BUTTONS (Xác nhận, Bỏ qua)
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                Button(
+                                                    onClick = {
+                                                        if (selectedWalletId == 0) {
+                                                            android.widget.Toast.makeText(context, "Vui lòng chọn ví tài chính!", android.widget.Toast.LENGTH_SHORT).show()
+                                                            return@Button
+                                                        }
+                                                        if (selectedCategoryName.isEmpty()) {
+                                                            android.widget.Toast.makeText(context, "Vui lòng chọn danh mục!", android.widget.Toast.LENGTH_SHORT).show()
+                                                            return@Button
+                                                        }
+                                                        viewModel.confirmPendingNotificationLog(log, selectedWalletId, selectedCategoryName)
+                                                        android.widget.Toast.makeText(context, "Xác nhận giao dịch thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(44.dp),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFF2E7D32)
+                                                    ),
+                                                    shape = RoundedCornerShape(12.dp)
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Check, contentDescription = "Confirm", modifier = Modifier.size(18.dp))
+                                                        Text("Duyệt", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                    }
+                                                }
+
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        viewModel.deleteNotificationLog(log)
+                                                        android.widget.Toast.makeText(context, "Đã bỏ qua giao dịch quét!", android.widget.Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(44.dp),
+                                                    colors = ButtonDefaults.outlinedButtonColors(
+                                                        contentColor = Color(0xFFC62828)
+                                                    ),
+                                                    border = BorderStroke(1.5.dp, Color(0xFFC62828)),
+                                                    shape = RoundedCornerShape(12.dp)
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Close, contentDescription = "Delete", modifier = Modifier.size(18.dp))
+                                                        Text("Bỏ qua", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -718,54 +1128,8 @@ fun BankNotificationHistoryScreen(
                 }
             }
 
-            // --- SECTION 3: NHẬT KÝ THÔNG BÁO ĐÃ DUYỆT (Collapsible Simulation) ---
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showHistoryPanel = !showHistoryPanel }
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "History Logs",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "LỊCH SỬ TIN NHẮN ĐÃ XỬ LÝ (3 NGÀY KO GIỚI HẠN)",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = CircleShape
-                        ) {
-                            Text(
-                                text = processedLogs.size.toString(),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    Icon(
-                        imageVector = if (showHistoryPanel) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = "Toggle History",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (showHistoryPanel) {
-                // Filters & Search display inside Collapsible History Block
+            if (activeTab == 1) {
+                // Filters & Search display inside History Tab
                 item {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -863,7 +1227,7 @@ fun BankNotificationHistoryScreen(
                 } else {
                     items(processedLogs, key = { "processed_" + it.timestamp + "_" + it.text.hashCode() }) { log ->
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surface
                             ),

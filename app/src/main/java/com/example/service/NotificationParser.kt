@@ -246,12 +246,20 @@ object NotificationParser {
             .replace("£", "gbp")
             .lowercase()
 
+        // Remove account/card masks containing 'xxx' (e.g. 82xxx686)
+        cleanText = cleanText.replace(Regex("""\b\w*xxx\w*\b"""), "")
+
         // Remove phone country code prefix (+84)
         cleanText = cleanText.replace("+84", "")
         
-        // Remove timezone offset like +07:00 or general timezone offsets
-        cleanText = cleanText.replace(Regex("""\+\d{1,2}:\d{2}"""), "")
-        cleanText = cleanText.replace(Regex("""\+\d{2,4}\b"""), "")
+        // Remove specific timezone offsets (like +07:00, +0700, +07) without matching currency amounts
+        cleanText = cleanText.replace(Regex("""\+0[789]:00\b"""), "")
+        cleanText = cleanText.replace(Regex("""\+0[789]00\b"""), "")
+        cleanText = cleanText.replace(Regex("""\+0[789]\b"""), "")
+
+        // Remove long account/card/phone numbers of 8 to 18 digits (optionally with leading hyphen)
+        // that are not followed by a currency suffix to preserve amount extraction
+        cleanText = cleanText.replace(Regex("""(?:[-–]\s*)?\b\d{8,18}(?!\s*(?:vnd|đ|d|usd|eur|gbp|đồng|dong))\b"""), "")
 
         // Remove dates and times to prevent matching hours, minutes, seconds, or dates
         cleanText = cleanText.replace(Regex("""\b\d{1,2}[:h]\d{2}(?:[:ms]\d{2})?\b"""), "")
@@ -321,57 +329,7 @@ object NotificationParser {
     }
 
     private fun extractNote(text: String, bankName: String, type: String): String {
-        val lowerText = text.lowercase()
-        val indicators = listOf(
-            "nội dung gd:", "noi dung gd:", "nội dung chuyển khoản:", "noi dung chuyen khoan:",
-            "nội dung:", "noi dung:", "noidung:", 
-            "lý do:", "ly do:", "lydo:",
-            "giao dịch và nội dung:", "giao dich va noi dung:",
-            "giao dịch:", "giao dich:",
-            "gd:", "nd:", "ref:", 
-            "mô tả:", "mo ta:", 
-            "note:", "memo:", "desc:"
-        )
-        for (indicator in indicators) {
-            val idx = lowerText.indexOf(indicator)
-            if (idx != -1) {
-                val rem = text.substring(idx + indicator.length).trim()
-                return cleanNoteString(rem)
-            }
-        }
-
-        val quotePattern = Pattern.compile(""""([^"]+)"""")
-        val qMatcher = quotePattern.matcher(text)
-        if (qMatcher.find()) {
-            return cleanNoteString(qMatcher.group(1) ?: "")
-        }
-
-        // Special patterns for common applications
-        if (bankName == "MoMo") {
-            // "Ban da thanh toan thanh cong so tien -50,000 d cho dich vu GrabFood qua vi MoMo"
-            val targetKeyword = "cho dịch vụ"
-            val targetKeywordUnaccent = "cho dich vu"
-            val idxTarget = lowerText.indexOf(targetKeyword)
-            val idxTargetUnaccent = lowerText.indexOf(targetKeywordUnaccent)
-            val targetIdx = if (idxTarget != -1) idxTarget else idxTargetUnaccent
-            
-            if (targetIdx != -1) {
-                val keywordLength = if (idxTarget != -1) targetKeyword.length else targetKeywordUnaccent.length
-                val start = targetIdx + keywordLength
-                val end = lowerText.indexOf("qua vi", start)
-                val rawNote = if (end != -1) {
-                    text.substring(start, end).trim()
-                } else {
-                    text.substring(start).trim()
-                }
-                if (rawNote.isNotBlank()) {
-                    return "Thanh toán " + cleanNoteString(rawNote)
-                }
-            }
-        }
-
-        val actionStr = if (type == "INCOME") "Nhận tiền qua" else "Chi tiêu qua"
-        return "$actionStr $bankName"
+        return "Giao dịch qua $bankName"
     }
 
     private fun cleanNoteString(input: String): String {
