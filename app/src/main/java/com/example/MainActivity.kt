@@ -69,13 +69,14 @@ fun MainContent(
     val navController = rememberNavController()
     val isAppUnlocked by viewModel.isAppUnlocked.collectAsState()
     val isLoadingSettings by viewModel.isLoadingSettings.collectAsState()
+    val startScreen by viewModel.startScreen.collectAsState()
 
     // Observe active routes
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route ?: Routes.DASHBOARD
+    val currentRoute = navBackStackEntry?.destination?.route ?: startScreen
 
     // Keep track of the last primary route to keep bottom bar item selected even when in "add_transaction"
-    var lastPrimaryRoute by remember { mutableStateOf(Routes.DASHBOARD) }
+    var lastPrimaryRoute by remember(startScreen) { mutableStateOf(startScreen) }
     LaunchedEffect(currentRoute) {
         if (currentRoute in listOf(Routes.DASHBOARD, Routes.HISTORY, Routes.BUDGET_GOAL, Routes.STATS, Routes.SETTINGS)) {
             lastPrimaryRoute = currentRoute
@@ -300,9 +301,10 @@ fun NavHostContainer(
     viewModel: FinanceViewModel,
     modifier: Modifier = Modifier
 ) {
+    val startScreen by viewModel.startScreen.collectAsState()
     NavHost(
         navController = navController,
-        startDestination = Routes.ADD_TRANSACTION,
+        startDestination = startScreen,
         modifier = modifier,
         enterTransition = {
             fadeIn(animationSpec = tween(150))

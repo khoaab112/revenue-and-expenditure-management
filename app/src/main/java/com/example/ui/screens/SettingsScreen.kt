@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -73,6 +74,9 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val isPinEnabled by viewModel.isPinEnabled.collectAsState()
+    val startScreen by viewModel.startScreen.collectAsState()
+    val preferredStartScreen by viewModel.preferredStartScreen.collectAsState()
+    var isPreferredScreenExpanded by remember { mutableStateOf(false) }
     var showPinSetupDialog by remember { mutableStateOf(false) }
     var showWalletManagement by remember { mutableStateOf(false) }
     var showCategoryManagement by remember { mutableStateOf(false) }
@@ -189,6 +193,121 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.testTag("pin_protection_switch")
                     )
+                }
+
+                Divider(
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isPreferredScreenExpanded = !isPreferredScreenExpanded }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Launch,
+                                contentDescription = "Ưu tiên hiển thị",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column {
+                                Text(
+                                    text = "Ưu tiên hiển thị",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                val screenLabel = when (preferredStartScreen) {
+                                    "dashboard" -> "Tổng quan"
+                                    "history" -> "Lịch sử"
+                                    "stats" -> "Thống kê"
+                                    "add_transaction" -> "Giao dịch"
+                                    "settings" -> "Cài đặt"
+                                    else -> "Giao dịch"
+                                }
+                                Text(
+                                    text = "Màn hình mở đầu: $screenLabel",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Icon(
+                            imageVector = if (isPreferredScreenExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isPreferredScreenExpanded) "Thu gọn" else "Mở rộng",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = isPreferredScreenExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 36.dp, top = 8.dp, end = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            val options = listOf(
+                                Triple("dashboard", "Tổng quan", Icons.Default.GridView),
+                                Triple("history", "Lịch sử", Icons.Default.History),
+                                Triple("stats", "Thống kê", Icons.Default.PieChart),
+                                Triple("add_transaction", "Giao dịch", Icons.Default.AddCircle),
+                                Triple("settings", "Cài đặt", Icons.Default.Settings)
+                            )
+
+                            options.forEach { (route, label, icon) ->
+                                val isSelected = preferredStartScreen == route
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.setStartScreen(route)
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = label,
+                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = label,
+                                            fontSize = 14.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = {
+                                            viewModel.setStartScreen(route)
+                                        },
+                                        colors = RadioButtonDefaults.colors(
+                                            selectedColor = MaterialTheme.colorScheme.primary
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

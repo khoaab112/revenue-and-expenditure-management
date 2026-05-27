@@ -82,6 +82,14 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isPinEnabled = MutableStateFlow(false)
     val isPinEnabled: StateFlow<Boolean> = _isPinEnabled.asStateFlow()
 
+    // Start Screen Flow ("dashboard", "history", "stats", "add_transaction", "settings")
+    private val _startScreen = MutableStateFlow("add_transaction")
+    val startScreen: StateFlow<String> = _startScreen.asStateFlow()
+
+    // Saved starting screen preference for settings UI
+    private val _preferredStartScreen = MutableStateFlow("add_transaction")
+    val preferredStartScreen: StateFlow<String> = _preferredStartScreen.asStateFlow()
+
     private val _isAppUnlocked = MutableStateFlow(false)
     val isAppUnlocked: StateFlow<Boolean> = _isAppUnlocked.asStateFlow()
 
@@ -198,11 +206,16 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val pinEnabledSetting = repository.getSetting("pin_enabled")
         val pinHashSetting = repository.getSetting("pin_hash")
         val widgetsSetting = repository.getSetting("widgets_enabled")
+        val startScreenSetting = repository.getSetting("start_screen")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
         _savedPinHash.value = pinHashSetting?.value ?: ""
         _widgetsEnabled.value = widgetsSetting?.value == "true"
+        
+        val startVal = startScreenSetting?.value ?: "add_transaction"
+        _startScreen.value = startVal
+        _preferredStartScreen.value = startVal
         
         // If PIN is not enabled, the app is unlocked by default
         _isAppUnlocked.value = !enabled
@@ -659,6 +672,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             _isPinEnabled.value = false
             _savedPinHash.value = ""
             _isAppUnlocked.value = true
+        }
+    }
+
+    fun setStartScreen(route: String) {
+        viewModelScope.launch {
+            repository.saveSetting("start_screen", route)
+            _preferredStartScreen.value = route
         }
     }
 
