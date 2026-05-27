@@ -240,20 +240,23 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
                     val timestamp = obj.optLong("timestamp", now)
-                    if (timestamp >= limitTime) {
-                        list.add(
-                            NotificationLog(
-                                timestamp = timestamp,
-                                title = obj.optString("title", ""),
-                                text = obj.optString("text", ""),
-                                bankName = obj.optString("bankName", ""),
-                                amount = obj.optDouble("amount", 0.0),
-                                type = obj.optString("type", "EXPENSE"),
-                                note = obj.optString("note", ""),
-                                walletName = obj.optString("walletName", ""),
-                                status = obj.optString("status", "")
+                    val status = obj.optString("status", "")
+                    if (status == "PENDING" || status == "DELETED" || timestamp >= limitTime) {
+                        if (status != "DELETED") {
+                            list.add(
+                                NotificationLog(
+                                    timestamp = timestamp,
+                                    title = obj.optString("title", ""),
+                                    text = obj.optString("text", ""),
+                                    bankName = obj.optString("bankName", ""),
+                                    amount = obj.optDouble("amount", 0.0),
+                                    type = obj.optString("type", "EXPENSE"),
+                                    note = obj.optString("note", ""),
+                                    walletName = obj.optString("walletName", ""),
+                                    status = status
+                                )
                             )
-                        )
+                        }
                         newJSONArray.put(obj)
                     } else {
                         modified = true
@@ -276,6 +279,77 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun scanNotificationsManual(
+        context: android.content.Context,
+        onSuccess: (Int) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val serviceInstance = com.example.service.BankNotificationListenerService.instance
+                if (serviceInstance == null) {
+                    onError("Dịch vụ đọc thông báo chưa hoạt động. Hãy chắc chắn rằng bạn đã cấp quyền truy cập thông báo trong cài đặt hệ thống.")
+                    return@launch
+                }
+
+                val activeNotifications = try {
+                    serviceInstance.activeNotifications
+                } catch (e: Exception) {
+                    onError("Không thể đọc thông báo chủ động từ hệ thống: ${e.localizedMessage}")
+                    return@launch
+                }
+
+                if (activeNotifications.isNullOrEmpty()) {
+                    onSuccess(0)
+                    return@launch
+                }
+
+                var countAdded = 0
+                val wallets = repository.allWallets.firstOrNull() ?: emptyList()
+
+                for (sbn in activeNotifications) {
+                    val packageName = sbn.packageName ?: ""
+                    val extras = sbn.notification?.extras ?: continue
+                    val title = extras.getString(android.app.Notification.EXTRA_TITLE) ?: ""
+                    val text = extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() ?: ""
+
+                    if (text.isBlank()) continue
+
+                    val parsed = com.example.service.NotificationParser.parse(title, text, packageName)
+                    if (!parsed.success) continue
+
+                    // Check for duplicate in current state/database logs
+                    val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+                    val jsonArray = try { org.json.JSONArray(logsSetting) } catch (e: Exception) { org.json.JSONArray() }
+                    var duplicate = false
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        if (obj.optString("text") == text && obj.optString("title") == title) {
+                            duplicate = true
+                            break
+                        }
+                    }
+                    if (duplicate) continue
+
+                    // Find matched wallet
+                    val matchedWallet = wallets.find { it.name.lowercase().contains(parsed.bankName.lowercase()) }
+                        ?: wallets.find { it.name.lowercase().contains(parsed.detectedWalletName.lowercase()) }
+                        ?: wallets.find { it.type == "BANK" }
+                        ?: wallets.firstOrNull()
+
+                    val walletLabel = matchedWallet?.name ?: parsed.detectedWalletName
+                    saveLocalLog(title, text, parsed, "PENDING", walletLabel)
+                    countAdded++
+                }
+
+                loadNotificationLogs()
+                onSuccess(countAdded)
+            } catch (e: Exception) {
+                onError("Có lỗi: ${e.localizedMessage}")
+            }
+        }
+    }
+
     fun clearNotificationLogs() {
         viewModelScope.launch {
             repository.saveSetting("notification_logs", "[]")
@@ -287,56 +361,18 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             try {
                 val parsed = com.example.service.NotificationParser.parse(title, text, packageName)
-                
                 val wallets = repository.allWallets.firstOrNull() ?: emptyList()
                 val matchedWallet = wallets.find { it.name.lowercase().contains(parsed.bankName.lowercase()) }
                     ?: wallets.find { it.name.lowercase().contains(parsed.detectedWalletName.lowercase()) }
                     ?: wallets.find { it.type == "BANK" }
                     ?: wallets.firstOrNull()
 
-                if (matchedWallet != null && parsed.success) {
-                    val categoryName = when (parsed.type) {
-                        "INCOME" -> {
-                            val lowerNote = parsed.note.lowercase()
-                            when {
-                                lowerNote.contains("luong") || lowerNote.contains("salary") -> "Lương"
-                                lowerNote.contains("thuong") || lowerNote.contains("gift") || lowerNote.contains("tang") -> "Thưởng"
-                                lowerNote.contains("ban hang") || lowerNote.contains("kinh doanh") -> "Kinh doanh"
-                                else -> "Khác"
-                            }
-                        }
-                        else -> {
-                            val lowerNote = parsed.note.lowercase()
-                            when {
-                                lowerNote.contains("an uong") || lowerNote.contains("restaurant") || lowerNote.contains("coffee") || lowerNote.contains("milktea") || lowerNote.contains("tra sua") -> "Ăn uống"
-                                lowerNote.contains("grab") || lowerNote.contains("xe") || lowerNote.contains("petrol") || lowerNote.contains("xang") -> "Di chuyển"
-                                lowerNote.contains("shopee") || lowerNote.contains("tiki") || lowerNote.contains("lazada") || lowerNote.contains("mua sam") -> "Mua sắm"
-                                lowerNote.contains("cuoc") || lowerNote.contains("dien nuoc") || lowerNote.contains("hoa don") || lowerNote.contains("tien dien") -> "Hóa đơn"
-                                lowerNote.contains("cgv") || lowerNote.contains("netflix") || lowerNote.contains("giai tri") -> "Giải trí"
-                                else -> "Khác"
-                            }
-                        }
-                    }
-
-                    val catDetails = Categories.getByCategoryName(categoryName)
-                    val tx = Transaction(
-                        walletId = matchedWallet.id,
-                        walletName = matchedWallet.name,
-                        type = parsed.type,
-                        amount = parsed.amount,
-                        categoryName = categoryName,
-                        categoryIcon = catDetails.iconName,
-                        categoryColor = catDetails.colorHex,
-                        note = parsed.note,
-                        timestamp = System.currentTimeMillis()
-                    )
-                    repository.insertTransaction(tx)
-                    
-                    // Log success
-                    saveLocalLog(title, text, parsed, "AUTO_ADDED", matchedWallet.name)
+                if (parsed.success) {
+                    val walletLabel = matchedWallet?.name ?: parsed.detectedWalletName
+                    saveLocalLog(title, text, parsed, "PENDING", walletLabel)
                 } else {
-                    val walletLabel = matchedWallet?.name ?: "Không tìm thấy ví"
-                    saveLocalLog(title, text, parsed, if (!parsed.success) "FAILED_PARSE" else "NO_WALLET", walletLabel)
+                    val walletLabel = matchedWallet?.name ?: "Không xác định"
+                    saveLocalLog(title, text, parsed, "FAILED_PARSE", walletLabel)
                 }
                 
                 // Reload logs
@@ -375,12 +411,133 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         for (i in 0 until jsonArray.length()) {
             val item = jsonArray.getJSONObject(i)
             val timestamp = item.optLong("timestamp", 0L)
-            if (timestamp >= limitTime) {
+            val statusVal = item.optString("status", "")
+            if (statusVal == "PENDING" || statusVal == "DELETED" || timestamp >= limitTime) {
                 newList.put(item)
             }
         }
 
         repository.saveSetting("notification_logs", newList.toString())
+    }
+
+    fun confirmPendingNotificationLog(log: NotificationLog, walletId: Int, categoryName: String) {
+        viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId) ?: return@launch
+            val catDetails = getCategoryByName(categoryName)
+            val tx = Transaction(
+                walletId = walletId,
+                walletName = wallet.name,
+                type = log.type,
+                amount = log.amount,
+                categoryName = categoryName,
+                categoryIcon = catDetails.iconName,
+                categoryColor = catDetails.colorHex,
+                note = log.note.ifEmpty { "Ghi từ thông báo" },
+                timestamp = log.timestamp
+            )
+            repository.insertTransaction(tx)
+            updateLogStatus(log, "AUTO_ADDED", wallet.name)
+        }
+    }
+
+    fun confirmPendingNotificationLogsBulk(logs: List<NotificationLog>, walletId: Int) {
+        viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId) ?: return@launch
+            val currentCategories = _categoriesList.value
+            
+            val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+            val jsonArray = try { org.json.JSONArray(logsSetting) } catch (e: Exception) { org.json.JSONArray() }
+            
+            val targetKeys = logs.map { Pair(it.timestamp, it.text) }.toSet()
+            
+            for (log in logs) {
+                val matchedCategory = currentCategories.find { it.name.lowercase() == log.note.lowercase() }
+                    ?: currentCategories.find { it.type == "BOTH" || it.type == log.type }
+                    ?: currentCategories.firstOrNull()
+                val categoryName = matchedCategory?.name ?: "Khác"
+                val categoryIcon = matchedCategory?.iconName ?: "category"
+                val categoryColor = matchedCategory?.colorHex ?: "#9E9E9E"
+                
+                val tx = Transaction(
+                    walletId = walletId,
+                    walletName = wallet.name,
+                    type = log.type,
+                    amount = log.amount,
+                    categoryName = categoryName,
+                    categoryIcon = categoryIcon,
+                    categoryColor = categoryColor,
+                    note = log.note.ifEmpty { "Ghi từ thông báo hàng loạt" },
+                    timestamp = log.timestamp
+                )
+                repository.insertTransaction(tx)
+            }
+            
+            val newList = org.json.JSONArray()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val timestamp = obj.optLong("timestamp", 0L)
+                val text = obj.optString("text", "")
+                if (targetKeys.contains(Pair(timestamp, text))) {
+                    obj.put("status", "AUTO_ADDED")
+                    obj.put("walletName", wallet.name)
+                }
+                newList.put(obj)
+            }
+            
+            repository.saveSetting("notification_logs", newList.toString())
+            loadNotificationLogs()
+        }
+    }
+
+    fun deleteNotificationLog(log: NotificationLog) {
+        viewModelScope.launch {
+            updateLogStatus(log, "DELETED", log.walletName)
+        }
+    }
+
+    fun deleteNotificationLogsBulk(logs: List<NotificationLog>, deleteCompletely: Boolean = true) {
+        viewModelScope.launch {
+            val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+            val jsonArray = try { org.json.JSONArray(logsSetting) } catch (e: Exception) { org.json.JSONArray() }
+            
+            val targetKeys = logs.map { Pair(it.timestamp, it.text) }.toSet()
+            val newList = org.json.JSONArray()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val timestamp = obj.optLong("timestamp", 0L)
+                val text = obj.optString("text", "")
+                if (targetKeys.contains(Pair(timestamp, text))) {
+                    if (deleteCompletely) {
+                        continue // completely remove so it can be scanned again
+                    } else {
+                        obj.put("status", "DELETED")
+                        newList.put(obj)
+                    }
+                } else {
+                    newList.put(obj)
+                }
+            }
+            repository.saveSetting("notification_logs", newList.toString())
+            loadNotificationLogs()
+        }
+    }
+
+    private suspend fun updateLogStatus(log: NotificationLog, newStatus: String, walletName: String) {
+        val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+        val jsonArray = try { org.json.JSONArray(logsSetting) } catch (e: Exception) { org.json.JSONArray() }
+        val newList = org.json.JSONArray()
+        for (i in 0 until jsonArray.length()) {
+            val obj = jsonArray.getJSONObject(i)
+            val timestamp = obj.optLong("timestamp", 0L)
+            val text = obj.optString("text", "")
+            if (timestamp == log.timestamp && text == log.text) {
+                obj.put("status", newStatus)
+                obj.put("walletName", walletName)
+            }
+            newList.put(obj)
+        }
+        repository.saveSetting("notification_logs", newList.toString())
+        loadNotificationLogs()
     }
 
     fun addManualTransactionFromLog(log: NotificationLog, walletId: Int, categoryName: String) {
@@ -876,6 +1033,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 val categoriesSetting = repository.getSetting("custom_categories")?.value ?: ""
                 root.put("customCategories", categoriesSetting)
 
+                // Notification Logs
+                val notificationLogsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+                root.put("notificationLogs", notificationLogsSetting)
+
                 val jsonString = root.toString(2)
 
                 // Save to context.getExternalFilesDir("Backups")
@@ -1083,9 +1244,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 }
                 addLog("Khởi chạy tiến trình xóa sạch dữ liệu...")
                 repository.clearAllData()
+                // Clear bank notification logs too
+                repository.saveSetting("notification_logs", "[]")
+                _notificationLogs.value = emptyList()
+                addLog("Xóa sạch toàn bộ lịch sử đọc thông báo...")
                 addLog("Xóa sạch toàn bộ giao dịch, ví, ngân sách thành công!")
-                _syncStatus.value = "SUCCESS"
-                android.widget.Toast.makeText(context, "Đã xóa toàn bộ dữ liệu!", android.widget.Toast.LENGTH_SHORT).show()
+                _syncStatus.value = "SUCCESS_CLEAR"
+                android.widget.Toast.makeText(context, "Xóa dữ liệu thành công", android.widget.Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 _syncStatus.value = "ERROR"
                 e.printStackTrace()
@@ -1209,8 +1374,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     repository.saveSetting("custom_categories", customCategories)
                 }
 
+                // 6. Notification Logs
+                val notificationLogsRestore = root.optString("notificationLogs", "")
+                if (notificationLogsRestore.isNotEmpty()) {
+                    repository.saveSetting("notification_logs", notificationLogsRestore)
+                }
+
                 addLog("🎉 KHÔI PHỤC DỮ LIỆU THÀNH CÔNG HOÀN TOÀN!")
                 _syncStatus.value = "SUCCESS"
+                loadNotificationLogs()
                 android.widget.Toast.makeText(context, "Khôi phục dữ liệu từ bản sao lưu thành công!", android.widget.Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 addLog("Lỗi khôi phục: ${e.localizedMessage ?: "File JSON lỗi cấu trúc."}")

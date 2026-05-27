@@ -17,6 +17,27 @@ import org.json.JSONObject
 class BankNotificationListenerService : NotificationListenerService() {
     private val serviceScope = CoroutineScope(Dispatchers.IO)
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        instance = this
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        instance = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        instance = null
+    }
+
+    companion object {
+        @Volatile
+        var instance: BankNotificationListenerService? = null
+            private set
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         if (sbn == null) return
@@ -55,31 +76,10 @@ class BankNotificationListenerService : NotificationListenerService() {
                     ?: wallets.find { it.type == "BANK" }
                     ?: wallets.firstOrNull()
 
-                if (matchedWallet == null) {
-                    saveLog(repository, title, text, parsed, "NO_WALLET", null)
-                    return@launch
-                }
+                val walletNameInput = matchedWallet?.name ?: parsed.detectedWalletName
 
-                // 4. Select category
-                val categoryName = selectCategory(parsed.type, parsed.note)
-
-                // 5. Create and insert background transaction
-                val catDetails = Categories.getByCategoryName(categoryName)
-                val tx = Transaction(
-                    walletId = matchedWallet.id,
-                    walletName = matchedWallet.name,
-                    type = parsed.type,
-                    amount = parsed.amount,
-                    categoryName = categoryName,
-                    categoryIcon = catDetails.iconName,
-                    categoryColor = catDetails.colorHex,
-                    note = parsed.note,
-                    timestamp = System.currentTimeMillis()
-                )
-                repository.insertTransaction(tx)
-
-                // 6. Save log
-                saveLog(repository, title, text, parsed, "AUTO_ADDED", matchedWallet.name)
+                // 4. Save as PENDING so that user can review and confirm with complete certainty
+                saveLog(repository, title, text, parsed, "PENDING", walletNameInput)
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -135,8 +135,14 @@ class BankNotificationListenerService : NotificationListenerService() {
 
         val newList = JSONArray()
         newList.put(logObj)
-        for (i in 0 until Math.min(jsonArray.length(), 49)) {
-            newList.put(jsonArray.getJSONObject(i))
+        val limitTime = System.currentTimeMillis() - (3L * 24 * 60 * 60 * 1000)
+        for (i in 0 until jsonArray.length()) {
+            val item = jsonArray.getJSONObject(i)
+            val timestamp = item.optLong("timestamp", 0L)
+            val statusVal = item.optString("status", "")
+            if (statusVal == "PENDING" || statusVal == "DELETED" || timestamp >= limitTime) {
+                newList.put(item)
+            }
         }
 
         repository.saveSetting("notification_logs", newList.toString())

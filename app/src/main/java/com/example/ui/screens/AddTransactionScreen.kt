@@ -376,7 +376,7 @@ fun AddTransactionScreen(
             value = rawExpression,
             onValueChange = { rawExpression = it },
             label = "Số tiền phát sinh",
-            autoFocus = true,
+            autoFocus = false,
             onDismissKeyboard = {
                 scope.launch {
                     scrollState.animateScrollTo(0)

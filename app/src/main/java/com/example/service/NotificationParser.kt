@@ -13,21 +13,51 @@ object NotificationParser {
     )
 
     fun parse(title: String, text: String, packageName: String): ParsedNotification {
+        val lowerPackageName = packageName.lowercase()
         val lowerTitle = title.lowercase()
         val lowerText = text.lowercase()
         val combinedText = "$lowerTitle $lowerText"
 
-        // 1. Determine Bank / App and corresponding Wallet name for Vietnamese and Foreign Banks
+        // 1. Determine Bank / App and corresponding Wallet name (prioritizing package name and title for accuracy)
         val (bankName, detectedWalletName) = when {
-            combinedText.contains("momo") || packageName.contains("momo") -> Pair("MoMo", "Ví MoMo")
-            combinedText.contains("vietcombank") || packageName.contains("vietcombank") || combinedText.contains("vcb") -> Pair("Vietcombank", "Tài khoản ngân hàng")
-            combinedText.contains("techcom") || packageName.contains("techcombank") || combinedText.contains("tcb") -> Pair("Techcombank", "Tài khoản ngân hàng")
-            combinedText.contains("mb bank") || combinedText.contains("mbbank") || packageName.contains("mbmobile") || combinedText.contains("mb_bank") -> Pair("MB Bank", "Tài khoản ngân hàng")
-            combinedText.contains("tpbank") || packageName.contains("tpbank") -> Pair("TPBank", "Tài khoản ngân hàng")
-            combinedText.contains("agribank") || packageName.contains("agribank") -> Pair("Agribank", "Tài khoản ngân hàng")
-            combinedText.contains("acb") || packageName.contains("acb") -> Pair("ACB", "Tài khoản ngân hàng")
-            combinedText.contains("viettel pay") || combinedText.contains("viettel money") || packageName.contains("viettelpay") -> Pair("Viettel Money", "Ví MoMo")
-            combinedText.contains("zalopay") || packageName.contains("zalopay") || combinedText.contains("zalo pay") -> Pair("ZaloPay", "Ví MoMo")
+            // First Priority: Package name
+            lowerPackageName.contains("vietcombank") || lowerPackageName.contains("vcb") -> Pair("Vietcombank", "Tài khoản ngân hàng")
+            lowerPackageName.contains("techcombank") -> Pair("Techcombank", "Tài khoản ngân hàng")
+            lowerPackageName.contains("momo") || lowerPackageName.contains("mservice.momo") -> Pair("MoMo", "Ví MoMo")
+            lowerPackageName.contains("mbmobile") || lowerPackageName.contains("mbbank") -> Pair("MB Bank", "Tài khoản ngân hàng")
+            lowerPackageName.contains("tpbank") -> Pair("TPBank", "Tài khoản ngân hàng")
+            lowerPackageName.contains("agribank") -> Pair("Agribank", "Tài khoản ngân hàng")
+            lowerPackageName.contains("acb") -> Pair("ACB", "Tài khoản ngân hàng")
+            lowerPackageName.contains("zalopay") -> Pair("ZaloPay", "Ví MoMo")
+            lowerPackageName.contains("viettel") -> Pair("Viettel Money", "Ví MoMo")
+            lowerPackageName.contains("bidv") -> Pair("BIDV", "Tài khoản ngân hàng")
+            lowerPackageName.contains("vpbank") -> Pair("VPBank", "Tài khoản ngân hàng")
+
+            // Second Priority: Title
+            lowerTitle.contains("vietcombank") || lowerTitle.contains("vcb") -> Pair("Vietcombank", "Tài khoản ngân hàng")
+            lowerTitle.contains("techcombank") || lowerTitle.contains("tcb") -> Pair("Techcombank", "Tài khoản ngân hàng")
+            lowerTitle.contains("momo") -> Pair("MoMo", "Ví MoMo")
+            lowerTitle.contains("mb bank") || lowerTitle.contains("mbbank") || lowerTitle.contains("mb_bank") -> Pair("MB Bank", "Tài khoản ngân hàng")
+            lowerTitle.contains("tpbank") -> Pair("TPBank", "Tài khoản ngân hàng")
+            lowerTitle.contains("agribank") -> Pair("Agribank", "Tài khoản ngân hàng")
+            lowerTitle.contains("acb") -> Pair("ACB", "Tài khoản ngân hàng")
+            lowerTitle.contains("zalopay") || lowerTitle.contains("zalo pay") -> Pair("ZaloPay", "Ví MoMo")
+            lowerTitle.contains("viettel pay") || lowerTitle.contains("viettel money") -> Pair("Viettel Money", "Ví MoMo")
+            lowerTitle.contains("bidv") -> Pair("BIDV", "Tài khoản ngân hàng")
+            lowerTitle.contains("vpbank") -> Pair("VPBank", "Tài khoản ngân hàng")
+
+            // Third Priority: Body text fallbacks
+            lowerText.contains("vietcombank") || lowerText.contains("vcb") -> Pair("Vietcombank", "Tài khoản ngân hàng")
+            lowerText.contains("techcombank") || lowerText.contains("tcb") -> Pair("Techcombank", "Tài khoản ngân hàng")
+            lowerText.contains("mb bank") || lowerText.contains("mbbank") || lowerText.contains("mb_bank") -> Pair("MB Bank", "Tài khoản ngân hàng")
+            lowerText.contains("tpbank") -> Pair("TPBank", "Tài khoản ngân hàng")
+            lowerText.contains("agribank") -> Pair("Agribank", "Tài khoản ngân hàng")
+            lowerText.contains("acb") -> Pair("ACB", "Tài khoản ngân hàng")
+            lowerText.contains("bidv") -> Pair("BIDV", "Tài khoản ngân hàng")
+            lowerText.contains("vpbank") -> Pair("VPBank", "Tài khoản ngân hàng")
+            lowerText.contains("momo") -> Pair("MoMo", "Ví MoMo")
+            lowerText.contains("zalopay") || lowerText.contains("zalo pay") -> Pair("ZaloPay", "Ví MoMo")
+            lowerText.contains("viettel pay") || lowerText.contains("viettel money") -> Pair("Viettel Money", "Ví MoMo")
             
             // International / Foreign Banks support
             combinedText.contains("hsbc") || packageName.contains("hsbc") -> Pair("HSBC", "Foreign Bank Account")
@@ -40,7 +70,11 @@ object NotificationParser {
             
             else -> {
                 // Heuristic detection based on common bank abbreviations
-                val words = listOf("bidv", "vpbank", "sacombank", "vbi", "shb", "vib", "msb", "ocb", "hdbank", "scb")
+                val words = listOf(
+                    "bidv", "vpbank", "sacombank", "vietin", "vbi", "shb", "vib", "msb", "ocb", "hdbank", 
+                    "scb", "lienviet", "lpbank", "shinhan", "cimb", "woori", "timo", "cake", "eximbank", 
+                    "namabank", "seabank", "bacabank", "vietbank", "pvcombank"
+                )
                 val matched = words.find { combinedText.contains(it) }
                 if (matched != null) {
                     Pair(matched.uppercase(), "Tài khoản ngân hàng")
@@ -50,43 +84,148 @@ object NotificationParser {
             }
         }
 
-        // 2. Determine Transaction Type (INCOME or EXPENSE) with Vietnamese & English keywords
+        // 2. Implement robust blocklisting (Ignore advertisements, OTP, logins, security alerts, saving/depositing advice)
+        val blocklistKeywords = listOf(
+            // OTP / Authen / Security
+            "otp", "mã otp", "ma otp", "verification code", "security code", "mã pin", "ma pin",
+            "mã xác thực", "ma xac thuc", "mã xác minh", "ma xac minh", "nhập mã", "nhan ma", "mã bảo mật",
+            "đăng nhập", "dang nhap", "thiết bị mới", "thiet bi moi", "login", "đổi mật khẩu", "doi mat khau",
+            "mật khẩu mới", "mã xác nhận", "ma xac nhan", "ma bao mat", "cảnh báo bảo mật", "khoá thẻ", "khóa thẻ",
+            
+            // Promotions / Discounts / Advertisements / Spam
+            "khuyen mai", "khuyến mại", "khuyến mãi", "ưu đãi", "uu dai", "quang cao", "quảng cáo",
+            "nhận quà", "quà tặng", "trúng thưởng", "vòng quay", "vong quay", "tri ân", "tri an",
+            "hoàn tiền đến", "hoàn tiền lên đến", "hoàn đến", "hoan tien den", "hoàn ngay", "hoan ngay",
+            "voucher", "giftcode", "mã giảm giá", "ma giam gia", "giảm ngay", "giam ngay", "giảm đến", "giam den",
+            "tặng ngay", "tang ngay", "miễn phí", "mien phi", "free", "quà tặng", "qua tang", "ưu đãi lên tới",
+            "giảm up to", "giam up to", "trúng ngay", "trung ngay", "cơ hội", "co hoi", "may mắn", "may man",
+            "bốc thăm", "boc tham", "chương trình", "chuong trinh", "sự kiện", "su kien", "đại tiệc",
+            "nhận voucher", "nhan voucher", "vàng 9999", "vàng sjc", "săn", "san code", "hoàn tiền 10%", "hoàn 10%",
+            "nhận code", "tặng code", "nhập mã ngay", "mua sắm ngay", "chi tiêu ngay", "mua chung",
+            "mở thẻ", "mo the", "mở tk", "mo tk", "mở ví", "mo vi", "mở tài khoản mới", "liên kết", "lien ket",
+            "vay tiêu dùng", "vay tieu dung", "vay tín chấp", "vay siêu tốc", "lãi suất ưu đãi", "chúc mừng sinh nhật",
+            "bảo hiểm", "bao hiem", "scb tuyển dụng", "gửi tiết kiệm", "gui tiet kiem", "gửi góp", "tiết kiệm trực tuyến",
+            "hoàn tiền 20%", "hoàn tiền 5%", "hoàn tiền 30%", "quà tặng năng lượng", "gói quà", "lãi suất"
+        )
+        
+        val isBlocklisted = blocklistKeywords.any { combinedText.contains(it) }
+        if (isBlocklisted) {
+            return ParsedNotification(
+                amount = 0.0,
+                type = "EXPENSE",
+                bankName = bankName,
+                detectedWalletName = detectedWalletName,
+                note = "Bị chặn quảng cáo/bảo mật/OTP/Dịch vụ phụ",
+                success = false
+            )
+        }
+
+        // 3. Check for transaction indicators in any balance changes or payments
+        val transactionKeywords = listOf(
+            "số dư", "biến động", "bđsd", "sotien", "soduthaydoi", "sd tk", "so du tk", "tk sd", "gd:", "nd:", "nội dung gd",
+            "giao dịch", "giao dich", "phát sinh", "bien dong so du", "bien dong gd", "biến động gd", "sự thay đổi số dư",
+            "chuyển khoản", "chuyển tiền", "nhận tiền", "cộng tài khoản", "nạp tiền", "nhận từ", "vừa nhận", "giao dịch cộng",
+            "giao dịch trừ", "thanh toán", "thanh toan", "rút tiền", "phí duy trì", "phí thường niên", "trừ phí", "hoàn tiền",
+            "thanh toan thành cong", "chuyển khoản thành công", "được cộng", "bị trừ", "trừ tiền", "nợ tài khoản",
+            // English equivalents
+            "balance changed", "available balance", "account balance", "debited", "credited", "withdrawn", "deposited", "transferred",
+            "transaction code", "payment of", "received money", "payment success", "billing info"
+        )
+        
+        val hasTransactionIndicator = transactionKeywords.any { combinedText.contains(it) }
+        
+        // If a notification doesn't match a specific bank and has no transaction indicator, reject it
+        if (bankName == "Ngân hàng" && !hasTransactionIndicator) {
+            return ParsedNotification(
+                amount = 0.0,
+                type = "EXPENSE",
+                bankName = bankName,
+                detectedWalletName = detectedWalletName,
+                note = "Không phải giao dịch ngân hàng",
+                success = false
+            )
+        }
+        
+        // For general safety, require at least one transaction keyword, currency symbol, or dynamic change sign (+/-)
+        val currencyKeywords = listOf("vnd", "đ", "d", "usd", "eur", "gbp", "đồng", "dong")
+        val hasCurrencyIndicator = currencyKeywords.any { combinedText.contains(it) }
+        val hasSign = combinedText.contains("+") || combinedText.contains("-")
+        
+        if (!hasTransactionIndicator && !hasCurrencyIndicator && !hasSign) {
+            return ParsedNotification(
+                amount = 0.0,
+                type = "EXPENSE",
+                bankName = bankName,
+                detectedWalletName = detectedWalletName,
+                note = "Không khớp định dạng biến động số dư",
+                success = false
+            )
+        }
+
+        // 4. Determine Transaction Type (INCOME or EXPENSE) with Vietnamese & English keywords
         val incomeKeywords = listOf(
             "+", "nhận tiền", "cong +", "nạp tiền", "nhận", "co:", "cộng", "transfer in", "chuyển đến", "tăng", "nhận từ", "được cộng",
-            "received", "deposited", "refunded", "transfer from", "credit", "incoming", "added"
+            "received", "deposited", "refunded", "transfer from", "credit", "incoming", "added", "hoàn tiền", "hoan tien"
         )
         val expenseKeywords = listOf(
             "-", "trừ", "thanh toán", "chuyển đi", "nợ:", "trừ tiền", "chuyển khoản đi", "transfer out", "giảm", "rút tiền", "thanh toán hóa đơn", "phí",
-            "paid", "spent", "purchase", "withdrew", "charge", "outgoing", "payment for"
+            "paid", "spent", "purchase", "withdrew", "charge", "outgoing", "payment for", "phi gd"
         )
 
         var type = "EXPENSE" // default
-        val hasPlus = combinedText.contains("+")
-        val hasMinus = combinedText.contains("-")
+        val cleanForType = getCleanText(combinedText)
+
+        val hasPlus = Regex("""\+\s*\d""").containsMatchIn(cleanForType)
+        val hasMinus = Regex("""-\s*\d""").containsMatchIn(cleanForType)
 
         if (hasPlus && !hasMinus) {
             type = "INCOME"
         } else if (hasMinus && !hasPlus) {
             type = "EXPENSE"
         } else {
-            // Count matched keywords
-            val incomeScore = incomeKeywords.count { combinedText.contains(it) }
-            val expenseScore = expenseKeywords.count { combinedText.contains(it) }
-            if (incomeScore > expenseScore) {
+            // Highly robust priority checks
+            val incomeIndicators = listOf(
+                "nhận được", "nhan duoc", "nhận từ", "nhan tu", "nhận tiền", "nhan tien", "cộng tài khoản", "cong tai khoan",
+                "được cộng", "duoc cong", "hoàn tiền", "hoan tien", "hoàn trả", "hoan tra", "lương", "luong", "thưởng", "thuong"
+            )
+            val expenseIndicators = listOf(
+                "thanh toán", "thanh toan", "chuyển đi", "chuyen di", "chuyển khoản đi", "chuyen khoan di", "bị trừ", "bi tru",
+                "rút tiền", "rut tien", "mua sắm", "mua sam", "phí duy trì", "phi duy tri", "khấu trừ", "khau tru"
+            )
+
+            val matchesIncome = incomeIndicators.any { combinedText.contains(it) }
+            val matchesExpense = expenseIndicators.any { combinedText.contains(it) }
+
+            if (matchesIncome && !matchesExpense) {
                 type = "INCOME"
+            } else if (matchesExpense && !matchesIncome) {
+                type = "EXPENSE"
+            } else {
+                val incomeScore = incomeKeywords.count { combinedText.contains(it) }
+                val expenseScore = expenseKeywords.count { combinedText.contains(it) }
+                if (incomeScore > expenseScore) {
+                    type = "INCOME"
+                } else if (expenseScore > incomeScore) {
+                    type = "EXPENSE"
+                } else {
+                    // Check if '+' symbol appears anywhere in the raw text
+                    if (combinedText.contains("+")) {
+                        type = "INCOME"
+                    }
+                }
             }
         }
 
-        // 3. Extract Amount
+        // 5. Extract Amount with date and time safety
         val rawAmount = extractAmount(text)
 
-        // 4. Extract clean transaction note
-        var note = extractNote(text, bankName)
+        // 6. Extract clean transaction note
+        var note = extractNote(text, bankName, type)
         if (note.length > 80) {
             note = note.substring(0, 77) + "..."
         }
         if (note.isBlank()) {
-            note = "Biến động số dư $bankName"
+            note = if (type == "INCOME") "Giao dịch cộng $bankName" else "Giao dịch trừ $bankName"
         }
 
         return ParsedNotification(
@@ -99,21 +238,54 @@ object NotificationParser {
         )
     }
 
-    private fun extractAmount(text: String): Double {
-        val cleanText = text.replace("đ", "vnd")
+    private fun getCleanText(text: String): String {
+        var cleanText = text.replace("đ", "vnd")
             .replace("d", "vnd")
             .replace("$", "usd")
             .replace("€", "eur")
             .replace("£", "gbp")
             .lowercase()
 
-        // Match numbers following signs or associated with currency keywords
+        // Remove phone country code prefix (+84)
+        cleanText = cleanText.replace("+84", "")
+        
+        // Remove timezone offset like +07:00 or general timezone offsets
+        cleanText = cleanText.replace(Regex("""\+\d{1,2}:\d{2}"""), "")
+        cleanText = cleanText.replace(Regex("""\+\d{2,4}\b"""), "")
+
+        // Remove dates and times to prevent matching hours, minutes, seconds, or dates
+        cleanText = cleanText.replace(Regex("""\b\d{1,2}[:h]\d{2}(?:[:ms]\d{2})?\b"""), "")
+        cleanText = cleanText.replace(Regex("""\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"""), "")
+        
+        // Remove standalone years (2024 to 2035)
+        cleanText = cleanText.replace(Regex("""\b202[4-9]\b"""), "")
+        cleanText = cleanText.replace(Regex("""\b203[0-5]\b"""), "")
+
+        // Remove account numbers, cards (typically preceded by tk, stk, tai khoan, card, the)
+        cleanText = cleanText.replace(Regex("""\b(?:tk|stk|tai khoan|tài khoản|account|so tk|sotk|the|thẻ|card)\s?\d+\b"""), "")
+        
+        // Remove phone numbers/hotlines
+        cleanText = cleanText.replace(Regex("""\b(?:hotline|sđt|sdt|lien he|liên hệ|call|tel|phone|mb)\s?\d+\b"""), "")
+        
+        return cleanText
+    }
+
+    private fun extractAmount(text: String): Double {
+        val cleanText = getCleanText(text)
+
+        // Match numbers following signs or associated with currency keywords or direct transaction context
         val patterns = listOf(
+            // 1. Clear dynamic sign (+ or -) followed by a number
             Pattern.compile("""[+-]\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
+            
+            // 2. Number followed directly by currency keyword (vnd, usd, eur, gbp)
             Pattern.compile("""(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s?(?:vnd|usd|eur|gbp)\b"""),
+            
+            // 3. Foreign currency prefix followed by a number
             Pattern.compile("""(?:usd|eur|gbp)\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
-            Pattern.compile("""\b(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
-            Pattern.compile("""\b(\d{4,12})\b""")
+            
+            // 4. Number preceded by a direct transaction indicator to parse values safely
+            Pattern.compile("""\b(?:số tiền|so tien|sotien|trị giá|tri gia|tiền|tien|thanh toán|thanh toan|biến động|bien dong|giao dịch|giao dich|giá trị|gia tri|cộng|co:|nợ:)\s*:?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b""")
         )
 
         for (pattern in patterns) {
@@ -148,9 +320,18 @@ object NotificationParser {
         return 0.0
     }
 
-    private fun extractNote(text: String, bankName: String): String {
+    private fun extractNote(text: String, bankName: String, type: String): String {
         val lowerText = text.lowercase()
-        val indicators = listOf("nội dung:", "noidung:", "lý do:", "gd:", "nd:", "ref:", "mô tả:", "nội dung gd:", "note:", "memo:", "desc:")
+        val indicators = listOf(
+            "nội dung gd:", "noi dung gd:", "nội dung chuyển khoản:", "noi dung chuyen khoan:",
+            "nội dung:", "noi dung:", "noidung:", 
+            "lý do:", "ly do:", "lydo:",
+            "giao dịch và nội dung:", "giao dich va noi dung:",
+            "giao dịch:", "giao dich:",
+            "gd:", "nd:", "ref:", 
+            "mô tả:", "mo ta:", 
+            "note:", "memo:", "desc:"
+        )
         for (indicator in indicators) {
             val idx = lowerText.indexOf(indicator)
             if (idx != -1) {
@@ -165,7 +346,32 @@ object NotificationParser {
             return cleanNoteString(qMatcher.group(1) ?: "")
         }
 
-        return "Nhận qua $bankName"
+        // Special patterns for common applications
+        if (bankName == "MoMo") {
+            // "Ban da thanh toan thanh cong so tien -50,000 d cho dich vu GrabFood qua vi MoMo"
+            val targetKeyword = "cho dịch vụ"
+            val targetKeywordUnaccent = "cho dich vu"
+            val idxTarget = lowerText.indexOf(targetKeyword)
+            val idxTargetUnaccent = lowerText.indexOf(targetKeywordUnaccent)
+            val targetIdx = if (idxTarget != -1) idxTarget else idxTargetUnaccent
+            
+            if (targetIdx != -1) {
+                val keywordLength = if (idxTarget != -1) targetKeyword.length else targetKeywordUnaccent.length
+                val start = targetIdx + keywordLength
+                val end = lowerText.indexOf("qua vi", start)
+                val rawNote = if (end != -1) {
+                    text.substring(start, end).trim()
+                } else {
+                    text.substring(start).trim()
+                }
+                if (rawNote.isNotBlank()) {
+                    return "Thanh toán " + cleanNoteString(rawNote)
+                }
+            }
+        }
+
+        val actionStr = if (type == "INCOME") "Nhận tiền qua" else "Chi tiêu qua"
+        return "$actionStr $bankName"
     }
 
     private fun cleanNoteString(input: String): String {
