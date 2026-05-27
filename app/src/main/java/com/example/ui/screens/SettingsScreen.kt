@@ -1240,57 +1240,145 @@ fun SettingsScreen(
 
     // Beautiful Interactive State Dialog for sync feedback
     if (syncStatus.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = { viewModel.clearSyncLogs() },
-            confirmButton = {
-                TextButton(onClick = { viewModel.clearSyncLogs() }) {
-                    Text("Đã hiểu")
-                }
-            },
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    when (syncStatus) {
-                        "SYNCING" -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        "SUCCESS_CLOUD", "SUCCESS", "SUCCESS_CLEAR" -> Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Success", tint = Color(0xFF0F9D58))
-                        "SUCCESS_CLIPBOARD" -> Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copied", tint = Color(0xFF4285F4))
-                        "ERROR" -> Icon(imageVector = Icons.Default.Error, contentDescription = "Error", tint = MaterialTheme.colorScheme.error)
-                    }
-                    Text(
-                        text = when (syncStatus) {
-                            "SYNCING" -> "ĐANG ĐỒNG BỘ..."
-                            "SUCCESS_CLOUD", "SUCCESS" -> "ĐỒNG BỘ CLOUD THÀNH CÔNG"
-                            "SUCCESS_CLEAR" -> "XÓA DỮ LIỆU THÀNH CÔNG"
-                            "SUCCESS_CLIPBOARD" -> "ĐÃ COPY DỮ LIỆU ĐỂ DÁN (PASTE)"
-                            else -> "ĐỒNG BỘ THẤT BẠI"
+        if (syncStatus == "SUCCESS_LOCAL_BACKUP") {
+            AlertDialog(
+                onDismissRequest = { viewModel.clearSyncLogs() },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.shareBackupFile(context)
                         },
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    syncProgressLogs.forEach { log ->
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.testTag("share_backup_confirm_button")
+                    ) {
+                        Icon(imageVector = Icons.Default.Share, contentDescription = "Share", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Chia sẻ")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { viewModel.clearSyncLogs() },
+                        modifier = Modifier.testTag("close_backup_confirm_button")
+                    ) {
+                        Text("Đóng")
+                    }
+                },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Success", tint = Color(0xFF0F9D58))
                         Text(
-                            text = log,
-                            fontSize = 11.sp,
-                            color = if (log.contains("Lỗi") || log.contains("Thất bại")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                            text = "SAO LƯU THÀNH CÔNG!",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Bản sao lưu đã được tạo và lưu trữ an toàn trong ứng dụng cũng như thư mục Downloads công khai.",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        Text(
+                            text = "Bạn có muốn chia sẻ tệp sao lưu (.json) này ra ứng dụng ngoài (gửi qua Zalo, Messenger, email hoặc lưu Driver) không?",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                        
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 4.dp))
+                        
+                        Text(
+                            text = "Chi tiết tiến trình:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 120.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            syncProgressLogs.forEach { log ->
+                                Text(
+                                    text = log,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
-            }
-        )
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { viewModel.clearSyncLogs() },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.clearSyncLogs() }) {
+                        Text("Đã hiểu")
+                    }
+                },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        when (syncStatus) {
+                            "SYNCING" -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            "SUCCESS_CLOUD", "SUCCESS", "SUCCESS_CLEAR" -> Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Success", tint = Color(0xFF0F9D58))
+                            "SUCCESS_CLIPBOARD" -> Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copied", tint = Color(0xFF4285F4))
+                            "ERROR" -> Icon(imageVector = Icons.Default.Error, contentDescription = "Error", tint = MaterialTheme.colorScheme.error)
+                        }
+                        Text(
+                            text = when (syncStatus) {
+                                "SYNCING" -> "ĐANG ĐỒNG BỘ..."
+                                "SUCCESS_CLOUD", "SUCCESS" -> "ĐỒNG BỘ CLOUD THÀNH CÔNG"
+                                "SUCCESS_CLEAR" -> "XÓA DỮ LIỆU THÀNH CÔNG"
+                                "SUCCESS_CLIPBOARD" -> "ĐÃ COPY DỮ LIỆU ĐỂ DÁN (PASTE)"
+                                else -> "ĐỒNG BỘ THẤT BẠI"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        syncProgressLogs.forEach { log ->
+                            Text(
+                                text = log,
+                                fontSize = 11.sp,
+                                color = if (log.contains("Lỗi") || log.contains("Thất bại")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            )
+        }
     }
 
     // Clear Data confirmation dialog

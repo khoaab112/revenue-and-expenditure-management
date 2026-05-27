@@ -61,7 +61,15 @@ fun CustomMoneyInputField(
             value = if (value.isEmpty()) "" else FormatHelper.formatExpression(value),
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp)) },
+            label = { 
+                val evaluated = FormatHelper.evaluateExpression(value)
+                val displayLabel = if ((value.contains("+") || value.contains("-") || value.contains("×") || value.contains("÷")) && evaluated > 0.0) {
+                    "$label: ${FormatHelper.formatVND(evaluated).replace(" ₫", " đ")}"
+                } else {
+                    label
+                }
+                Text(displayLabel, style = androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 15.sp)) 
+            },
             placeholder = { Text(placeholder) },
             isError = isError,
             trailingIcon = {
@@ -82,12 +90,13 @@ fun CustomMoneyInputField(
             },
             supportingText = {
                 val evaluated = FormatHelper.evaluateExpression(value)
-                if (evaluated > 0.0) {
+                if ((value.contains("+") || value.contains("-") || value.contains("×") || value.contains("÷")) && evaluated > 0.0) {
                     Text(
-                        text = "Số tiền định dạng: ${FormatHelper.formatVND(evaluated)}",
+                        text = "= ${FormatHelper.formatVND(evaluated).replace(" ₫", " đ")}",
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(top = 4.dp).testTag("${testTag}_live_sum_preview")
                     )
                 }
             },
@@ -229,31 +238,63 @@ fun CalculatorKeyboardDialog(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                                
+                                val evaluatedVal = remember(rawExpr) { FormatHelper.evaluateExpression(rawExpr) }
+                                if ((rawExpr.contains("+") || rawExpr.contains("-") || rawExpr.contains("×") || rawExpr.contains("÷")) && evaluatedVal > 0.0) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "= ${FormatHelper.formatVND(evaluatedVal).replace(" ₫", " đ")}",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.testTag("kb_live_sum_val")
+                                    )
+                                }
                             }
+                            
+                            // Delete (Backspace) Button
                             IconButton(
-                                onClick = { animateAndDismiss() },
-                                modifier = Modifier.background(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(50.dp)
-                                )
+                                onClick = {
+                                    if (rawExpr.isNotEmpty()) {
+                                        var temp = rawExpr
+                                        if (temp.endsWith(" ")) {
+                                            temp = temp.dropLast(1)
+                                        }
+                                        if (temp.isNotEmpty() && (temp.endsWith("+") || temp.endsWith("-") || temp.endsWith("×") || temp.endsWith("÷"))) {
+                                            temp = temp.dropLast(1)
+                                        }
+                                        if (temp.endsWith(" ")) {
+                                            temp = temp.dropLast(1)
+                                        }
+                                        rawExpr = if (temp.isNotEmpty()) temp.dropLast(1) else ""
+                                        onValueChange(rawExpr)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        RoundedCornerShape(50.dp)
+                                    )
+                                    .clip(RoundedCornerShape(50.dp))
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close",
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.Backspace,
+                                    contentDescription = "Backspace",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                        // Grid containing separate 00 and 000 keys
+                        // Custom Grid Layout
                         val keyRows = listOf(
-                            listOf("7", "8", "9", "÷"),
-                            listOf("4", "5", "6", "×"),
-                            listOf("1", "2", "3", "-"),
-                            listOf("0", "00", "000", "+"),
-                            listOf("C", "⌫", "=")
+                            listOf("1", "2", "3", "+"),
+                            listOf("4", "5", "6", "-"),
+                            listOf("7", "8", "9", "×"),
+                            listOf("0", "00", "000", "÷")
                         )
 
                         keyRows.forEach { rowKeys ->
@@ -262,51 +303,28 @@ fun CalculatorKeyboardDialog(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 rowKeys.forEach { key ->
-                                    val isOp = key in listOf("+", "-", "×", "÷", "=")
-                                    val isUtil = key in listOf("C", "⌫")
+                                    val isOp = key in listOf("+", "-", "×", "÷")
                                     val isMultiZero = key in listOf("00", "000")
 
                                     val bgColor = when {
                                         isOp -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                                        isUtil -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
                                         isMultiZero -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
                                         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                                     }
 
                                     val textColor = when {
                                         isOp -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        isUtil -> MaterialTheme.colorScheme.error
                                         else -> MaterialTheme.colorScheme.onSurface
                                     }
 
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(50.dp)
+                                            .height(58.dp) // Adjusted height slightly to make buttons squarish like the sketch
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(bgColor)
                                             .clickable {
                                                 when (key) {
-                                                    "C" -> {
-                                                        rawExpr = ""
-                                                        onValueChange("")
-                                                    }
-                                                    "⌫" -> {
-                                                        if (rawExpr.isNotEmpty()) {
-                                                            var temp = rawExpr
-                                                            if (temp.endsWith(" ")) {
-                                                                temp = temp.dropLast(1)
-                                                            }
-                                                            if (temp.isNotEmpty() && (temp.endsWith("+") || temp.endsWith("-") || temp.endsWith("×") || temp.endsWith("÷"))) {
-                                                                temp = temp.dropLast(1)
-                                                            }
-                                                            if (temp.endsWith(" ")) {
-                                                                temp = temp.dropLast(1)
-                                                            }
-                                                            rawExpr = if (temp.isNotEmpty()) temp.dropLast(1) else ""
-                                                            onValueChange(rawExpr)
-                                                        }
-                                                    }
                                                     "+", "-", "×", "÷" -> {
                                                         val cleanStr = rawExpr.trim()
                                                         if (cleanStr.isNotEmpty()) {
@@ -323,17 +341,6 @@ fun CalculatorKeyboardDialog(
                                                         val cleanStr = rawExpr.trim()
                                                         if (cleanStr.isNotEmpty() && cleanStr.last().isDigit()) {
                                                             rawExpr += key
-                                                            onValueChange(rawExpr)
-                                                        }
-                                                    }
-                                                    "=" -> {
-                                                        if (rawExpr.isNotEmpty()) {
-                                                            val res = FormatHelper.evaluateExpression(rawExpr)
-                                                            rawExpr = if (res % 1.0 == 0.0) {
-                                                                res.toLong().toString()
-                                                            } else {
-                                                                String.format("%.2f", res)
-                                                            }
                                                             onValueChange(rawExpr)
                                                         }
                                                     }
@@ -356,7 +363,7 @@ fun CalculatorKeyboardDialog(
                                         } else {
                                             Text(
                                                 text = key,
-                                                fontSize = 18.sp,
+                                                fontSize = 20.sp, // Made font slightly larger
                                                 fontWeight = FontWeight.Bold,
                                                 color = textColor
                                             )
@@ -368,40 +375,75 @@ fun CalculatorKeyboardDialog(
 
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // Large, Super-Prominent Done Button spanning full width below keypad grid!
-                        Button(
-                            onClick = {
-                                if (rawExpr.isNotEmpty()) {
-                                    val res = FormatHelper.evaluateExpression(rawExpr)
-                                    rawExpr = if (res % 1.0 == 0.0) {
-                                        res.toLong().toString()
-                                    } else {
-                                        String.format("%.2f", res)
-                                    }
-                                    onValueChange(rawExpr)
-                                }
-                                animateAndDismiss()
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .testTag("kb_key_Done"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 4.dp,
-                                pressedElevation = 8.dp
-                            )
+                        // Row containing Clear (30%) and Done (70%) buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "DONE",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.2.sp
-                            )
+                            // Clear (XÓA) Button - 30% width
+                            Button(
+                                onClick = {
+                                    rawExpr = ""
+                                    onValueChange("")
+                                },
+                                modifier = Modifier
+                                    .weight(0.3f)
+                                    .height(56.dp)
+                                    .testTag("kb_key_Clear"),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(
+                                    defaultElevation = 4.dp,
+                                    pressedElevation = 8.dp
+                                )
+                            ) {
+                                Text(
+                                    text = "XÓA",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.0.sp
+                                )
+                            }
+
+                            // Done (XONG) Button - 70% width
+                            Button(
+                                onClick = {
+                                    if (rawExpr.isNotEmpty()) {
+                                        val res = FormatHelper.evaluateExpression(rawExpr)
+                                        rawExpr = if (res % 1.0 == 0.0) {
+                                            res.toLong().toString()
+                                        } else {
+                                            String.format("%.2f", res)
+                                        }
+                                        onValueChange(rawExpr)
+                                    }
+                                    animateAndDismiss()
+                                },
+                                modifier = Modifier
+                                    .weight(0.7f)
+                                    .height(56.dp)
+                                    .testTag("kb_key_Done"),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(
+                                    defaultElevation = 4.dp,
+                                    pressedElevation = 8.dp
+                                )
+                            ) {
+                                Text(
+                                    text = "XONG",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.2.sp
+                                )
+                            }
                         }
                     }
                 }

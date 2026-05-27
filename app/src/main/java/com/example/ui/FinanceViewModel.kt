@@ -61,6 +61,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _syncProgressLogs = MutableStateFlow<List<String>>(emptyList())
     val syncProgressLogs: StateFlow<List<String>> = _syncProgressLogs.asStateFlow()
 
+    private val _lastBackupFile = MutableStateFlow<java.io.File?>(null)
+    val lastBackupFile: StateFlow<java.io.File?> = _lastBackupFile.asStateFlow()
+
     // Base flows
     val allWallets: StateFlow<List<Wallet>>
     val allTransactions: StateFlow<List<Transaction>>
@@ -944,6 +947,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun clearSyncLogs() {
         _syncStatus.value = ""
         _syncProgressLogs.value = emptyList()
+        _lastBackupFile.value = null
     }
 
     fun exportLocalBackup(context: android.content.Context) {
@@ -1180,40 +1184,47 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 _localBackupCount.value = filesList?.size ?: 0
 
                 addLog("🎉 SAO LƯU THÀNH CÔNG!")
-                _syncStatus.value = "SUCCESS"
-
-                // Launch Share intent
-                withContext(Dispatchers.Main) {
-                    try {
-                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            file
-                        )
-                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                            type = "application/json"
-                            putExtra(android.content.Intent.EXTRA_STREAM, fileUri)
-                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Sổ Chi Tiêu Backup File")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        val chooserIntent = android.content.Intent.createChooser(shareIntent, "Chia sẻ & Sao lưu dữ liệu JSON")
-                        chooserIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(chooserIntent)
-                    } catch (e: Exception) {
-                        // Fallback
-                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText("Sổ Chi Tiêu JSON Backup", jsonString)
-                        clipboard.setPrimaryClip(clip)
-                        addLog("⚠️ Không thể khởi chạy trình FileProvider. Dữ liệu JSON đã được copy vào bộ nhớ tạm để thay thế.")
-                        android.widget.Toast.makeText(context, "Đã sao chép nội dung JSON vào Clipboard!", android.widget.Toast.LENGTH_LONG).show()
-                    }
-                }
+                _lastBackupFile.value = file
+                _syncStatus.value = "SUCCESS_LOCAL_BACKUP"
             } catch (e: Exception) {
                 addLog("Sao lưu lỗi: ${e.localizedMessage ?: "Lỗi không xác định"}")
                 _syncStatus.value = "ERROR"
                 e.printStackTrace()
             }
+        }
+    }
+
+    fun shareBackupFile(context: android.content.Context) {
+        val file = _lastBackupFile.value ?: return
+        try {
+            val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(android.content.Intent.EXTRA_STREAM, fileUri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Sổ Chi Tiêu Backup File")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooserIntent = android.content.Intent.createChooser(shareIntent, "Chia sẻ & Sao lưu dữ liệu JSON")
+            chooserIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(chooserIntent)
+        } catch (e: Exception) {
+            // Fallback
+            try {
+                val jsonString = file.readText()
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("Sổ Chi Tiêu JSON Backup", jsonString)
+                clipboard.setPrimaryClip(clip)
+                android.widget.Toast.makeText(context, "Đã sao chép nội dung JSON vào Clipboard!", android.widget.Toast.LENGTH_LONG).show()
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+            }
+        } finally {
+            clearSyncLogs()
         }
     }
 

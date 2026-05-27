@@ -59,7 +59,19 @@ fun DashboardScreen(
 
     val displayMonth = remember(activeMonth) {
         if (activeMonth.length >= 7) {
-            "${activeMonth.substring(5)}/${activeMonth.substring(2, 4)}"
+            "Tháng ${activeMonth.substring(5)}/${activeMonth.substring(0, 4)}"
+        } else {
+            activeMonth
+        }
+    }
+
+    val displayMonthShort = remember(activeMonth) {
+        if (activeMonth.length >= 7) {
+            try {
+                "T${activeMonth.substring(5).toInt()}"
+            } catch (e: Exception) {
+                "T${activeMonth.substring(5)}"
+            }
         } else {
             activeMonth
         }
@@ -126,7 +138,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Thu nhập ($displayMonth)",
+                                text = "Thu nhập ($displayMonthShort)",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                             )
@@ -149,7 +161,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Chi tiêu ($displayMonth)",
+                                text = "Chi tiêu ($displayMonthShort)",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                             )
