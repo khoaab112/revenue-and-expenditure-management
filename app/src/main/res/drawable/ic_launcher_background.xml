@@ -6,7 +6,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     
-    <!-- Warm Cream to Soft Sand Sunset Gradient Background -->
+    <!-- Cool light-blue professional gradient background -->
     <path
         android:pathData="M0,0h108v108h-108z" >
         <aapt:attr name="android:fillColor">
@@ -16,9 +16,9 @@
                 android:endX="108"
                 android:endY="108"
                 android:type="linear">
-                <item android:color="#FFFDF9" android:offset="0.0" />
-                <item android:color="#FFF3E0" android:offset="0.5" />
-                <item android:color="#FFE0B2" android:offset="1.0" />
+                <item android:color="#F5F8FC" android:offset="0.0" />
+                <item android:color="#EDF2F8" android:offset="0.5" />
+                <item android:color="#E1E9F2" android:offset="1.0" />
             </gradient>
         </aapt:attr>
     </path>
