@@ -32,7 +32,7 @@ import java.util.Calendar
 @Composable
 fun DashboardScreen(
     viewModel: FinanceViewModel,
-    onNavigateToWallets: () -> Unit,
+    onNavigateToWallets: (Wallet?) -> Unit,
     onNavigateToHistory: () -> Unit,
     onNavigateToStats: () -> Unit,
     onNavigateToBudget: () -> Unit,
@@ -260,7 +260,7 @@ fun DashboardScreen(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .clickable { onNavigateToWallets() }
+                    .clickable { onNavigateToWallets(null) }
                     .testTag("view_all_wallets_button")
             )
         }
@@ -1023,13 +1023,13 @@ fun DashboardScreen(
 @Composable
 fun WalletMiniCard(
     wallet: Wallet,
-    onClick: () -> Unit,
+    onClick: (Wallet) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier
             .height(110.dp)
-            .clickable { onClick() }
+            .clickable { onClick(wallet) }
             .testTag("wallet_mini_${wallet.id}"),
         colors = CardDefaults.cardColors(
             containerColor = FormatHelper.parseColor(wallet.colorHex).copy(alpha = 0.15f)
@@ -1119,7 +1119,7 @@ fun RecentTransactionItem(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = tx.note,
+                text = tx.categoryName,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -1132,37 +1132,37 @@ fun RecentTransactionItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = tx.walletName,
+                    text = if (tx.note.isNotBlank()) "${tx.walletName} - ${tx.note}" else tx.walletName,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "•",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "${FormatHelper.formatDate(tx.timestamp)} ${java.text.SimpleDateFormat("HH:mm", java.util.Locale("vi", "VN")).format(tx.timestamp)}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
 
-        Text(
-            text = if (tx.type == "EXPENSE") "-${FormatHelper.formatVND(tx.amount)}"
-                   else "+${FormatHelper.formatVND(tx.amount)}",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (tx.type == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = if (tx.type == "EXPENSE") "-${FormatHelper.formatVND(tx.amount)}"
+                       else "+${FormatHelper.formatVND(tx.amount)}",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (tx.type == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "${FormatHelper.formatDate(tx.timestamp)} ${java.text.SimpleDateFormat("HH:mm", java.util.Locale("vi", "VN")).format(tx.timestamp)}",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
 @Composable
 fun WalletChunkGrid(
     chunk: List<Wallet>,
-    onWalletClick: () -> Unit,
+    onWalletClick: (Wallet) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(

@@ -1058,7 +1058,7 @@ fun RemovableTransactionItem(
         // Details Column
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = tx.note,
+                text = tx.categoryName,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -1071,15 +1071,11 @@ fun RemovableTransactionItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = tx.walletName,
+                    text = if (tx.note.isNotBlank()) "${tx.walletName} - ${tx.note}" else tx.walletName,
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(text = "•", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                Text(
-                    text = java.text.SimpleDateFormat("HH:mm", java.util.Locale("vi", "VN")).format(tx.timestamp),
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (tx.isRecurring) {
                     Text(text = "•", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
@@ -1098,14 +1094,22 @@ fun RemovableTransactionItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = if (tx.type == "EXPENSE") "-${FormatHelper.formatVND(tx.amount)}"
-                       else "+${FormatHelper.formatVND(tx.amount)}",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (tx.type == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
-                textAlign = TextAlign.End
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = if (tx.type == "EXPENSE") "-${FormatHelper.formatVND(tx.amount)}"
+                           else "+${FormatHelper.formatVND(tx.amount)}",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (tx.type == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
+                    textAlign = TextAlign.End
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = java.text.SimpleDateFormat("HH:mm", java.util.Locale("vi", "VN")).format(tx.timestamp),
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+            }
 
             IconButton(
                 onClick = onDelete,

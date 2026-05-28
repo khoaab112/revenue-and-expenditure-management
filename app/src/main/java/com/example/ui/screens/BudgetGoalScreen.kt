@@ -150,7 +150,7 @@ fun BudgetsSection(
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("budgets_lazy_column"),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(filteredBudgets) { budget ->
+                    items(filteredBudgets, key = { it.id }) { budget ->
                         BudgetItemCard(
                             budget = budget,
                             onDelete = { budgetToDelete = budget },

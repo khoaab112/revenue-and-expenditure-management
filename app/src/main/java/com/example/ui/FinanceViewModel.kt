@@ -94,6 +94,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isPinEnabled = MutableStateFlow(false)
     val isPinEnabled: StateFlow<Boolean> = _isPinEnabled.asStateFlow()
 
+    private val _focusedWalletId = MutableStateFlow<Int?>(null)
+    val focusedWalletId: StateFlow<Int?> = _focusedWalletId.asStateFlow()
+
+    fun setFocusedWalletId(id: Int?) {
+        _focusedWalletId.value = id
+    }
+
     // Start Screen Flow ("dashboard", "history", "stats", "add_transaction", "settings")
     private val _startScreen = MutableStateFlow("add_transaction")
     val startScreen: StateFlow<String> = _startScreen.asStateFlow()
@@ -370,51 +377,55 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     fun loadNotificationLogs() {
         viewModelScope.launch {
-            var logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
-            if (logsSetting.trim().isEmpty()) {
-                logsSetting = "[]"
-            }
-
-            val list = mutableListOf<NotificationLog>()
-            var modified = false
-            val now = System.currentTimeMillis()
-            val limitTime = now - (3L * 24 * 60 * 60 * 1000) // 3 days in ms
-            try {
-                val array = org.json.JSONArray(logsSetting)
-                val newJSONArray = org.json.JSONArray()
-                for (i in 0 until array.length()) {
-                    val obj = array.getJSONObject(i)
-                    val timestamp = obj.optLong("timestamp", now)
-                    val status = obj.optString("status", "")
-                    if (status == "PENDING" || status == "DELETED" || timestamp >= limitTime) {
-                        if (status != "DELETED") {
-                            list.add(
-                                NotificationLog(
-                                    timestamp = timestamp,
-                                    title = obj.optString("title", ""),
-                                    text = obj.optString("text", ""),
-                                    bankName = obj.optString("bankName", ""),
-                                    amount = obj.optDouble("amount", 0.0),
-                                    type = obj.optString("type", "EXPENSE"),
-                                    note = obj.optString("note", ""),
-                                    walletName = obj.optString("walletName", ""),
-                                    status = status
-                                )
-                            )
-                        }
-                        newJSONArray.put(obj)
-                    } else {
-                        modified = true
-                    }
-                }
-                if (modified) {
-                    repository.saveSetting("notification_logs", newJSONArray.toString())
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            _notificationLogs.value = list
+            loadNotificationLogsSync()
         }
+    }
+
+    private suspend fun loadNotificationLogsSync() {
+        var logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
+        if (logsSetting.trim().isEmpty()) {
+            logsSetting = "[]"
+        }
+
+        val list = mutableListOf<NotificationLog>()
+        var modified = false
+        val now = System.currentTimeMillis()
+        val limitTime = now - (3L * 24 * 60 * 60 * 1000) // 3 days in ms
+        try {
+            val array = org.json.JSONArray(logsSetting)
+            val newJSONArray = org.json.JSONArray()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val timestamp = obj.optLong("timestamp", now)
+                val status = obj.optString("status", "")
+                if (status == "PENDING" || status == "DELETED" || timestamp >= limitTime) {
+                    if (status != "DELETED") {
+                        list.add(
+                            NotificationLog(
+                                timestamp = timestamp,
+                                title = obj.optString("title", ""),
+                                text = obj.optString("text", ""),
+                                bankName = obj.optString("bankName", ""),
+                                amount = obj.optDouble("amount", 0.0),
+                                type = obj.optString("type", "EXPENSE"),
+                                note = obj.optString("note", ""),
+                                walletName = obj.optString("walletName", ""),
+                                status = status
+                            )
+                        )
+                    }
+                    newJSONArray.put(obj)
+                } else {
+                    modified = true
+                }
+            }
+            if (modified) {
+                repository.saveSetting("notification_logs", newJSONArray.toString())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        _notificationLogs.value = list
     }
 
     fun resetSamplePendingLogs() {
@@ -501,7 +512,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     countAdded++
                 }
 
-                loadNotificationLogs()
+                // Wait for the new items to populate the flow
+                loadNotificationLogsSync()
                 onSuccess(countAdded)
             } catch (e: Exception) {
                 onError("Có lỗi: ${e.localizedMessage}")
@@ -1352,6 +1364,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     obj.put("limitAmount", b.limitAmount)
                     obj.put("spentAmount", b.spentAmount)
                     obj.put("month", b.month)
+                    obj.put("isRecurring", b.isRecurring)
                     budgetsArray.put(obj)
                 }
                 root.put("budgets", budgetsArray)
@@ -1658,15 +1671,46 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             val now = System.currentTimeMillis()
             val oneDay = 24L * 60L * 60L * 1000L
             
-            // For Tiền mặt (Assuming ID 1 is created by checkAndSeedDatabase)
-            addTransaction(walletId = 1, type = "EXPENSE", amount = 150000.0, categoryName = "Ăn uống", note = "Ăn tối lẩu cua", timestamp = now - oneDay * 2)
-            addTransaction(walletId = 1, type = "EXPENSE", amount = 50000.0, categoryName = "Di chuyển", note = "GrabBike đi làm", timestamp = now - oneDay)
-            addTransaction(walletId = 1, type = "EXPENSE", amount = 120000.0, categoryName = "Giải trí", note = "Vé xem phim CGV", timestamp = now)
+            // Fetch wallets to ensure we get correct IDs
+            val wts = repository.allWallets.firstOrNull() ?: emptyList()
+            val cashWallet = wts.find { it.type == "CASH" }?.id ?: 1
+            val bankWallet = wts.find { it.type == "BANK" }?.id ?: 2
+            val electronicWallet = wts.find { it.type == "WALLET" }?.id ?: 3
+            val savingsWallet = wts.find { it.type == "SAVINGS" }?.id ?: 4
             
-            // For Tài khoản ngân hàng (Assuming ID 2)
-            addTransaction(walletId = 2, type = "EXPENSE", amount = 450000.0, categoryName = "Mua sắm", note = "Mua giày thể thao", timestamp = now - oneDay * 3)
-            addTransaction(walletId = 2, type = "INCOME", amount = 8000000.0, categoryName = "Lương", note = "Nhận lương dự án ngoài", timestamp = now - oneDay * 4)
-            addTransaction(walletId = 2, type = "EXPENSE", amount = 1500000.0, categoryName = "Hóa đơn", note = "Thanh toán hoá điện nước", timestamp = now - oneDay)
+            // Lương & Thu nhập (Bank)
+            addTransaction(walletId = bankWallet, type = "INCOME", amount = 18000000.0, categoryName = "Lương", note = "Lương tháng này", timestamp = now - oneDay * 5)
+            addTransaction(walletId = bankWallet, type = "INCOME", amount = 2000000.0, categoryName = "Thưởng", note = "Thưởng dự án đạt mốc", timestamp = now - oneDay * 4)
+            addTransaction(walletId = electronicWallet, type = "INCOME", amount = 500000.0, categoryName = "Khác", note = "Hoàn tiền thẻ tín dụng", timestamp = now - oneDay * 2)
+
+            // Sinh hoạt phí (Tiền mặt & Momo)
+            addTransaction(walletId = cashWallet, type = "EXPENSE", amount = 45000.0, categoryName = "Ăn uống", note = "Ăn sáng phở", timestamp = now - oneDay * 3)
+            addTransaction(walletId = cashWallet, type = "EXPENSE", amount = 150000.0, categoryName = "Ăn uống", note = "Ăn trưa quán vỉa hè", timestamp = now - oneDay * 2)
+            addTransaction(walletId = electronicWallet, type = "EXPENSE", amount = 250000.0, categoryName = "Ăn uống", note = "Ăn tối lẩu Thái", timestamp = now - oneDay)
+            addTransaction(walletId = electronicWallet, type = "EXPENSE", amount = 65000.0, categoryName = "Cà phê", note = "Phúc Long", timestamp = now)
+
+            // Di chuyển
+            addTransaction(walletId = cashWallet, type = "EXPENSE", amount = 60000.0, categoryName = "Di chuyển", note = "Đổ xăng", timestamp = now - oneDay * 4)
+            addTransaction(walletId = bankWallet, type = "EXPENSE", amount = 120000.0, categoryName = "Di chuyển", note = "GrabBike đi siêu thị", timestamp = now - oneDay * 1)
+
+            // Hóa đơn & Mua sắm (Bank)
+            addTransaction(walletId = bankWallet, type = "EXPENSE", amount = 950000.0, categoryName = "Hóa đơn", note = "Tiền điện và nước", timestamp = now - oneDay * 3)
+            addTransaction(walletId = bankWallet, type = "EXPENSE", amount = 300000.0, categoryName = "Hóa đơn", note = "Cước internet", timestamp = now - oneDay * 3)
+            addTransaction(walletId = bankWallet, type = "EXPENSE", amount = 1200000.0, categoryName = "Mua sắm", note = "Quần áo Uniqlo", timestamp = now - oneDay * 2)
+            addTransaction(walletId = electronicWallet, type = "EXPENSE", amount = 150000.0, categoryName = "Mua sắm", note = "Sách Shopee", timestamp = now - oneDay)
+
+            // Tiết kiệm
+            addTransaction(walletId = savingsWallet, type = "INCOME", amount = 2000000.0, categoryName = "Lương", note = "Chích lương vào tiết kiệm", timestamp = now - oneDay * 4)
+            addTransaction(walletId = savingsWallet, type = "INCOME", amount = 500000.0, categoryName = "Thưởng", note = "Gửi thêm sau thưởng dự án", timestamp = now - oneDay * 1)
+            
+            // Giải trí
+            addTransaction(walletId = electronicWallet, type = "EXPENSE", amount = 120000.0, categoryName = "Giải trí", note = "Vé xem phim CGV", timestamp = now)
+
+            // Đầu tư
+            addTransaction(walletId = bankWallet, type = "EXPENSE", amount = 5000000.0, categoryName = "Đầu tư", note = "Mua ETF chứng khoán", timestamp = now - oneDay)
+
+            // Sức khỏe
+            addTransaction(walletId = cashWallet, type = "EXPENSE", amount = 350000.0, categoryName = "Sức khỏe", note = "Mua thuốc và vitamin", timestamp = now - oneDay * 5)
             
             // Refresh
             loadCategories()
@@ -1791,7 +1835,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             categoryColor = obj.optString("categoryColor", ""),
                             limitAmount = obj.optDouble("limitAmount", 0.0),
                             spentAmount = obj.optDouble("spentAmount", 0.0),
-                            month = obj.optString("month", "")
+                            month = obj.optString("month", ""),
+                            isRecurring = obj.optBoolean("isRecurring", false)
                         )
                         repository.insertBudgetDirect(b)
                     }

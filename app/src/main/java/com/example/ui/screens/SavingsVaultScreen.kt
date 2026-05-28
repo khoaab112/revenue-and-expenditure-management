@@ -342,10 +342,12 @@ fun SavingsVaultScreen(
                             }
 
                             items(txList, key = { it.id }) { tx ->
+                                val isIncome = tx.type == "INCOME"
+                                val statusColor = if (isIncome) Color(0xFF4CAF50) else Color(0xFFF44336)
                                 ListItem(
                                     headlineContent = { 
                                         Text(
-                                            text = tx.note, 
+                                            text = tx.categoryName, 
                                             fontWeight = FontWeight.Medium, 
                                             fontSize = 13.sp, 
                                             maxLines = 1,
@@ -354,30 +356,30 @@ fun SavingsVaultScreen(
                                     },
                                     supportingContent = {
                                         Text(
-                                            text = "${tx.walletName} • ${SimpleDateFormat("HH:mm", Locale("vi", "VN")).format(tx.timestamp)}",
+                                            text = "${tx.walletName}${if(tx.note.isNotBlank()) " • " + tx.note else ""} • ${SimpleDateFormat("HH:mm", Locale("vi", "VN")).format(tx.timestamp)}",
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                         )
                                     },
                                     leadingContent = {
                                         Icon(
-                                            imageVector = if (tx.type == "INCOME") Icons.Default.Add else Icons.Default.Remove,
+                                            imageVector = if (isIncome) Icons.Default.Add else Icons.Default.Remove,
                                             contentDescription = tx.type,
-                                            tint = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                            tint = statusColor
                                         )
                                     },
                                     trailingContent = {
                                         Text(
-                                            text = "${if (tx.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(tx.amount)}",
+                                            text = "${if (isIncome) "+" else "-"}${FormatHelper.formatVND(tx.amount)}",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 13.sp,
-                                            color = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                            color = statusColor
                                         )
                                     },
                                     modifier = Modifier
                                         .padding(vertical = 2.dp)
                                         .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                                        .border(1.dp, statusColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                                 )
                             }
                         }

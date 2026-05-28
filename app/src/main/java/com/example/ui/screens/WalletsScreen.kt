@@ -40,8 +40,10 @@ fun WalletsScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedWalletForTransactions by remember { mutableStateOf<Wallet?>(null) }
     var walletToDelete by remember { mutableStateOf<Wallet?>(null) }
+    var pinnedWalletId by remember { mutableStateOf<Int?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val focusedWalletId by viewModel.focusedWalletId.collectAsState()
 
     if (walletToDelete != null) {
         AlertDialog(
@@ -69,10 +71,20 @@ fun WalletsScreen(
         )
     }
 
-    // Select the first wallet by default if not set
-    LaunchedEffect(wallets) {
-        if (selectedWalletForTransactions == null && wallets.isNotEmpty()) {
+    // Select the focused wallet or first wallet by default
+    LaunchedEffect(wallets, focusedWalletId) {
+        if (focusedWalletId != null) {
+            val wallet = wallets.find { it.id == focusedWalletId }
+            if (wallet != null) {
+                selectedWalletForTransactions = wallet
+                pinnedWalletId = focusedWalletId
+            }
+            viewModel.setFocusedWalletId(null) // Consume
+        } else if (selectedWalletForTransactions == null && wallets.isNotEmpty()) {
             selectedWalletForTransactions = wallets.first()
+            pinnedWalletId = wallets.first().id
+        } else if (pinnedWalletId == null && selectedWalletForTransactions != null) {
+            pinnedWalletId = selectedWalletForTransactions?.id
         }
     }
 
@@ -129,6 +141,20 @@ fun WalletsScreen(
                     )
                 }
             } else {
+                val sortedWallets = remember(wallets, pinnedWalletId) {
+                    val pinnedId = pinnedWalletId
+                    if (pinnedId != null) {
+                        val pinnedWallet = wallets.find { it.id == pinnedId }
+                        if (pinnedWallet != null) {
+                            listOf(pinnedWallet) + wallets.filter { it.id != pinnedId }
+                        } else {
+                            wallets
+                        }
+                    } else {
+                        wallets
+                    }
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -136,7 +162,7 @@ fun WalletsScreen(
                         .padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    wallets.forEach { wallet ->
+                    sortedWallets.forEach { wallet ->
                         val isSelected = selectedWalletForTransactions?.id == wallet.id
                         WalletBigCard(
                             wallet = wallet,

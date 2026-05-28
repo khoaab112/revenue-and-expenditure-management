@@ -593,7 +593,12 @@ fun NavHostContainer(
         composable(Routes.DASHBOARD) {
             DashboardScreen(
                 viewModel = viewModel,
-                onNavigateToWallets = { navController.navigate(Routes.WALLETS) },
+                onNavigateToWallets = { wallet ->
+                    if (wallet != null) {
+                        viewModel.setFocusedWalletId(wallet.id)
+                    }
+                    navController.navigate(Routes.WALLETS)
+                },
                 onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
                 onNavigateToStats = { navController.navigate(Routes.STATS) },
                 onNavigateToBudget = { navController.navigate(Routes.BUDGET_GOAL) },
