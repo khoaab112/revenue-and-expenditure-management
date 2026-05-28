@@ -1372,18 +1372,14 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
                 // Application & Protection Settings
                 val settingsObj = org.json.JSONObject()
-                settingsObj.put("widgets_enabled", repository.getSetting("widgets_enabled")?.value ?: "false")
-                settingsObj.put("smart_wallet_mappings", repository.getSetting("smart_wallet_mappings")?.value ?: "[]")
-                settingsObj.put("notification_reader_enabled", repository.getSetting("notification_reader_enabled")?.value ?: "false")
-                settingsObj.put("pin_enabled", repository.getSetting("pin_enabled")?.value ?: "false")
-                settingsObj.put("pin_hash", repository.getSetting("pin_hash")?.value ?: "")
-                settingsObj.put("start_screen", repository.getSetting("start_screen")?.value ?: "add_transaction")
+                val allSettings = repository.getAllSettings()
+                allSettings.forEach { setting ->
+                    settingsObj.put(setting.key, setting.value)
+                }
                 
-                // Set the default backup category/notification logs values also in settings object for integrity
+                // Fallbacks if not present in DB but needed for legacy reasons
                 val categoriesSetting = repository.getSetting("custom_categories")?.value ?: ""
-                settingsObj.put("custom_categories", categoriesSetting)
                 val notificationLogsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
-                settingsObj.put("notification_logs", notificationLogsSetting)
                 
                 root.put("app_settings", settingsObj)
 
@@ -1823,32 +1819,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 val settingsObj = root.optJSONObject("app_settings")
                 if (settingsObj != null) {
                     addLog("Đang khôi phục cài đặt và cấu hình ứng dụng...")
-                    val widgetsEnabled = settingsObj.optString("widgets_enabled", "false")
-                    repository.saveSetting("widgets_enabled", widgetsEnabled)
-                    
-                    val smartWalletMappings = settingsObj.optString("smart_wallet_mappings", "[]")
-                    repository.saveSetting("smart_wallet_mappings", smartWalletMappings)
-                    
-                    val notificationReaderEnabled = settingsObj.optString("notification_reader_enabled", "false")
-                    repository.saveSetting("notification_reader_enabled", notificationReaderEnabled)
-                    
-                    val pinEnabled = settingsObj.optString("pin_enabled", "false")
-                    repository.saveSetting("pin_enabled", pinEnabled)
-                    
-                    val pinHash = settingsObj.optString("pin_hash", "")
-                    repository.saveSetting("pin_hash", pinHash)
-                    
-                    val startScreen = settingsObj.optString("start_screen", "add_transaction")
-                    repository.saveSetting("start_screen", startScreen)
-                    
-                    val customCategories = settingsObj.optString("custom_categories", "")
-                    if (customCategories.isNotEmpty()) {
-                        repository.saveSetting("custom_categories", customCategories)
-                    }
-                    
-                    val notificationLogsRestore = settingsObj.optString("notification_logs", "[]")
-                    if (notificationLogsRestore.isNotEmpty()) {
-                        repository.saveSetting("notification_logs", notificationLogsRestore)
+                    val keys = settingsObj.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val value = settingsObj.optString(key, "")
+                        if (value.isNotEmpty()) {
+                            repository.saveSetting(key, value)
+                        }
                     }
                 } else {
                     // Fallback to format v1

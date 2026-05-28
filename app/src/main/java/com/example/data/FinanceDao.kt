@@ -70,6 +70,9 @@ interface FinanceDao {
     suspend fun deleteSavingsGoal(goal: SavingsGoal)
 
     // ---- App Settings ----
+    @Query("SELECT * FROM settings")
+    suspend fun getAllSettings(): List<AppSetting>
+
     @Query("SELECT * FROM settings WHERE `key` = :key")
     suspend fun getSetting(key: String): AppSetting?
 

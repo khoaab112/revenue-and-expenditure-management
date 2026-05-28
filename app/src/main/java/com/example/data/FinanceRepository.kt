@@ -147,6 +147,7 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun deleteSavingsGoal(goal: SavingsGoal) = dao.deleteSavingsGoal(goal)
 
     // --- Settings ---
+    suspend fun getAllSettings(): List<AppSetting> = dao.getAllSettings()
     suspend fun getSetting(key: String): AppSetting? = dao.getSetting(key)
     fun observeSetting(key: String): Flow<AppSetting?> = dao.observeSetting(key)
     suspend fun saveSetting(key: String, value: String) {
