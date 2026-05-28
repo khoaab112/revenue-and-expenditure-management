@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.lazy.grid.items
 import com.example.data.Transaction
 import com.example.data.Wallet
 import com.example.ui.FinanceViewModel
@@ -248,12 +249,23 @@ fun DashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Tài khoản của tôi",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            Column {
+                Text(
+                    text = "Tài khoản của tôi",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                if (wallets.size > 4) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Vuốt ngang để xem thêm ví",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Text(
                 text = "Xem tất cả",
                 fontSize = 14.sp,
@@ -283,21 +295,23 @@ fun DashboardScreen(
                 )
             }
         } else {
-            val walletChunks = remember(wallets) { wallets.chunked(4) }
             val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-            val chunkWidth = remember(walletChunks.size, screenWidth) {
-                if (walletChunks.size > 1) screenWidth - 48.dp else screenWidth - 32.dp
-            }
+            val chunkWidth = if (wallets.size > 4) (screenWidth - 48.dp) / 2 else (screenWidth - 32.dp) / 2
 
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            androidx.compose.foundation.lazy.grid.LazyHorizontalGrid(
+                rows = androidx.compose.foundation.lazy.grid.GridCells.Fixed(if (wallets.size > 2) 2 else 1),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 0.dp),
-                modifier = Modifier.fillMaxWidth().testTag("dashboard_wallets_row")
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(if (wallets.size > 2) 228.dp else 110.dp) // Exact height: 110dp per card + 8dp spacing
+                    .testTag("dashboard_wallets_row")
             ) {
-                items(walletChunks) { chunk ->
-                    WalletChunkGrid(
-                        chunk = chunk,
-                        onWalletClick = onNavigateToWallets,
+                items(wallets) { wallet ->
+                    WalletMiniCard(
+                        wallet = wallet,
+                        onClick = onNavigateToWallets,
                         modifier = Modifier.width(chunkWidth)
                     )
                 }
@@ -1159,69 +1173,6 @@ fun RecentTransactionItem(
     }
 }
 
-@Composable
-fun WalletChunkGrid(
-    chunk: List<Wallet>,
-    onWalletClick: (Wallet) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Row 1 (Item 0 and Item 1)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (chunk.isNotEmpty()) {
-                WalletMiniCard(
-                    wallet = chunk[0],
-                    onClick = onWalletClick,
-                    modifier = Modifier.weight(1f)
-                )
-            } else {
-                Spacer(modifier = Modifier.weight(1f))
-            }
-
-            if (chunk.size > 1) {
-                WalletMiniCard(
-                    wallet = chunk[1],
-                    onClick = onWalletClick,
-                    modifier = Modifier.weight(1f)
-                )
-            } else {
-                Spacer(modifier = Modifier.weight(1f))
-            }
-        }
-
-        // Row 2 (Item 2 and Item 3)
-        if (chunk.size > 2) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                WalletMiniCard(
-                    wallet = chunk[2],
-                    onClick = onWalletClick,
-                    modifier = Modifier.weight(1f)
-                )
-
-                if (chunk.size > 3) {
-                    WalletMiniCard(
-                        wallet = chunk[3],
-                        onClick = onWalletClick,
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
 
 data class SmartSpendingInsight(
     val title: String,
