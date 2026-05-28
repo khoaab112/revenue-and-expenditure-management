@@ -57,6 +57,11 @@ fun BankNotificationHistoryScreen(
     val notificationReaderEnabled by viewModel.notificationReaderEnabled.collectAsState()
     val isServiceEnabled = remember(context) { isNotificationServiceEnabled(context) }
     var isPermitted by remember { mutableStateOf(isServiceEnabled) }
+    
+    val postNotificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        onResult = { /* No-op, just requesting is enough */ }
+    )
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -207,7 +212,16 @@ fun BankNotificationHistoryScreen(
 
                             Switch(
                                 checked = notificationReaderEnabled,
-                                onCheckedChange = { viewModel.setNotificationReaderEnabled(it) },
+                                onCheckedChange = { isChecked ->
+                                    viewModel.setNotificationReaderEnabled(isChecked)
+                                    if (isChecked) {
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                postNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                            }
+                                        }
+                                    }
+                                },
                                 modifier = Modifier.testTag("notification_reader_switch")
                             )
                         }

@@ -43,6 +43,9 @@ fun DashboardScreen(
     val wallets by viewModel.dailyWallets.collectAsState()
     val transactions by viewModel.dailyTransactions.collectAsState()
     val activeMonth by viewModel.activeMonth.collectAsState()
+    val savingsWallets by viewModel.savingsWallets.collectAsState()
+    val budgets by viewModel.allBudgets.collectAsState()
+    val savingsGoals by viewModel.allSavingsGoals.collectAsState()
 
     val totalBalance = wallets.sumOf { it.balance }
 
@@ -659,151 +662,256 @@ fun DashboardScreen(
                 }
 
                 // Insights section list
-                val computedInsights = remember(transactions, currentMonthTransactions, totalIncome, totalExpense) {
+                val computedInsights = remember(transactions, currentMonthTransactions, totalIncome, totalExpense, wallets, savingsWallets, budgets, savingsGoals) {
                     val insightsList = mutableListOf<SmartSpendingInsight>()
                     val exps = transactions.filter { it.type == "EXPENSE" }
                     
-                    if (exps.isEmpty()) {
-                        insightsList.add(
-                            SmartSpendingInsight(
-                                title = "Khởi tạo dữ liệu sinh trắc",
-                                description = "Gợi ý thông minh sẽ tự động học hỏi khi bạn có giao dịch chi tiêu.",
-                                icon = Icons.Default.Lightbulb,
-                                tint = Color(0xFFA0A0A0)
-                            )
-                        )
-                        return@remember insightsList
-                    }
-
                     val now = System.currentTimeMillis()
                     val MS_DAY = 24 * 60 * 60 * 1000L
-
-                    // 1. Difference trend
-                    val cWeek = exps.filter { now - it.timestamp <= 7 * MS_DAY }.sumOf { it.amount }
-                    val pWeek = exps.filter { 
-                        val diff = now - it.timestamp
-                        diff > 7 * MS_DAY && diff <= 14 * MS_DAY 
-                    }.sumOf { it.amount }
-
-                    if (pWeek > 0.0) {
-                        val diffPercent = ((cWeek - pWeek) / pWeek * 100).toInt()
-                        if (diffPercent < 0) {
+                    
+                    // --- 1. RISK ALERTS (Cảnh báo rủi ro) ---
+                    // Ví đang âm / sắp âm
+                    val lowestWallet = wallets.minByOrNull { it.balance }
+                    if (lowestWallet != null) {
+                        if (lowestWallet.balance <= 0.0) {
                             insightsList.add(
                                 SmartSpendingInsight(
-                                    title = "Xu hướng tuần này giảm tốt",
-                                    description = "Chi tiêu tuần này giảm ${-diffPercent}% so với tuần trước. Bạn tiết kiệm giỏi hơn!",
-                                    icon = Icons.Default.TrendingDown,
-                                    tint = Color(0xFF4CAF50),
-                                    score = 90
+                                    title = "Cảnh báo: Ví '${lowestWallet.name}' đang cạn kiệt",
+                                    description = "Số dư hiện tại là ${FormatHelper.formatVND(lowestWallet.balance)}. Cần nạp thêm tiền để duy trì chi tiêu thiết yếu.",
+                                    icon = Icons.Default.Warning,
+                                    tint = Color(0xFFF44336), 
+                                    score = 110 // Highest priority
                                 )
                             )
-                        } else if (diffPercent > 0) {
+                        } else if (lowestWallet.balance < 500000.0) {
                             insightsList.add(
                                 SmartSpendingInsight(
-                                    title = "Chi tiêu tăng so với tuần trước",
-                                    description = "Chi tiêu tuần này đã tăng ${diffPercent}% so với tuần trước. Hãy cân đối bớt thói quen tiêu vặt.",
-                                    icon = Icons.Default.TrendingUp,
-                                    tint = Color(0xFFF44336),
-                                    score = 85
+                                    title = "Lưu ý: Số dư '${lowestWallet.name}' ở mức thấp",
+                                    description = "Chỉ còn lại ${FormatHelper.formatVND(lowestWallet.balance)}. Hãy cẩn trọng với các khoản mua sắm tùy hứng nhé.",
+                                    icon = Icons.Default.Info,
+                                    tint = Color(0xFFFF9800),
+                                    score = 80
                                 )
                             )
                         }
                     }
 
-                    // 2. Daily hour habit detecting
-                    val hbMap = mutableMapOf<Pair<String, String>, MutableList<Transaction>>()
-                    val cl = Calendar.getInstance()
-                    exps.forEach { tx ->
-                        cl.timeInMillis = tx.timestamp
-                        val hr = cl.get(Calendar.HOUR_OF_DAY)
-                        val period = when {
-                            hr in 6..11 -> "buổi sáng (6h - 11h)"
-                            hr in 12..17 -> "buổi trưa chiều (12h - 17h)"
-                            hr in 18..22 -> "buổi tối (18h - 22h)"
-                            else -> "đêm muộn (23h - 5h)"
+                    // Vượt ngân sách
+                    budgets.forEach { bug ->
+                        val spent = currentMonthTransactions.filter { it.categoryName == bug.categoryName && it.type == "EXPENSE" }.sumOf { it.amount }
+                        if (bug.limitAmount > 0) {
+                            val ratio = spent / bug.limitAmount
+                            if (ratio >= 1.0) {
+                                insightsList.add(
+                                    SmartSpendingInsight(
+                                        title = "Đã vượt ngân sách '${bug.categoryName}'",
+                                        description = "Tháng này bạn đã dùng ${FormatHelper.formatVND(spent)}, vượt ${FormatHelper.formatVND(spent - bug.limitAmount)} so với hạn mức.",
+                                        icon = Icons.Default.Report,
+                                        tint = Color(0xFFD32F2F),
+                                        score = 105
+                                    )
+                                )
+                            } else if (ratio >= 0.8) {
+                                insightsList.add(
+                                    SmartSpendingInsight(
+                                        title = "Chạm ngưỡng ngân sách '${bug.categoryName}'",
+                                        description = "Đã tiêu ${(ratio * 100).toInt()}% hạn mức tháng. Giảm nhịp độ chi tiêu ngay thôi!",
+                                        icon = Icons.Default.AvTimer,
+                                        tint = Color(0xFFFF9800),
+                                        score = 90
+                                    )
+                                )
+                            }
                         }
-                        val pairKey = Pair(tx.categoryName, period)
-                        hbMap.getOrPut(pairKey) { mutableListOf() }.add(tx)
                     }
 
-                    val maxHabit = hbMap.entries.filter { it.value.size >= 2 }.maxByOrNull { it.value.size }
-                    if (maxHabit != null) {
-                        val meanVal = maxHabit.value.map { it.amount }.average()
-                        insightsList.add(
-                            SmartSpendingInsight(
-                                title = "Khung giờ chi tiêu nổi bật",
-                                description = "Bạn thường chi tiêu mức ${FormatHelper.formatVND(meanVal)} cho '${maxHabit.key.first}' vào ${maxHabit.key.second}.",
-                                icon = Icons.Default.Schedule,
-                                tint = Color(0xFF2196F3),
-                                score = 80
-                            )
-                        )
-                    }
-
-                    // 3. Subscription/Recurring Keyword mapping (e.g., Cafe, Highlands, Grab, Netflix)
-                    val specNotes = exps.filter { it.note.isNotBlank() }
-                        .groupBy { it.note.trim().lowercase() }
-                        .mapValues { it.value.size }
-
-                    val topNoteMatch = specNotes.entries.filter { it.value >= 2 }.maxByOrNull { it.value }
-                    if (topNoteMatch != null) {
-                        val item = exps.first { it.note.trim().lowercase() == topNoteMatch.key }
-                        insightsList.add(
-                            SmartSpendingInsight(
-                                title = "Hành vi lặp lại thường xuyên",
-                                description = "Ghi chú '${item.note}' được bạn thanh toán đều đặn lặp lại ${topNoteMatch.value} lần vừa qua.",
-                                icon = Icons.Default.Sync,
-                                tint = Color(0xFF9C27B0),
-                                score = 75
-                            )
-                        )
-                    }
-
-                    // 4. Monthly High Outlier
-                    val catSums = currentMonthTransactions.filter { it.type == "EXPENSE" }
-                        .groupBy { it.categoryName }
-                        .mapValues { it.value.sumOf { tx -> tx.amount } }
-
-                    val maxCat = catSums.maxByOrNull { it.value }
-                    if (maxCat != null && maxCat.value > 0) {
-                        insightsList.add(
-                            SmartSpendingInsight(
-                                title = "Hạng mục tiêu dùng lớn nhất",
-                                description = "Hạng mục '${maxCat.key}' đang tiêu tốn ngân sách lớn nhất tháng này (${FormatHelper.formatVND(maxCat.value)}).",
-                                icon = Icons.Default.PieChart,
-                                tint = Color(0xFFE91E63),
-                                score = 70
-                            )
-                        )
-                    }
-
-                    // 5. Total saving rates metrics
+                    // Cashflow alert
                     if (totalIncome > 0.0) {
                         val svRatio = (totalIncome - totalExpense) / totalIncome
-                        if (svRatio >= 0.2) {
+                        if (svRatio < 0.0) {
                             insightsList.add(
                                 SmartSpendingInsight(
-                                    title = "Tích lũy tài sản tốt",
-                                    description = "Dòng tiền dương! Bạn đã tiết kiệm thành công ${(svRatio * 100).toInt()}% thu nhập tháng này.",
+                                    title = "Dòng tiền tháng này đang âm!",
+                                    description = "Tốc độ chi tiêu đang vượt xa thu nhập. Hãy rà soát lại các khoản chi không cần thiết nhé.",
+                                    icon = Icons.Default.TrendingDown,
+                                    tint = Color(0xFFF44336),
+                                    score = 100
+                                )
+                            )
+                        } else if (svRatio >= 0.2) {
+                            insightsList.add(
+                                SmartSpendingInsight(
+                                    title = "Dòng tiền khỏe mạnh",
+                                    description = "Bạn đã giữ lại được ${(svRatio * 100).toInt()}% thu nhập tháng này.",
                                     icon = Icons.Default.ThumbUp,
                                     tint = Color(0xFF4CAF50),
                                     score = 95
                                 )
                             )
-                        } else if (svRatio < 0.0) {
+                        }
+                    } else if (totalExpense > 0.0) {
+                        insightsList.add(
+                            SmartSpendingInsight(
+                                title = "Chưa có nguồn thu trong tháng",
+                                description = "Bạn đã chi ${FormatHelper.formatVND(totalExpense)} ra nhưng chưa có khoản tiền vào.",
+                                icon = Icons.Default.TrendingDown,
+                                tint = Color(0xFFFF9800),
+                                score = 75
+                            )
+                        )
+                    }
+
+                    // --- 2. GOALS & TÍCH LŨY (Mục tiêu) ---
+                    val nearGoalvault = savingsGoals.find { 
+                        it.targetAmount > 0.0 && 
+                        (it.currentAmount / it.targetAmount) >= 0.8 && it.currentAmount < it.targetAmount 
+                    }
+                    if (nearGoalvault != null) {
+                        val remaining = nearGoalvault.targetAmount - nearGoalvault.currentAmount
+                        insightsList.add(
+                            SmartSpendingInsight(
+                                title = "Mục tiêu '${nearGoalvault.name}' sắp hoàn thành",
+                                description = "Tuyệt vời! Chỉ còn ${FormatHelper.formatVND(remaining)} nữa là bạn chạm đích. Tiếp tục phát huy!",
+                                icon = Icons.Default.EmojiEvents,
+                                tint = Color(0xFF4CAF50),
+                                score = 98
+                            )
+                        )
+                    }
+
+                    val completedVault = savingsGoals.find { it.targetAmount > 0.0 && it.currentAmount >= it.targetAmount }
+                    if (completedVault != null) {
+                        insightsList.add(
+                            SmartSpendingInsight(
+                                title = "Thành tựu: Đạt mục tiêu '${completedVault.name}'",
+                                description = "Chúc mừng! Bạn đã hoàn thành 100% mục tiêu tích lũy này.",
+                                icon = Icons.Default.Celebration,
+                                tint = Color(0xFF9C27B0),
+                                score = 85
+                            )
+                        )
+                    }
+
+                    // --- 3. PHÂN TÍCH HÀNH VI CHI TIÊU & XU HƯỚNG ---
+                    if (exps.isNotEmpty()) {
+                        // So sánh tuần này & trước
+                        val cWeek = exps.filter { now - it.timestamp <= 7 * MS_DAY }.sumOf { it.amount }
+                        val pWeek = exps.filter { 
+                            val diff = now - it.timestamp
+                            diff > 7 * MS_DAY && diff <= 14 * MS_DAY 
+                        }.sumOf { it.amount }
+
+                        if (pWeek > 0.0) {
+                            val diffPercent = ((cWeek - pWeek) / pWeek * 100).toInt()
+                            if (diffPercent < 0) {
+                                insightsList.add(
+                                    SmartSpendingInsight(
+                                        title = "Tiết chế chi tiêu tốt",
+                                        description = "Tuần này bạn tiêu ít hơn tuần trước ${-diffPercent}%. Rất đáng khen ngợi!",
+                                        icon = Icons.Default.TrendingDown,
+                                        tint = Color(0xFF4CAF50),
+                                        score = 90
+                                    )
+                                )
+                            } else if (diffPercent > 30) {
+                                insightsList.add(
+                                    SmartSpendingInsight(
+                                        title = "Chi tiêu tăng vọt bất thường",
+                                        description = "Tuần này chi phí của bạn tăng đột biến ${diffPercent}% so với tuần trước. Hãy kiểm tra lại lịch sử giao dịch.",
+                                        icon = Icons.Default.SsidChart,
+                                        tint = Color(0xFFE91E63),
+                                        score = 88
+                                    )
+                                )
+                            }
+                        }
+
+                        // Khoản chi định kỳ (Recurring bills)
+                        val specNotes = exps.filter { it.note.isNotBlank() && now - it.timestamp <= 30 * MS_DAY }
+                            .groupBy { it.note.trim().lowercase() }
+                            .mapValues { it.value.size }
+
+                        val topNoteMatch = specNotes.entries.filter { it.value >= 3 }.maxByOrNull { it.value }
+                        if (topNoteMatch != null) {
+                            val item = exps.first { it.note.trim().lowercase() == topNoteMatch.key }
                             insightsList.add(
                                 SmartSpendingInsight(
-                                    title = "Báo động dòng tiền âm",
-                                    description = "Tổng chi tiêu vượt quá mức thu nhập trong tháng. Vui lòng dừng mua sắm bất chợt để tránh thâm hụt tài chính.",
-                                    icon = Icons.Default.Warning,
-                                    tint = Color(0xFFF44336),
-                                    score = 100
+                                    title = "Phát hiện khoản chi lặp lại",
+                                    description = "Giao dịch '${item.note}' xuất hiện thường xuyên. Hãy chắc chắn bạn đã chuẩn bị đủ số dư cho các kỳ tiếp theo.",
+                                    icon = Icons.Default.Sync,
+                                    tint = Color(0xFF2196F3),
+                                    score = 75
                                 )
                             )
                         }
+                    } else {
+                        insightsList.add(
+                            SmartSpendingInsight(
+                                title = "Khởi tạo dữ liệu sinh trắc",
+                                description = "Thêm các khoản chi tiêu để AI học hỏi và đưa ra những gợi ý phù hợp nhất.",
+                                icon = Icons.Default.Lightbulb,
+                                tint = Color(0xFFA0A0A0)
+                            )
+                        )
                     }
 
                     insightsList.sortedByDescending { it.score }.take(3)
+                }
+
+                // Financial Health Score UI
+                val healthScore = remember(totalIncome, totalExpense, savingsWallets, budgets, savingsGoals) {
+                    var score = 100
+                    
+                    if (totalIncome > 0) {
+                        val svRatio = (totalIncome - totalExpense) / totalIncome
+                        if (svRatio < 0) score -= 30
+                        else if (svRatio < 0.1) score -= 15
+                    } else if (totalExpense > 0) {
+                        score -= 20
+                    }
+
+                    budgets.forEach { b ->
+                        val sp = currentMonthTransactions.filter { it.categoryName == b.categoryName && it.type == "EXPENSE" }.sumOf { it.amount }
+                        if (b.limitAmount > 0 && sp > b.limitAmount) score -= 10
+                    }
+                    
+                    wallets.forEach { 
+                        if (it.balance < 0) score -= 20 
+                    }
+                    
+                    if (savingsWallets.isNotEmpty()) score += 10
+                    
+                    score.coerceIn(0, 100)
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Điểm Sức Khỏe Tài Chính", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = when(healthScore) {
+                                in 85..100 -> "Xuất sắc! Mood: Tự hào 🌟"
+                                in 65..84 -> "Tốt! Mood: Thoải mái 😊"
+                                in 40..64 -> "Trung bình. Mood: Cần chú ý 🤔"
+                                else -> "Báo động! Mood: Căng thẳng 😰"
+                            }, 
+                            fontSize = 11.sp, 
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "$healthScore",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black,
+                        color = when {
+                            healthScore >= 80 -> Color(0xFF4CAF50)
+                            healthScore >= 50 -> Color(0xFFFF9800)
+                            else -> Color(0xFFF44336)
+                        }
+                    )
                 }
 
                 computedInsights.forEachIndexed { idx, ins ->

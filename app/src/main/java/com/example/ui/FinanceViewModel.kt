@@ -105,6 +105,17 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isAppUnlocked = MutableStateFlow(false)
     val isAppUnlocked: StateFlow<Boolean> = _isAppUnlocked.asStateFlow()
 
+    private val _openBankNotificationsEvent = MutableStateFlow(false)
+    val openBankNotificationsEvent: StateFlow<Boolean> = _openBankNotificationsEvent.asStateFlow()
+
+    fun triggerOpenBankNotifications() {
+        _openBankNotificationsEvent.value = true
+    }
+
+    fun consumeOpenBankNotificationsEvent() {
+        _openBankNotificationsEvent.value = false
+    }
+
     private val _isLoadingSettings = MutableStateFlow(true)
     val isLoadingSettings: StateFlow<Boolean> = _isLoadingSettings.asStateFlow()
 
@@ -208,6 +219,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             loadSecuritySettings()
             loadNotificationSettings()
             processRecurringTransactions()
+            processRecurringBudgets()
             _isLoadingSettings.value = false
         }
     }
@@ -426,9 +438,16 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     ) {
         viewModelScope.launch {
             try {
-                val serviceInstance = com.example.service.BankNotificationListenerService.instance
+                var serviceInstance = com.example.service.BankNotificationListenerService.instance
                 if (serviceInstance == null) {
-                    onError("Dịch vụ đọc thông báo chưa hoạt động. Hãy chắc chắn rằng bạn đã cấp quyền truy cập thông báo trong cài đặt hệ thống.")
+                    // Try to rebind service specifically for aggresive battery managers (like Xiaomi HyperOS)
+                    com.example.service.BankNotificationListenerService.requestRebindService(context)
+                    kotlinx.coroutines.delay(1500) // Wait up to 1.5s for service to bind
+                    serviceInstance = com.example.service.BankNotificationListenerService.instance
+                }
+
+                if (serviceInstance == null) {
+                    onError("Dịch vụ đọc thông báo chưa hoạt động. Hãy chắc chắn rằng bạn đã cấp quyền hoặc vui lòng khởi động lại dịch vụ bằng cách tắt/bật lại quyền.")
                     return@launch
                 }
 
@@ -944,6 +963,46 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    // --- RECURRING BUDGETS ENGINE ---
+    private suspend fun processRecurringBudgets() {
+        val allBud = repository.getAllBudgets().firstOrNull() ?: return
+        val currentMonth = _activeMonth.value
+        val recurringBudgets = allBud.filter { it.isRecurring }
+        
+        // Find latest month
+        val latestMonth = allBud.maxByOrNull { it.month }?.month ?: currentMonth
+        
+        // Let's create budgets for the *next* month if it's the 1st of the month or something?
+        // Actually, let's just create if it is currently after the month of the budget. 
+        // No, that's not quite right.
+        // If a budget for 2026-05 exists and it's 2026-06, we should create 2026-06.
+        val nextMonth = getNextMonth(currentMonth)
+        
+        for (budget in recurringBudgets) {
+            // Check if budget exists for the month following budget.month
+            val budgetMonth = budget.month
+            val nextBudgetMonth = getNextMonth(budgetMonth)
+            
+            if (allBud.none { it.categoryName == budget.categoryName && it.month == nextBudgetMonth }) {
+                // Create
+                addBudget(budget.categoryName, budget.limitAmount, nextBudgetMonth, true)
+            }
+        }
+    }
+
+    private fun getNextMonth(month: String): String {
+        // month format: YYYY-MM
+        val parts = month.split("-")
+        var y = parts[0].toInt()
+        var m = parts[1].toInt()
+        m++
+        if (m > 12) {
+            m = 1
+            y++
+        }
+        return String.format("%04d-%02d", y, m)
+    }
+
     // --- RECURRING TRANSACTIONS ENGINE ---
     private suspend fun processRecurringTransactions() {
         // Find existing recurring transactions and check if duplicate is due
@@ -1120,7 +1179,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // --- BUDGETS SERVICES ---
-    fun addBudget(categoryName: String, limitAmount: Double, month: String) {
+    fun toggleBudgetRecurring(budget: Budget) {
+        viewModelScope.launch {
+            repository.updateBudget(budget.copy(isRecurring = !budget.isRecurring))
+        }
+    }
+
+    fun addBudget(categoryName: String, limitAmount: Double, month: String, isRecurring: Boolean = false) {
         viewModelScope.launch {
             val cat = getCategoryByName(categoryName)
             
@@ -1137,7 +1202,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     categoryColor = cat.colorHex,
                     limitAmount = limitAmount,
                     spentAmount = spent,
-                    month = month
+                    month = month,
+                    isRecurring = isRecurring
                 )
             )
         }
@@ -1405,6 +1471,29 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 
                 // Dọn dẹp các bản sao lưu cũ trong thư mục Public Downloads
                 withContext(Dispatchers.IO) {
+                    // CÁCH 1: Dọn dẹp mạnh mẽ qua File API (Hỗ trợ tốt trên Android 11+ và Android cũ)
+                    try {
+                        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                        val subDir = java.io.File(downloadsDir, "SoChiTieuBackups")
+                        if (subDir.exists()) {
+                            val publicBackupFiles = subDir.listFiles { _, name -> name.endsWith(".json") }
+                            if (publicBackupFiles != null && publicBackupFiles.size > 3) {
+                                val sortedPublicFiles = publicBackupFiles.sortedByDescending { it.lastModified() }
+                                for (i in 3 until sortedPublicFiles.size) {
+                                    try {
+                                        val deleted = sortedPublicFiles[i].delete()
+                                        if (deleted) addLog("🗑️ Đã xóa file public cũ: ${sortedPublicFiles[i].name}")
+                                    } catch (e: Exception) {
+                                        // Ghi nhận nhưng tiếp tục
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        addLog("Cảnh báo: Dọn file bằng File API lỗi: ${e.message}")
+                    }
+
+                    // CÁCH 2: Dọn dẹp Database MediaStore cho đồng bộ (Android 10+)
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                         try {
                             val resolver = context.contentResolver
@@ -1413,8 +1502,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                                 android.provider.MediaStore.MediaColumns._ID,
                                 android.provider.MediaStore.MediaColumns.DATE_MODIFIED
                             )
-                            val selection = "${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
-                            val selectionArgs = arrayOf("%SoChiTieuBackups%")
+                            val selection = "${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+                            val selectionArgs = arrayOf("%SoChiTieuBackups%", "%.json")
                             
                             resolver.query(collection, projection, selection, selectionArgs, "${android.provider.MediaStore.MediaColumns.DATE_MODIFIED} DESC")?.use { cursor ->
                                 val idColumn = cursor.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns._ID)
@@ -1426,7 +1515,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                                         val uri = android.content.ContentUris.withAppendedId(collection, id)
                                         try {
                                             val deleted = resolver.delete(uri, null, null)
-                                            if (deleted > 0) addLog("🗑️ Đã dọn file public cũ.")
+                                            if (deleted > 0) addLog("🗑️ Đã dọn entry public cũ trong MediaStore.")
                                         } catch (e: Exception) {
                                             // Ignored
                                         }
@@ -1434,28 +1523,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                                 }
                             }
                         } catch (e: Exception) {
-                            addLog("⚠️ Cảnh báo: Không thể dọn dẹp file public cũ (Android 10+).")
-                        }
-                    } else {
-                        try {
-                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                            val subDir = java.io.File(downloadsDir, "SoChiTieuBackups")
-                            if (subDir.exists()) {
-                                val publicBackupFiles = subDir.listFiles { _, name -> name.endsWith(".json") }
-                                if (publicBackupFiles != null && publicBackupFiles.size > 3) {
-                                    val sortedPublicFiles = publicBackupFiles.sortedByDescending { it.lastModified() }
-                                    for (i in 3 until sortedPublicFiles.size) {
-                                        try {
-                                            val deleted = sortedPublicFiles[i].delete()
-                                            if (deleted) addLog("🗑️ Đã dọn file public cũ.")
-                                        } catch (e: Exception) {
-                                            // Ignored
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            addLog("⚠️ Cảnh báo: Không thể dọn dẹp file public cũ do thiếu quyền hệ thống.")
+                            addLog("⚠️ Cảnh báo: Không thể dọn dẹp entry MediaStore cũ.")
                         }
                     }
                 }

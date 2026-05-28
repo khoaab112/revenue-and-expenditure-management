@@ -38,7 +38,8 @@ data class Budget(
     val categoryColor: String,
     val limitAmount: Double,
     val spentAmount: Double = 0.0,
-    val month: String // Format: "YYYY-MM"
+    val month: String, // Format: "YYYY-MM"
+    val isRecurring: Boolean = false
 )
 
 @Entity(tableName = "savings_goals")

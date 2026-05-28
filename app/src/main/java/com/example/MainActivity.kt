@@ -52,10 +52,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val openBankNotifications = intent?.getBooleanExtra("OPEN_BANK_NOTIFICATIONS", false) ?: false
         setContent {
             MyApplicationTheme {
-                MainContent(viewModel = viewModel)
+                MainContent(viewModel = viewModel, forceStartWithBankNotifications = openBankNotifications)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Note: Full recomposition will happen if we pass state, but this simple approach is fine
+        // if the app is heavily recreated or we just rely on the new intent firing onCreate mostly.
+        // Actually to handle onNewIntent reliably during foreground, we can just send an event to viewModel.
+        if (intent.getBooleanExtra("OPEN_BANK_NOTIFICATIONS", false)) {
+            viewModel.triggerOpenBankNotifications()
         }
     }
 
@@ -69,12 +81,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainContent(
     viewModel: FinanceViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    forceStartWithBankNotifications: Boolean = false
 ) {
     val navController = rememberNavController()
     val isAppUnlocked by viewModel.isAppUnlocked.collectAsState()
     val isLoadingSettings by viewModel.isLoadingSettings.collectAsState()
     val startScreen by viewModel.startScreen.collectAsState()
+    
+    val openBankNotificationsEvent by viewModel.openBankNotificationsEvent.collectAsState()
 
     // Observe active routes
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -82,6 +97,24 @@ fun MainContent(
 
     // Keep track of the last primary route to keep bottom bar item selected even when in "add_transaction"
     var lastPrimaryRoute by remember(startScreen) { mutableStateOf(startScreen) }
+
+    LaunchedEffect(isAppUnlocked) {
+        if (isAppUnlocked && forceStartWithBankNotifications) {
+            navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) {
+                launchSingleTop = true
+            }
+        }
+    }
+
+    LaunchedEffect(openBankNotificationsEvent, isAppUnlocked) {
+        if (openBankNotificationsEvent && isAppUnlocked) {
+            navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) {
+                launchSingleTop = true
+            }
+            viewModel.consumeOpenBankNotificationsEvent()
+        }
+    }
+
     LaunchedEffect(currentRoute) {
         val baseRoute = currentRoute.substringBefore("?")
         if (baseRoute in listOf(Routes.DASHBOARD, Routes.HISTORY, Routes.BUDGET_GOAL, Routes.SAVINGS_VAULT, Routes.STATS, Routes.SETTINGS, Routes.BANK_NOTIFICATION_HISTORY)) {
@@ -107,6 +140,14 @@ fun MainContent(
             if (!isPermitted) {
                 showPermissionErrorPopup = true
             } else {
+                // If it's permitted but the service is dead (e.g., killed by Xiaomi HyperOS),
+                // request a rebind.
+                if (com.example.service.BankNotificationListenerService.instance == null) {
+                    com.example.service.BankNotificationListenerService.requestRebindService(context)
+                    // Wait a bit for it to bind before trying to scan
+                    kotlinx.coroutines.delay(1000)
+                }
+
                 viewModel.scanNotificationsManual(
                     context = context,
                     onSuccess = { count ->
@@ -570,11 +611,17 @@ fun NavHostContainer(
         }
 
         composable(Routes.STATS) {
-            ReportsScreen(viewModel = viewModel)
+            ReportsScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.BUDGET_GOAL) {
-            BudgetGoalScreen(viewModel = viewModel)
+            BudgetGoalScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.SAVINGS_VAULT) {

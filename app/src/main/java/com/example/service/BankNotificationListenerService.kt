@@ -36,6 +36,39 @@ class BankNotificationListenerService : NotificationListenerService() {
         @Volatile
         var instance: BankNotificationListenerService? = null
             private set
+
+        /**
+         * Re-bind the service. Some device's aggressive battery managers (like Xiaomi HyperOS)
+         * kill the service and never restart it. Toggling the component enabled state
+         * forces the OS to rebind.
+         */
+        fun requestRebindService(context: android.content.Context) {
+            val componentName = android.content.ComponentName(context, BankNotificationListenerService::class.java)
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    android.service.notification.NotificationListenerService.requestRebind(componentName)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            
+            // Fallback for MIUI/HyperOS/battery savers
+            try {
+                val pm = context.packageManager
+                pm.setComponentEnabledSetting(
+                    componentName,
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP
+                )
+                pm.setComponentEnabledSetting(
+                    componentName,
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -81,13 +114,63 @@ class BankNotificationListenerService : NotificationListenerService() {
                 // 4. Save as PENDING so that user can review and confirm with complete certainty
                 saveLog(repository, title, text, parsed, "PENDING", walletNameInput)
 
+                // 5. Fire system notification
+                sendLocalNotification(context, parsed.amount, parsed.type)
+
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
 
-    private fun selectCategory(type: String, note: String): String {
+    private fun sendLocalNotification(context: android.content.Context, amount: Double, type: String) {
+    val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+    val channelId = "bank_sync_channel"
+    
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        val channel = android.app.NotificationChannel(
+            channelId,
+            "Thông báo giao dịch tự động",
+            android.app.NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "Thông báo khi ứng dụng quét được thông báo ngân hàng mới"
+        }
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    val amountStr = com.example.ui.FormatHelper.formatVND(amount)
+    val prefix = if (type == "EXPENSE") "-" else "+"
+    val contentText = "Nhận được 1 giao dịch $prefix$amountStr"
+
+    val intent = android.content.Intent(context, com.example.MainActivity::class.java).apply {
+        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+        putExtra("OPEN_BANK_NOTIFICATIONS", true)
+    }
+    val pendingIntent = android.app.PendingIntent.getActivity(
+        context,
+        0,
+        intent,
+        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val builder = android.app.Notification.Builder(context, channelId)
+        .setSmallIcon(android.R.drawable.ic_dialog_info) // Fallback icon
+        .setContentTitle("Ví của tôi")
+        .setContentText(contentText)
+        .setAutoCancel(true)
+        .setContentIntent(pendingIntent)
+
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        // Build is handled above
+    } else {
+        @Suppress("DEPRECATION")
+        builder.setPriority(android.app.Notification.PRIORITY_DEFAULT)
+    }
+
+    notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
+}
+
+private fun selectCategory(type: String, note: String): String {
         val lowerNote = note.lowercase()
         if (type == "INCOME") {
             return when {
