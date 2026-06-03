@@ -8,17 +8,33 @@ import java.util.Locale
 
 object FormatHelper {
     private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN"))
+    private val timeFormatter = SimpleDateFormat("HH:mm", Locale("vi", "VN"))
+
+    private val vndSymbols = DecimalFormatSymbols(Locale("vi", "VN")).apply {
+        groupingSeparator = '.'
+        decimalSeparator = ','
+    }
+    private val vndFormatter = DecimalFormat("#,###", vndSymbols)
 
     fun formatVND(amount: Double): String {
-        val symbols = DecimalFormatSymbols(Locale("vi", "VN")).apply {
-            groupingSeparator = '.'
-            decimalSeparator = ','
-        }
-        val formatter = DecimalFormat("#,###", symbols)
         return try {
-            "${formatter.format(amount)} ₫"
+            val formatted = synchronized(vndFormatter) {
+                vndFormatter.format(amount)
+            }
+            "$formatted ₫"
         } catch (e: Exception) {
             "${String.format("%.0f", amount)} ₫"
+        }
+    }
+
+    fun formatTime(timestamp: Long): String {
+        return try {
+            synchronized(timeFormatter) {
+                timeFormatter.format(timestamp)
+            }
+        } catch (e: Exception) {
+            val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+            String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
         }
     }
 
@@ -26,13 +42,10 @@ object FormatHelper {
         val clean = input.filter { it.isDigit() }
         if (clean.isEmpty()) return ""
         val parsed = clean.toDoubleOrNull() ?: 0.0
-        val symbols = DecimalFormatSymbols(Locale("vi", "VN")).apply {
-            groupingSeparator = '.'
-            decimalSeparator = ','
-        }
-        val formatter = DecimalFormat("#,###", symbols)
         return try {
-            formatter.format(parsed)
+            synchronized(vndFormatter) {
+                vndFormatter.format(parsed)
+            }
         } catch (e: Exception) {
             clean
         }
@@ -119,7 +132,9 @@ object FormatHelper {
 
     fun formatDate(timestamp: Long): String {
         return try {
-            dateFormatter.format(timestamp)
+            synchronized(dateFormatter) {
+                dateFormatter.format(timestamp)
+            }
         } catch (e: Exception) {
             val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
             String.format("%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))

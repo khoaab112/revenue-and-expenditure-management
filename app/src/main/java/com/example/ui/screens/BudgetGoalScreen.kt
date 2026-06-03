@@ -31,6 +31,7 @@ import com.example.data.SavingsGoal
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
 import com.example.ui.IconMapper
+import com.example.ui.components.StripedProgressIndicator
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
@@ -168,7 +169,7 @@ fun BudgetsSection(
                 onAddBudget = { category, limit, isRecurring ->
                     viewModel.addBudget(category, limit, activeMonth, isRecurring)
                     showAddDialog = false
-                    android.widget.Toast.makeText(context, "Thêm ngân sách thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                    viewModel.showSuccessNotification("Thêm ngân sách thành công!")
                 }
             )
         }
@@ -183,7 +184,7 @@ fun BudgetsSection(
                         onClick = {
                             viewModel.deleteBudget(budget)
                             budgetToDelete = null
-                            android.widget.Toast.makeText(context, "Xóa ngân sách thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                            viewModel.showSuccessNotification("Xóa ngân sách thành công!")
                         }
                     ) {
                         Text("Xóa", color = Color.Red)
@@ -208,14 +209,14 @@ fun BudgetItemCard(
 ) {
     val ratio = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat() else 0f
     
+    val catColor = FormatHelper.parseColor(budget.categoryColor)
+
     // Choose progress color depending on danger ratios
     val progressColor = when {
         ratio >= 1.0f -> Color(0xFFF44336) // Red (overspent)
         ratio >= 0.8f -> Color(0xFFFF9800) // Orange (danger)
-        else -> Color(0xFF4CAF50) // Green
+        else -> catColor // Category color
     }
-
-    val catColor = FormatHelper.parseColor(budget.categoryColor)
 
     Card(
         modifier = modifier.fillMaxWidth().testTag("budget_card_${budget.id}"),
@@ -295,7 +296,7 @@ fun BudgetItemCard(
 
             // Progress Indicator
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                LinearProgressIndicator(
+                StripedProgressIndicator(
                     progress = ratio.coerceIn(0f, 1f),
                     color = progressColor,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,

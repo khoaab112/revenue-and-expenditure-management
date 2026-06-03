@@ -28,6 +28,7 @@ import com.example.data.Wallet
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
 import com.example.ui.IconMapper
+import com.example.ui.components.StripedProgressIndicator
 import java.util.Calendar
 
 @Composable
@@ -46,6 +47,10 @@ fun DashboardScreen(
     val activeMonth by viewModel.activeMonth.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
     val budgets by viewModel.allBudgets.collectAsState()
+    
+    val currentMonthBudgets = remember(budgets, activeMonth) {
+        budgets.filter { it.month == activeMonth }
+    }
     val savingsGoals by viewModel.allSavingsGoals.collectAsState()
 
     val totalBalance = wallets.sumOf { it.balance }
@@ -318,79 +323,108 @@ fun DashboardScreen(
             }
         }
 
-        // --- Visual Gauge Visual Component ---
-        Card(
-            modifier = Modifier.fillMaxWidth().testTag("stats_donut_card"),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(
+            // --- Visual Gauge Visual Component ---
+            Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-                    .clickable { onNavigateToStats() },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .weight(1f)
+                    .clickable { onNavigateToStats() }
+                    .testTag("stats_donut_card"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
-                // Circular Spend Gauge using Canvas
-                val expenseRatio = remember(totalIncome, totalExpense) {
-                    if (totalIncome > 0) (totalExpense / totalIncome).coerceIn(0.0, 1.0).toFloat()
-                    else if (totalExpense > 0) 1f
-                    else 0f
-                }
-
-                Box(
-                    modifier = Modifier.size(72.dp),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    val strokeColor = MaterialTheme.colorScheme.error
+                    val expenseRatio = remember(totalIncome, totalExpense) {
+                        if (totalIncome > 0) (totalExpense / totalIncome).coerceIn(0.0, 1.0).toFloat()
+                        else if (totalExpense > 0) 1f
+                        else 0f
+                    }
 
-                    Canvas(modifier = Modifier.size(60.dp)) {
-                        drawArc(
-                            color = trackColor,
-                            startAngle = 0f,
-                            sweepAngle = 360f,
-                            useCenter = false,
-                            style = Stroke(width = 16f)
-                        )
-                        drawArc(
-                            color = strokeColor,
-                            startAngle = -90f,
-                            sweepAngle = expenseRatio * 360f,
-                            useCenter = false,
-                            style = Stroke(width = 16f)
+                    Box(
+                        modifier = Modifier.size(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        val strokeColor = MaterialTheme.colorScheme.error
+
+                        Canvas(modifier = Modifier.size(36.dp)) {
+                            drawArc(
+                                color = trackColor,
+                                startAngle = 0f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                style = Stroke(width = 8f)
+                            )
+                            drawArc(
+                                color = strokeColor,
+                                startAngle = -90f,
+                                sweepAngle = expenseRatio * 360f,
+                                useCenter = false,
+                                style = Stroke(width = 8f)
+                            )
+                        }
+                        Text(
+                            text = "${(expenseRatio * 100).toInt()}%",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    Text(
-                        text = "${(expenseRatio * 100).toInt()}%",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
 
-                Column(modifier = Modifier.weight(1f)) {
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Tỷ lệ chi tiêu tháng này",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Bạn đã chi tiêu ${((expenseRatio) * 100).toInt()}% trong tổng số thu nhập tháng này.",
+                        text = "Tỷ lệ\nchi tiêu",
                         fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 16.sp
                     )
                 }
+            }
 
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "View details",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // --- Kho Tiết Kiệm Component ---
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onNavigateToSavings() }
+                    .testTag("dashboard_savings_vault_card"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.tertiaryContainer, shape = CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalance,
+                            contentDescription = "Kho tiết kiệm",
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Kho\ntiết kiệm",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 16.sp
+                    )
+                }
             }
         }
 
@@ -401,98 +435,87 @@ fun DashboardScreen(
                 .clickable { onNavigateToBudget() }
                 .testTag("dashboard_budget_shortcut_card"),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Savings,
+                                contentDescription = "Budget",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Hạn mức chi tiêu",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     Icon(
-                        imageVector = Icons.Default.Savings,
-                        contentDescription = "Budget",
-                        tint = MaterialTheme.colorScheme.primary
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Detail",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Hạn mức chi tiêu",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Đặt giới hạn chi tiêu và theo dõi mức chi dùng hàng tháng.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Detail",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
 
-        // --- Kho Tiết Kiệm (Savings goals) Component ---
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onNavigateToSavings() }
-                .testTag("dashboard_savings_vault_card"),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(MaterialTheme.colorScheme.tertiaryContainer, shape = CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountBalance,
-                        contentDescription = "Kho tiết kiệm",
-                        tint = MaterialTheme.colorScheme.tertiary
-                    )
+                if (currentMonthBudgets.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        currentMonthBudgets.take(3).forEach { budget ->
+                            val progress = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat().coerceIn(0f, 1f) else 0f
+                            val isExceeded = budget.spentAmount >= budget.limitAmount
+                            val progressColor = if (isExceeded) MaterialTheme.colorScheme.error else FormatHelper.parseColor(budget.categoryColor)
+
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = budget.categoryName,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${FormatHelper.formatVND(budget.spentAmount)} / ${FormatHelper.formatVND(budget.limitAmount)}",
+                                        fontSize = 11.sp,
+                                        color = if (isExceeded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                StripedProgressIndicator(
+                                    progress = progress,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = progressColor,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Kho tiết kiệm",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Theo dõi và tích lũy để đạt được các mục tiêu tài chính.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Detail",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
 
@@ -974,62 +997,6 @@ fun DashboardScreen(
             }
         }
 
-        // --- Recent Transactions ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Giao dịch gần đây",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "Toàn bộ",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .clickable { onNavigateToHistory() }
-                    .testTag("view_all_transactions_button")
-            )
-        }
-
-        if (transactions.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.CompareArrows,
-                        contentDescription = "Empty",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Chưa có giao dịch nào được nhập",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        } else {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth().testTag("dashboard_recent_transactions")
-            ) {
-                transactions.take(5).forEach { tx ->
-                    RecentTransactionItem(tx = tx)
-                }
-            }
-        }
-        
         Spacer(modifier = Modifier.height(24.dp))
     }
 }
@@ -1101,78 +1068,6 @@ fun WalletMiniCard(
         }
     }
 }
-
-@Composable
-fun RecentTransactionItem(
-    tx: Transaction,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(FormatHelper.parseColor(tx.categoryColor)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = IconMapper.getIconByName(tx.categoryIcon),
-                contentDescription = tx.categoryName,
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = tx.categoryName,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = if (tx.note.isNotBlank()) "${tx.walletName} - ${tx.note}" else tx.walletName,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = if (tx.type == "EXPENSE") "-${FormatHelper.formatVND(tx.amount)}"
-                       else "+${FormatHelper.formatVND(tx.amount)}",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (tx.type == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "${FormatHelper.formatDate(tx.timestamp)} ${java.text.SimpleDateFormat("HH:mm", java.util.Locale("vi", "VN")).format(tx.timestamp)}",
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
 
 data class SmartSpendingInsight(
     val title: String,

@@ -77,6 +77,12 @@ class BankNotificationListenerService : NotificationListenerService() {
 
         val context = applicationContext
         val packageName = sbn.packageName ?: ""
+        
+        // Ignore notifications posted by our own app to prevent infinite loops
+        if (packageName == context.packageName) {
+            return
+        }
+        
         val extras = sbn.notification?.extras ?: return
         val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
@@ -97,8 +103,6 @@ class BankNotificationListenerService : NotificationListenerService() {
                 // 2. Parse the notification
                 val parsed = NotificationParser.parse(title, text, packageName)
                 if (!parsed.success) {
-                    // Log failed parsing is also good for diagnostic/history purposes
-                    saveLog(repository, title, text, parsed, "FAILED_PARSE", null)
                     return@launch
                 }
 

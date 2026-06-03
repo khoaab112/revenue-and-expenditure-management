@@ -36,6 +36,8 @@ import com.example.ui.NotificationLog
 import com.example.ui.IconMapper
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,14 +78,7 @@ fun BankNotificationHistoryScreen(
         }
     }
 
-    // Section collapsing states
-    var showSimulationPanel by remember { mutableStateOf(false) }
     var showHistoryPanel by remember { mutableStateOf(true) }
-
-    // Simulation inputs state
-    var simTitle by remember { mutableStateOf("Vietcombank") }
-    var simText by remember { mutableStateOf("TK 1012938475 +5,000,000 VND luc 14:32. ND: Chuyen khoan luong thang 5") }
-    var simPackage by remember { mutableStateOf("com.vietcombank.card") }
 
     // Active expanded pending log timestamp tracker
     var expandedPendingTimestamp by remember { mutableStateOf<Long?>(null) }
@@ -93,6 +88,9 @@ fun BankNotificationHistoryScreen(
     var bulkSelectedWalletId by remember { mutableStateOf<Int?>(null) }
 
     var activeTab by remember { mutableStateOf(0) }
+    
+    var isCheckingNotifications by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     // Partition logs
     val pendingLogs = remember(notificationLogs) {
@@ -263,7 +261,7 @@ fun BankNotificationHistoryScreen(
                                                 val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
                                                 context.startActivity(intent)
                                             } catch (e: Exception) {
-                                                android.widget.Toast.makeText(context, "Không thể mở cài đặt", android.widget.Toast.LENGTH_SHORT).show()
+                                                viewModel.showErrorNotification("Không thể mở cài đặt")
                                             }
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -302,111 +300,33 @@ fun BankNotificationHistoryScreen(
                             }
                         }
 
-                        // Simulator Section
-                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                        
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showSimulationPanel = !showSimulationPanel }
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.BugReport,
-                                    contentDescription = "Simulate icon",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    text = "MÔ PHỎNG THÔNG BÁO THỬ NGHIỆM",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Icon(
-                                imageVector = if (showSimulationPanel) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = "Toggle Simulation",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        if (showSimulationPanel) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                val presets = listOf(
-                                    Triple("Vietcombank", "Vietcombank SD TK 0451 thay doi +500,000 VND luc 12:30. GD: Chuyen khoan luong thang 5", "com.vietcombank.restyle"),
-                                    Triple("Techcombank", "Techcombank: TK 1903 bien dong -150,000 VND. Noi dung: Mua tra sua HighTea", "vn.com.techcombank"),
-                                    Triple("MoMo", "Ban da thanh toan thanh cong so tien -50,000 d cho dich vu GrabFood qua vi MoMo", "com.mservice.momo"),
-                                    Triple("MB Bank", "MB_BANK: GD +200,000 VND luc 15:40. ND: Tien mung sinh nhat", "com.mbmobile")
-                                )
-                                presets.forEach { (bankName, presetText, pkg) ->
-                                    FilterChip(
-                                        selected = simTitle == bankName,
-                                        onClick = {
-                                            simTitle = bankName
-                                            simText = presetText
-                                            simPackage = pkg
-                                        },
-                                        label = { Text(bankName) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.primary
-                                        )
-                                    )
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = simText,
-                                onValueChange = { simText = it },
-                                label = { Text("Nội dung tin nhắn giả định") },
-                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 3
-                            )
-
-                            Button(
-                                onClick = {
-                                    viewModel.simulateBankNotification(simTitle, simText, simPackage)
-                                    android.widget.Toast.makeText(context, "Mô phỏng thành công! Kiểm tra nhật ký bên dưới.", android.widget.Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.fillMaxWidth().height(40.dp).testTag("simulate_notification_button"),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.BugReport, contentDescription = "Simulate", modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Chạy thử mô phỏng", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
                         // Manual Notification Scan Button
                         Divider(color = MaterialTheme.colorScheme.outlineVariant)
                         
                         Button(
                             onClick = {
-                                viewModel.scanNotificationsManual(
-                                    context = context,
-                                    onSuccess = { count ->
-                                        if (count > 0) {
-                                            android.widget.Toast.makeText(context, "Quét thành công! Đã tự động thêm $count giao dịch mới.", android.widget.Toast.LENGTH_LONG).show()
-                                        } else {
-                                            android.widget.Toast.makeText(context, "Quét xong! Không tìm thấy thông báo giao dịch mới nào trên thanh trạng thái.", android.widget.Toast.LENGTH_LONG).show()
+                                if (isCheckingNotifications) return@Button
+                                isCheckingNotifications = true
+                                coroutineScope.launch {
+                                    delay(1200) // Assure a minimum period of loading state indicator is visible to the user
+                                    viewModel.scanNotificationsManual(
+                                        context = context,
+                                        onSuccess = { count ->
+                                            isCheckingNotifications = false
+                                            if (count > 0) {
+                                                viewModel.showSuccessNotification("Quét thành công! Đã tự động thêm $count giao dịch mới.")
+                                            } else {
+                                                viewModel.showWarningNotification("Quét xong! Không tìm thấy thông báo giao dịch mới nào trên thanh trạng thái.")
+                                            }
+                                        },
+                                        onError = { errorMessage ->
+                                            isCheckingNotifications = false
+                                            viewModel.showErrorNotification(errorMessage)
                                         }
-                                    },
-                                    onError = { errorMessage ->
-                                        android.widget.Toast.makeText(context, errorMessage, android.widget.Toast.LENGTH_LONG).show()
-                                    }
-                                )
+                                    )
+                                }
                             },
+                            enabled = !isCheckingNotifications,
                             modifier = Modifier.fillMaxWidth().height(44.dp).testTag("manual_scan_notifications_button"),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -414,9 +334,19 @@ fun BankNotificationHistoryScreen(
                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         ) {
-                            Icon(imageVector = Icons.Default.Search, contentDescription = "Scan", modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Quét thông báo (Thủ công)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            if (isCheckingNotifications) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Đang quét tìm thông báo...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            } else {
+                                Icon(imageVector = Icons.Default.Search, contentDescription = "Scan", modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Quét thông báo (Thủ công)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -564,7 +494,7 @@ fun BankNotificationHistoryScreen(
                             Button(
                                 onClick = {
                                     if (wallets.isEmpty()) {
-                                        android.widget.Toast.makeText(context, "Vui lòng tạo ví tài khoản trước!", android.widget.Toast.LENGTH_SHORT).show()
+                                        viewModel.showWarningNotification("Vui lòng tạo ví tài khoản trước!")
                                     } else {
                                         bulkSelectedWalletId = wallets.firstOrNull()?.id ?: 0
                                         showBulkApproveDialog = true
@@ -618,6 +548,10 @@ fun BankNotificationHistoryScreen(
                             mutableStateOf(matchedCategory?.name ?: "")
                         }
 
+                        var customAmountStr by remember(log) {
+                            mutableStateOf(String.format("%.0f", log.amount))
+                        }
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -625,10 +559,10 @@ fun BankNotificationHistoryScreen(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surface
                             ),
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(12.dp),
                             border = BorderStroke(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                width = 1.5.dp,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
                             ),
                             elevation = CardDefaults.cardElevation(
                                 defaultElevation = 2.dp
@@ -639,14 +573,14 @@ fun BankNotificationHistoryScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxHeight()
-                                        .width(6.dp)
+                                        .width(4.dp)
                                         .background(
                                             if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
                                         )
                                 )
 
                                 // Card Content
-                                Column(modifier = Modifier.padding(16.dp).weight(1f)) {
+                                Column(modifier = Modifier.padding(10.dp).weight(1f)) {
                                     // Top Row: Bank Info and Pending Badge
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -655,11 +589,11 @@ fun BankNotificationHistoryScreen(
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(36.dp)
+                                                    .size(28.dp)
                                                     .background(
                                                         if (log.type == "INCOME") Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
                                                         CircleShape
@@ -670,14 +604,14 @@ fun BankNotificationHistoryScreen(
                                                     imageVector = if (log.type == "INCOME") Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
                                                     contentDescription = log.type,
                                                     tint = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828),
-                                                    modifier = Modifier.size(18.dp)
+                                                    modifier = Modifier.size(14.dp)
                                                 )
                                             }
                                             Column {
                                                 Text(
                                                     text = log.bankName.ifEmpty { "Ngân hàng" },
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 val timeStr = remember(log.timestamp) {
@@ -685,7 +619,7 @@ fun BankNotificationHistoryScreen(
                                                 }
                                                 Text(
                                                     text = timeStr,
-                                                    fontSize = 11.sp,
+                                                    fontSize = 10.sp,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
@@ -693,54 +627,47 @@ fun BankNotificationHistoryScreen(
 
                                         Surface(
                                             color = Color(0xFFFFF3E0),
-                                            shape = RoundedCornerShape(8.dp)
+                                            shape = RoundedCornerShape(6.dp)
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
                                             ) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(6.dp)
+                                                        .size(5.dp)
                                                         .background(Color(0xFFE65100), CircleShape)
                                                 )
                                                 Text(
                                                     text = "CHỜ DUYỆT",
                                                     color = Color(0xFFE65100),
-                                                    fontSize = 10.sp,
+                                                    fontSize = 9.sp,
                                                     fontWeight = FontWeight.Bold
                                                 )
                                             }
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
 
                                     // Original Message Text with elegant background
                                     Surface(
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                        shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
-                                            Text(
-                                                text = "Chi tiết thông báo:",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
+                                        Column(modifier = Modifier.padding(8.dp)) {
                                             Text(
                                                 text = log.text,
-                                                fontSize = 12.sp,
+                                                fontSize = 11.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                lineHeight = 16.sp
+                                                lineHeight = 15.sp
                                             )
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
 
                                     // Dynamic amount & Note Info
                                     Row(
@@ -750,14 +677,14 @@ fun BankNotificationHistoryScreen(
                                     ) {
                                         Column {
                                             Text(
-                                                text = "Khoản tiền phát hiện",
-                                                fontSize = 11.sp,
+                                                text = "Số tiền phát hiện",
+                                                fontSize = 10.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             Text(
                                                 text = "${if (log.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(log.amount)}",
-                                                fontSize = 20.sp,
-                                                fontWeight = FontWeight.Black,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold,
                                                 color = if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
                                             )
                                         }
@@ -765,21 +692,21 @@ fun BankNotificationHistoryScreen(
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text(
                                                 text = "Nội dung tóm tắt",
-                                                fontSize = 11.sp,
+                                                fontSize = 10.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             Text(
                                                 text = log.note.ifEmpty { "Giao dịch" },
-                                                fontSize = 13.sp,
+                                                fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                    Spacer(modifier = Modifier.height(6.dp))
 
                                     // Smart suggestion panel trigger row
                                     Row(
@@ -795,17 +722,17 @@ fun BankNotificationHistoryScreen(
                                                 imageVector = Icons.Default.AutoAwesome,
                                                 contentDescription = "Gợi ý",
                                                 tint = Color(0xFFF9A825),
-                                                modifier = Modifier.size(16.dp)
+                                                modifier = Modifier.size(14.dp)
                                             )
                                             Text(
                                                 text = "Đề xuất ví: ",
-                                                fontSize = 12.sp,
+                                                fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             Text(
                                                 text = matchedWallet?.name ?: "Chưa rõ",
-                                                fontSize = 12.sp,
+                                                fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.primary
                                             )
@@ -814,14 +741,14 @@ fun BankNotificationHistoryScreen(
                                         if (confidenceScore > 0) {
                                             Surface(
                                                 color = if (confidenceScore >= 3) Color(0xFFE8F5E9) else Color(0xFFE3F2FD),
-                                                shape = RoundedCornerShape(6.dp)
+                                                shape = RoundedCornerShape(4.dp)
                                             ) {
                                                 Text(
-                                                    text = if (confidenceScore >= 3) "🛡️ Tin cậy cao (học $confidenceScore lần)" else "⚡ Đã học ($confidenceScore lần)",
+                                                    text = if (confidenceScore >= 3) "🛡️ Tin cậy cao" else "⚡ Đã học",
                                                     color = if (confidenceScore >= 3) Color(0xFF2E7D32) else Color(0xFF1565C0),
-                                                    fontSize = 10.sp,
+                                                    fontSize = 9.sp,
                                                     fontWeight = FontWeight.ExtraBold,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                 )
                                             }
                                         }
@@ -836,18 +763,18 @@ fun BankNotificationHistoryScreen(
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(top = 16.dp)
+                                                .padding(top = 8.dp)
                                                 .background(
                                                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                                                    RoundedCornerShape(16.dp)
+                                                    RoundedCornerShape(12.dp)
                                                 )
                                                 .border(
                                                     1.dp,
                                                     MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                                                    RoundedCornerShape(16.dp)
+                                                    RoundedCornerShape(12.dp)
                                                 )
-                                                .padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -855,22 +782,20 @@ fun BankNotificationHistoryScreen(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(
-                                                    text = "Đề xuất",
+                                                    text = "Đề xuất thông tin",
                                                     fontWeight = FontWeight.Bold,
-                                                    fontSize = 13.sp,
+                                                    fontSize = 12.sp,
                                                     color = MaterialTheme.colorScheme.primary
                                                 )
                                                 Text(
-                                                    text = "Vui lòng xác nhận thông tin",
+                                                    text = "Sửa & kiểm tra lại để lưu",
                                                     fontSize = 10.sp,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
 
-                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                                            // WALLET CHIPS ROW
-                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            // WALLET CHIPS ROW WITH PINNED SELECTED WALLET FIRST (No more details about balance)
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -879,11 +804,11 @@ fun BankNotificationHistoryScreen(
                                                         imageVector = Icons.Default.AccountBalanceWallet,
                                                         contentDescription = null,
                                                         tint = MaterialTheme.colorScheme.secondary,
-                                                        modifier = Modifier.size(16.dp)
+                                                        modifier = Modifier.size(14.dp)
                                                     )
                                                     Text(
-                                                        text = "Áp dụng cho Ví tài chính:",
-                                                        fontSize = 12.sp,
+                                                        text = "Loại ví:",
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     )
@@ -897,15 +822,19 @@ fun BankNotificationHistoryScreen(
                                                         modifier = Modifier.padding(vertical = 4.dp)
                                                     )
                                                 } else {
+                                                    val sortedWallets = remember(wallets) {
+                                                        wallets
+                                                    }
+
                                                     Row(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .horizontalScroll(rememberScrollState())
-                                                            .padding(vertical = 6.dp),
-                                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                            .padding(vertical = 4.dp),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        wallets.forEach { w ->
+                                                        sortedWallets.forEach { w ->
                                                             val selected = selectedWalletId == w.id
                                                             val walletColor = try {
                                                                 Color(android.graphics.Color.parseColor(w.colorHex))
@@ -915,74 +844,54 @@ fun BankNotificationHistoryScreen(
 
                                                             Card(
                                                                 modifier = Modifier
-                                                                    .width(155.dp)
-                                                                    .height(82.dp)
+                                                                    .width(110.dp)
+                                                                    .height(38.dp)
                                                                     .clickable { selectedWalletId = w.id }
                                                                     .border(
-                                                                        width = if (selected) 3.dp else 1.dp,
-                                                                        color = if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.15f),
-                                                                        shape = RoundedCornerShape(12.dp)
+                                                                        width = if (selected) 2.dp else 1.dp,
+                                                                        color = if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.2f),
+                                                                        shape = RoundedCornerShape(8.dp)
                                                                     ),
                                                                 colors = CardDefaults.cardColors(
                                                                     containerColor = walletColor
                                                                 ),
-                                                                shape = RoundedCornerShape(12.dp),
-                                                                elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 6.dp else 1.dp)
+                                                                shape = RoundedCornerShape(8.dp),
+                                                                elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 3.dp else 0.dp)
                                                             ) {
-                                                                Column(
+                                                                Row(
                                                                     modifier = Modifier
-                                                                        .padding(10.dp)
+                                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
                                                                         .fillMaxSize(),
-                                                                    verticalArrangement = Arrangement.SpaceBetween
+                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically
                                                                 ) {
-                                                                    Row(
-                                                                        modifier = Modifier.fillMaxWidth(),
-                                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                                        verticalAlignment = Alignment.CenterVertically
-                                                                    ) {
+                                                                    Icon(
+                                                                        imageVector = IconMapper.getIconByName(w.iconName),
+                                                                        contentDescription = "Icon",
+                                                                        tint = Color.White.copy(alpha = 0.9f),
+                                                                        modifier = Modifier.size(13.dp)
+                                                                    )
+                                                                    Text(
+                                                                        text = w.name,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        fontSize = 11.sp,
+                                                                        color = Color.White,
+                                                                        maxLines = 1,
+                                                                        overflow = TextOverflow.Ellipsis,
+                                                                        modifier = Modifier.weight(1f)
+                                                                    )
+                                                                    if (selected) {
                                                                         Icon(
-                                                                            imageVector = IconMapper.getIconByName(w.iconName),
-                                                                            contentDescription = "Icon",
-                                                                            tint = Color.White.copy(alpha = 0.9f),
-                                                                            modifier = Modifier.size(16.dp)
+                                                                            imageVector = Icons.Default.CheckCircle,
+                                                                            contentDescription = "Selected",
+                                                                            tint = Color.White,
+                                                                            modifier = Modifier.size(12.dp)
                                                                         )
-                                                                        if (selected) {
-                                                                            Icon(
-                                                                                imageVector = Icons.Default.CheckCircle,
-                                                                                contentDescription = "Selected",
-                                                                                tint = Color.White,
-                                                                                modifier = Modifier.size(16.dp)
-                                                                            )
-                                                                        } else if (w.id == matchedWallet?.id) {
-                                                                            Surface(
-                                                                                color = Color(0xFFFFD54F),
-                                                                                shape = RoundedCornerShape(6.dp)
-                                                                            ) {
-                                                                                Text(
-                                                                                    text = "⚡ Đề xuất",
-                                                                                    color = Color(0xFF5D4037),
-                                                                                    fontSize = 8.sp,
-                                                                                    fontWeight = FontWeight.Bold,
-                                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                                                                )
-                                                                            }
-                                                                        }
-                                                                    }
-
-                                                                    Column {
+                                                                    } else if (w.id == matchedWallet?.id) {
                                                                         Text(
-                                                                            text = w.name,
-                                                                            fontWeight = FontWeight.Bold,
-                                                                            fontSize = 12.sp,
-                                                                            color = Color.White,
-                                                                            maxLines = 1,
-                                                                            overflow = TextOverflow.Ellipsis
-                                                                        )
-                                                                        Text(
-                                                                            text = FormatHelper.formatVND(w.balance),
+                                                                            text = "⚡",
                                                                             fontSize = 10.sp,
-                                                                            color = Color.White.copy(alpha = 0.8f),
-                                                                            maxLines = 1
+                                                                            color = Color.White
                                                                         )
                                                                     }
                                                                 }
@@ -992,8 +901,8 @@ fun BankNotificationHistoryScreen(
                                                 }
                                             }
 
-                                            // CATEGORIES ROW
-                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            // CATEGORIES ROW (Sửa để gọn hơn)
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1002,11 +911,11 @@ fun BankNotificationHistoryScreen(
                                                         imageVector = Icons.Default.Category,
                                                         contentDescription = null,
                                                         tint = MaterialTheme.colorScheme.secondary,
-                                                        modifier = Modifier.size(16.dp)
+                                                        modifier = Modifier.size(14.dp)
                                                     )
                                                     Text(
                                                         text = "Phân loại Danh Mục:",
-                                                        fontSize = 12.sp,
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     )
@@ -1017,7 +926,7 @@ fun BankNotificationHistoryScreen(
                                                         .fillMaxWidth()
                                                         .horizontalScroll(rememberScrollState())
                                                         .padding(vertical = 4.dp),
-                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     categories.filter { it.type == log.type || it.type == "BOTH" }.forEach { cat ->
                                                         val selected = selectedCategoryName == cat.name
@@ -1029,28 +938,28 @@ fun BankNotificationHistoryScreen(
 
                                                         Card(
                                                             modifier = Modifier
-                                                                .height(44.dp)
+                                                                .height(32.dp)
                                                                 .clickable { selectedCategoryName = cat.name }
                                                                 .border(
-                                                                    width = if (selected) 2.5.dp else 1.dp,
+                                                                    width = if (selected) 2.dp else 1.dp,
                                                                     color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                                                    shape = RoundedCornerShape(22.dp)
+                                                                    shape = RoundedCornerShape(16.dp)
                                                                 ),
                                                             colors = CardDefaults.cardColors(
                                                                 containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
                                                             ),
-                                                            shape = RoundedCornerShape(22.dp)
+                                                            shape = RoundedCornerShape(16.dp)
                                                         ) {
                                                             Row(
                                                                 modifier = Modifier
-                                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                                                    .padding(horizontal = 8.dp, vertical = 2.dp)
                                                                     .fillMaxHeight(),
                                                                 verticalAlignment = Alignment.CenterVertically,
-                                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                             ) {
                                                                 Box(
                                                                     modifier = Modifier
-                                                                        .size(22.dp)
+                                                                        .size(18.dp)
                                                                         .background(catColor.copy(alpha = 0.15f), CircleShape),
                                                                     contentAlignment = Alignment.Center
                                                                 ) {
@@ -1058,12 +967,12 @@ fun BankNotificationHistoryScreen(
                                                                         imageVector = IconMapper.getIconByName(cat.iconName),
                                                                         contentDescription = null,
                                                                         tint = catColor,
-                                                                        modifier = Modifier.size(12.dp)
+                                                                        modifier = Modifier.size(10.dp)
                                                                     )
                                                                 }
                                                                 Text(
                                                                     text = cat.name,
-                                                                    fontSize = 12.sp,
+                                                                    fontSize = 11.sp,
                                                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                                                     color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                                                 )
@@ -1073,63 +982,124 @@ fun BankNotificationHistoryScreen(
                                                 }
                                             }
 
-                                            Spacer(modifier = Modifier.height(4.dp))
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                                            // AMOUNT EDITING FIELD (Số tiền đổi thành VND và chuyển xuống cuối dòng kèm trợ giúp định dạng)
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "VND:",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        OutlinedTextField(
+                                                            value = customAmountStr,
+                                                            onValueChange = { input ->
+                                                                val filtered = input.filter { it.isDigit() }
+                                                                if (filtered.length <= 12) {
+                                                                    customAmountStr = filtered
+                                                                }
+                                                            },
+                                                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                                            ),
+                                                            modifier = Modifier
+                                                                .fillMaxWidth(),
+                                                            textStyle = androidx.compose.ui.text.TextStyle(
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            ),
+                                                            singleLine = true,
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            colors = OutlinedTextFieldDefaults.colors(
+                                                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                                            )
+                                                        )
+
+                                                        if (customAmountStr.isNotEmpty()) {
+                                                            val parsedVal = customAmountStr.toDoubleOrNull() ?: 0.0
+                                                            Text(
+                                                                text = FormatHelper.formatVND(parsedVal),
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.height(2.dp))
 
                                             // ACTION BUTTONS (Xác nhận, Bỏ qua)
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Button(
                                                     onClick = {
                                                         if (selectedWalletId == 0) {
-                                                            android.widget.Toast.makeText(context, "Vui lòng chọn ví tài chính!", android.widget.Toast.LENGTH_SHORT).show()
+                                                            viewModel.showWarningNotification("Vui lòng chọn ví tài chính!")
                                                             return@Button
                                                         }
                                                         if (selectedCategoryName.isEmpty()) {
-                                                            android.widget.Toast.makeText(context, "Vui lòng chọn danh mục!", android.widget.Toast.LENGTH_SHORT).show()
+                                                            viewModel.showWarningNotification("Vui lòng chọn danh mục!")
                                                             return@Button
                                                         }
-                                                        viewModel.confirmPendingNotificationLog(log, selectedWalletId, selectedCategoryName)
-                                                        android.widget.Toast.makeText(context, "Xác nhận giao dịch thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                                                        val finalAmount = customAmountStr.toDoubleOrNull() ?: log.amount
+                                                        viewModel.confirmPendingNotificationLog(log, selectedWalletId, selectedCategoryName, finalAmount)
+                                                        viewModel.showSuccessNotification("Xác nhận giao dịch thành công!")
                                                     },
                                                     modifier = Modifier
                                                         .weight(1f)
-                                                        .height(44.dp),
+                                                        .height(36.dp),
                                                     colors = ButtonDefaults.buttonColors(
                                                         containerColor = Color(0xFF2E7D32)
                                                     ),
-                                                    shape = RoundedCornerShape(12.dp)
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                                 ) {
                                                     Row(
                                                         verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                                     ) {
-                                                        Icon(Icons.Default.Check, contentDescription = "Confirm", modifier = Modifier.size(18.dp))
-                                                        Text("Duyệt", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                        Icon(Icons.Default.Check, contentDescription = "Confirm", modifier = Modifier.size(16.dp))
+                                                        Text("Duyệt", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                                     }
                                                 }
 
                                                 OutlinedButton(
                                                     onClick = {
                                                         viewModel.deleteNotificationLog(log)
-                                                        android.widget.Toast.makeText(context, "Đã bỏ qua giao dịch quét!", android.widget.Toast.LENGTH_SHORT).show()
+                                                        viewModel.showSuccessNotification("Đã bỏ qua giao dịch quét!")
                                                     },
                                                     modifier = Modifier
                                                         .weight(1f)
-                                                        .height(44.dp),
+                                                        .height(36.dp),
                                                     colors = ButtonDefaults.outlinedButtonColors(
                                                         contentColor = Color(0xFFC62828)
                                                     ),
-                                                    border = BorderStroke(1.5.dp, Color(0xFFC62828)),
-                                                    shape = RoundedCornerShape(12.dp)
+                                                    border = BorderStroke(1.2.dp, Color(0xFFC62828)),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                                 ) {
                                                     Row(
                                                         verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                                     ) {
-                                                        Icon(Icons.Default.Close, contentDescription = "Delete", modifier = Modifier.size(18.dp))
-                                                        Text("Bỏ qua", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                                        Icon(Icons.Default.Close, contentDescription = "Delete", modifier = Modifier.size(16.dp))
+                                                        Text("Bỏ qua", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
                                                     }
                                                 }
                                             }
@@ -1241,12 +1211,12 @@ fun BankNotificationHistoryScreen(
                 } else {
                     items(processedLogs, key = { "processed_" + it.timestamp + "_" + it.text.hashCode() }) { log ->
                         Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surface
                             ),
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.85f))
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 Row(
@@ -1423,10 +1393,10 @@ fun BankNotificationHistoryScreen(
                         val finalWalletId = bulkSelectedWalletId
                         if (finalWalletId != null && finalWalletId != 0) {
                             viewModel.confirmPendingNotificationLogsBulk(pendingLogs, finalWalletId)
-                            android.widget.Toast.makeText(context, "Đã phê duyệt hàng loạt thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                            viewModel.showSuccessNotification("Đã phê duyệt hàng loạt thành công!")
                             showBulkApproveDialog = false
                         } else {
-                            android.widget.Toast.makeText(context, "Vui lòng chọn một ví tài khoản!", android.widget.Toast.LENGTH_SHORT).show()
+                            viewModel.showWarningNotification("Vui lòng chọn một ví tài khoản!")
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
@@ -1452,7 +1422,7 @@ fun BankNotificationHistoryScreen(
                 Button(
                     onClick = {
                         viewModel.deleteNotificationLogsBulk(pendingLogs, deleteCompletely = true)
-                        android.widget.Toast.makeText(context, "Đã dọn dẹp hàng loạt giao dịch chờ!", android.widget.Toast.LENGTH_SHORT).show()
+                        viewModel.showSuccessNotification("Đã dọn dẹp hàng loạt giao dịch chờ!")
                         showBulkDeleteDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)

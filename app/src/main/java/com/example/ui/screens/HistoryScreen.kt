@@ -1,6 +1,12 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -55,6 +61,7 @@ import java.text.SimpleDateFormat
 @Composable
 fun HistoryScreen(
     viewModel: FinanceViewModel,
+    onNavigateToTimeline: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val filteredTransactions by viewModel.filteredTransactions.collectAsState()
@@ -79,7 +86,7 @@ fun HistoryScreen(
                     onClick = {
                         transactionToDelete?.let { tx ->
                             viewModel.deleteTransaction(tx)
-                            android.widget.Toast.makeText(context, "Xóa giao dịch thành công", android.widget.Toast.LENGTH_SHORT).show()
+                            viewModel.showSuccessNotification("Xóa giao dịch thành công")
                         }
                         transactionToDelete = null
                     }
@@ -96,7 +103,7 @@ fun HistoryScreen(
     }
 
     // --- DISPLAY MODE STATES ---
-    var displayMode by remember { mutableStateOf("LIST") } // LIST, CALENDAR
+    var displayMode by remember { mutableStateOf("CALENDAR") } // LIST, CALENDAR
     var selectedCalendarDay by remember { 
         mutableStateOf<CalendarDay?>(
             Calendar.getInstance().let {
@@ -116,7 +123,7 @@ fun HistoryScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
 
     // --- TIME FILTER STATES ---
-    var activeTimeFilterMode by remember { mutableStateOf("ALL") } // ALL, WEEK, DAY, MONTH, YEAR, RANGE
+    var activeTimeFilterMode by remember { mutableStateOf("MONTH") } // ALL, WEEK, DAY, MONTH, YEAR, RANGE
     var selectedCustomDate by remember { mutableStateOf<Calendar?>(null) }
     var selectedCustomMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) } // 0 to 11
     var selectedCustomMonthYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
@@ -501,6 +508,15 @@ fun HistoryScreen(
         filteredTransactions.groupBy { FormatHelper.formatDate(it.timestamp) }
     }
 
+    // Precompute daily summaries to optimize lazy list scrolling performance
+    val dailySummaries = remember(groupedTransactions) {
+        groupedTransactions.mapValues { (_, txList) ->
+            val totalIncome = txList.filter { it.type == "INCOME" }.sumOf { it.amount }
+            val totalExpense = txList.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+            Pair(totalIncome, totalExpense)
+        }
+    }
+
     // Grouping transactions by calendar date key for instant calendar day lookup
     val transactionsByDayKey = remember(filteredTransactions) {
         filteredTransactions.groupBy { tx ->
@@ -510,6 +526,51 @@ fun HistoryScreen(
     }
 
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
+    var isFiltersExpanded by remember { mutableStateOf(false) }
+
+    val filterSummary = remember(
+        searchQuery,
+        selectedTypeFilter,
+        selectedCategoryFilter,
+        activeTimeFilterMode,
+        selectedCustomDate,
+        selectedCustomMonth,
+        selectedCustomMonthYear,
+        selectedCustomYear,
+        selectedRangeStart,
+        selectedRangeEnd
+    ) {
+        val parts = mutableListOf<String>()
+        if (searchQuery.isNotEmpty()) {
+            parts.add("Tìm: \"$searchQuery\"")
+        }
+        if (selectedTypeFilter != "ALL") {
+            parts.add(if (selectedTypeFilter == "EXPENSE") "Chi" else "Thu")
+        }
+        if (selectedCategoryFilter != "ALL") {
+            parts.add("Hạng mục: $selectedCategoryFilter")
+        }
+        val timeStr = when (activeTimeFilterMode) {
+            "ALL" -> "Mọi lúc"
+            "DAY" -> selectedCustomDate?.let { 
+                SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(it.time) 
+            } ?: "Một ngày"
+            "WEEK" -> "1 Tuần qua"
+            "RANGE" -> if (selectedRangeStart != null && selectedRangeEnd != null) {
+                val s = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeStart!!.time)
+                val e = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeEnd!!.time)
+                "$s - $e"
+            } else "Khoảng ngày"
+            "MONTH" -> "Thg ${selectedCustomMonth + 1}/$selectedCustomMonthYear"
+            "YEAR" -> "Năm $selectedCustomYear"
+            else -> "Mọi lúc"
+        }
+        if (timeStr != "Mọi lúc") {
+            parts.add(timeStr)
+        }
+        
+        if (parts.isEmpty()) "Mọi giao dịch (Không có bộ lọc)" else parts.joinToString(" • ")
+    }
 
     Column(
         modifier = modifier
@@ -517,12 +578,46 @@ fun HistoryScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Lịch Sử Giao Dịch",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Lịch Sử Giao Dịch",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f)
+            )
+            
+            val exportContext = androidx.compose.ui.platform.LocalContext.current
+            FilledTonalButton(
+                onClick = {
+                    com.example.ui.ExcelExportHelper.exportTransactionsToCsv(
+                        context = exportContext,
+                        transactions = filteredTransactions,
+                        onWarning = { viewModel.showWarningNotification(it) },
+                        onError = { viewModel.showErrorNotification(it) }
+                    )
+                },
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.testTag("export_csv_button"),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Share, 
+                    contentDescription = "Xuất Excel",
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Xuất Excel", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
 
         // Mode Switcher (Danh sách / Lịch)
         Row(
@@ -566,248 +661,377 @@ fun HistoryScreen(
         }
 
         if (displayMode == "LIST") {
-            // Search Input Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.setSearchQuery(it) },
-                placeholder = { Text("Tìm kiếm ghi chú, danh mục, ví...") },
-                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search Log") },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "Clear")
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().testTag("history_search_input"),
-                singleLine = true
-            )
-    
-            // Type Filter Pills
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                listOf(
-                    "ALL" to "Tất cả",
-                    "EXPENSE" to "Khoản Chi",
-                    "INCOME" to "Khoản Thu"
-                ).forEach { (typeVal, name) ->
-                    val isSelected = selectedTypeFilter == typeVal
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.setTypeFilter(typeVal) },
-                        label = { Text(name, fontSize = 12.sp) },
-                        modifier = Modifier.testTag("filter_type_$typeVal")
-                    )
-                }
-            }
-    
-            // Hàng mọi danh mục & Dropdown Selector (Chỉ cần 1 nút 'Mọi danh mục' và 1 nút 'Select' gọn gàng)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val isAllCategory = selectedCategoryFilter == "ALL"
-                FilterChip(
-                    selected = isAllCategory,
-                    onClick = { viewModel.setCategoryFilter("ALL") },
-                    label = { Text("Mọi danh mục", fontSize = 12.sp) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("filter_category_ALL")
-                )
-    
-                Box(
-                    modifier = Modifier.weight(1.2f)
-                ) {
-                    val selectedCatObj = categoriesList.find { it.name == selectedCategoryFilter }
-                    FilterChip(
-                        selected = !isAllCategory,
-                        onClick = { categoryDropdownExpanded = true },
-                        label = {
-                            Text(
-                                text = if (isAllCategory) "Chọn danh mục..." else selectedCategoryFilter,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Select Category key",
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        leadingIcon = selectedCatObj?.let { cat ->
-                            {
-                                Icon(
-                                    imageVector = IconMapper.getIconByName(cat.iconName),
-                                    contentDescription = cat.name,
-                                    tint = if (!isAllCategory) Color.Unspecified else FormatHelper.parseColor(cat.colorHex),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("filter_category_select_selector")
-                    )
-    
-                    DropdownMenu(
-                        expanded = categoryDropdownExpanded,
-                        onDismissRequest = { categoryDropdownExpanded = false },
-                        modifier = Modifier.fillMaxWidth(0.55f)
-                    ) {
-                        categoriesList.forEach { cat ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = IconMapper.getIconByName(cat.iconName),
-                                            contentDescription = cat.name,
-                                            tint = FormatHelper.parseColor(cat.colorHex),
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(cat.name, fontSize = 13.sp)
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.setCategoryFilter(cat.name)
-                                    categoryDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Time Filters Row (Gọn hơn, scrollable)
-            Row(
+            // COLLAPSIBLE FILTER + SEARCH GROUP CARD
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .animateContentSize(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             ) {
-                // 1. Mọi lúc
-                val isAll = activeTimeFilterMode == "ALL"
-                FilterChip(
-                    selected = isAll,
-                    onClick = { activeTimeFilterMode = "ALL" },
-                    label = { Text("Mọi lúc", fontSize = 12.sp) },
-                    leadingIcon = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Clickable Header to Expand/Collapse
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isFiltersExpanded = !isFiltersExpanded }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "All time",
-                            modifier = Modifier.size(14.dp)
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Bộ lọc và tìm kiếm",
+                            tint = if (isFiltersExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
                         )
-                    },
-                    modifier = Modifier.testTag("time_filter_ALL")
-                )
-
-                // 2. Theo ngày
-                val isDay = activeTimeFilterMode == "DAY"
-                val dayLabel = if (selectedCustomDate != null) {
-                    SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(selectedCustomDate!!.time)
-                } else {
-                    "Theo ngày"
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Bộ lọc & Tìm kiếm",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (filterSummary.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(1.dp))
+                                Text(
+                                    text = filterSummary,
+                                    fontSize = 10.sp,
+                                    color = if (filterSummary.startsWith("Mọi giao dịch")) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                           else MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                    
+                    IconButton(
+                        onClick = { isFiltersExpanded = !isFiltersExpanded },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isFiltersExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isFiltersExpanded) "Thu gọn" else "Mở rộng",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
-                FilterChip(
-                    selected = isDay,
-                    onClick = { showDatePicker() },
-                    label = { Text(dayLabel, fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = "Specific day",
-                            modifier = Modifier.size(14.dp)
+                
+                AnimatedVisibility(
+                    visible = isFiltersExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        
+                        // 1. Search Bar
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            placeholder = { Text("Tìm kiếm ghi chú, danh mục, ví...", fontSize = 13.sp) },
+                            leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search Log", modifier = Modifier.size(20.dp)) },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                        Icon(imageVector = Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("history_search_input"),
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
                         )
-                    },
-                    modifier = Modifier.testTag("time_filter_DAY")
-                )
-
-                // 3. 1 Tuần
-                val isWeek = activeTimeFilterMode == "WEEK"
-                FilterChip(
-                    selected = isWeek,
-                    onClick = { activeTimeFilterMode = "WEEK" },
-                    label = { Text("1 Tuần", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Last week",
-                            modifier = Modifier.size(14.dp)
+                        
+                        // 2. Transaction Type Group
+                        Text(
+                            text = "Loại giao dịch",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                         )
-                    },
-                    modifier = Modifier.testTag("time_filter_WEEK")
-                )
-
-                // 4. Khoảng ngày / Khoảng thời gian
-                val isRange = activeTimeFilterMode == "RANGE"
-                val rangeLabel = if (selectedRangeStart != null && selectedRangeEnd != null) {
-                    val startStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeStart!!.time)
-                    val endStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeEnd!!.time)
-                    "$startStr - $endStr"
-                } else {
-                    "Khoảng ngày"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                "ALL" to "Tất cả",
+                                "EXPENSE" to "Khoản Chi",
+                                "INCOME" to "Khoản Thu"
+                            ).forEach { (typeVal, name) ->
+                                val isSelected = selectedTypeFilter == typeVal
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { viewModel.setTypeFilter(typeVal) },
+                                    label = { Text(name, fontSize = 11.sp) },
+                                    modifier = Modifier.testTag("filter_type_$typeVal"),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            }
+                        }
+                        
+                        // 3. Category selector Group
+                        Text(
+                            text = "Hạng mục giao dịch",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val isAllCategory = selectedCategoryFilter == "ALL"
+                            FilterChip(
+                                selected = isAllCategory,
+                                onClick = { viewModel.setCategoryFilter("ALL") },
+                                label = { Text("Mọi danh mục", fontSize = 11.sp) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("filter_category_ALL"),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                
+                            Box(
+                                modifier = Modifier.weight(1.2f)
+                            ) {
+                                val selectedCatObj = categoriesList.find { it.name == selectedCategoryFilter }
+                                FilterChip(
+                                    selected = !isAllCategory,
+                                    onClick = { categoryDropdownExpanded = true },
+                                    label = {
+                                        Text(
+                                            text = if (isAllCategory) "Chọn danh mục..." else selectedCategoryFilter,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDropDown,
+                                            contentDescription = "Select Category key",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    },
+                                    leadingIcon = selectedCatObj?.let { cat ->
+                                        {
+                                            Icon(
+                                                imageVector = IconMapper.getIconByName(cat.iconName),
+                                                contentDescription = cat.name,
+                                                tint = if (!isAllCategory) Color.Unspecified else FormatHelper.parseColor(cat.colorHex),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("filter_category_select_selector"),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                
+                                DropdownMenu(
+                                    expanded = categoryDropdownExpanded,
+                                    onDismissRequest = { categoryDropdownExpanded = false },
+                                    modifier = Modifier.fillMaxWidth(0.55f)
+                                ) {
+                                    categoriesList.forEach { cat ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = IconMapper.getIconByName(cat.iconName),
+                                                        contentDescription = cat.name,
+                                                        tint = FormatHelper.parseColor(cat.colorHex),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Text(cat.name, fontSize = 13.sp)
+                                                }
+                                            },
+                                            onClick = {
+                                                viewModel.setCategoryFilter(cat.name)
+                                                categoryDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 4. Time Filter Group
+                        Text(
+                            text = "Thời gian",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // All time
+                            val isAll = activeTimeFilterMode == "ALL"
+                            FilterChip(
+                                selected = isAll,
+                                onClick = { activeTimeFilterMode = "ALL" },
+                                label = { Text("Mọi lúc", fontSize = 11.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = "All time",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("time_filter_ALL"),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+            
+                            // Day
+                            val isDay = activeTimeFilterMode == "DAY"
+                            val dayLabel = if (selectedCustomDate != null) {
+                                SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(selectedCustomDate!!.time)
+                            } else {
+                                "Theo ngày"
+                            }
+                            FilterChip(
+                                selected = isDay,
+                                onClick = { showDatePicker() },
+                                label = { Text(dayLabel, fontSize = 11.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = "Specific day",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("time_filter_DAY"),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+            
+                            // Week
+                            val isWeek = activeTimeFilterMode == "WEEK"
+                            FilterChip(
+                                selected = isWeek,
+                                onClick = { activeTimeFilterMode = "WEEK" },
+                                label = { Text("1 Tuần", fontSize = 11.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = "Last week",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("time_filter_WEEK"),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+            
+                            // Range
+                            val isRange = activeTimeFilterMode == "RANGE"
+                            val rangeLabel = if (selectedRangeStart != null && selectedRangeEnd != null) {
+                                val startStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeStart!!.time)
+                                val endStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeEnd!!.time)
+                                "$startStr - $endStr"
+                            } else {
+                                "Khoảng ngày"
+                            }
+                            FilterChip(
+                                selected = isRange,
+                                onClick = { showRangeDialog = true },
+                                label = { Text(rangeLabel, fontSize = 11.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = "Date range",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("time_filter_RANGE"),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+            
+                            // Month
+                            val isMonth = activeTimeFilterMode == "MONTH"
+                            val monthLabel = "Thg ${selectedCustomMonth + 1}/$selectedCustomMonthYear"
+                            FilterChip(
+                                selected = isMonth,
+                                onClick = { showMonthDialog = true },
+                                label = { Text(if (isMonth) monthLabel else "Theo tháng", fontSize = 11.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = "Specific month",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("time_filter_MONTH"),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+            
+                            // Year
+                            val isYear = activeTimeFilterMode == "YEAR"
+                            val yearLabel = "Năm $selectedCustomYear"
+                            FilterChip(
+                                selected = isYear,
+                                onClick = { showYearDialog = true },
+                                label = { Text(if (isYear) yearLabel else "Theo năm", fontSize = 11.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = "Specific year",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("time_filter_YEAR"),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+                        
+                        // Reset Button option if any filter is active
+                        if (searchQuery.isNotEmpty() || selectedTypeFilter != "ALL" || selectedCategoryFilter != "ALL" || activeTimeFilterMode != "ALL") {
+                            TextButton(
+                                onClick = {
+                                    viewModel.setSearchQuery("")
+                                    viewModel.setTypeFilter("ALL")
+                                    viewModel.setCategoryFilter("ALL")
+                                    activeTimeFilterMode = "ALL"
+                                },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Icon(imageVector = Icons.Default.Refresh, contentDescription = "Xóa lọc", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Bỏ toàn bộ lọc", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
-                FilterChip(
-                    selected = isRange,
-                    onClick = { showRangeDialog = true },
-                    label = { Text(rangeLabel, fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Date range",
-                            modifier = Modifier.size(14.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("time_filter_RANGE")
-                )
-
-                // 5. Theo tháng
-                val isMonth = activeTimeFilterMode == "MONTH"
-                val monthLabel = "Thg ${selectedCustomMonth + 1}/$selectedCustomMonthYear"
-                FilterChip(
-                    selected = isMonth,
-                    onClick = { showMonthDialog = true },
-                    label = { Text(if (isMonth) monthLabel else "Theo tháng", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = "Specific month",
-                            modifier = Modifier.size(14.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("time_filter_MONTH")
-                )
-
-                // 6. Theo năm
-                val isYear = activeTimeFilterMode == "YEAR"
-                val yearLabel = "Năm $selectedCustomYear"
-                FilterChip(
-                    selected = isYear,
-                    onClick = { showYearDialog = true },
-                    label = { Text(if (isYear) yearLabel else "Theo năm", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = "Specific year",
-                            modifier = Modifier.size(14.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("time_filter_YEAR")
-                )
             }
-
+        }
+        }
+        
+        if (displayMode == "LIST") {
             Divider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Transaction Timeline List with daily summaries
@@ -849,8 +1073,9 @@ fun HistoryScreen(
                 ) {
                     groupedTransactions.forEach { (dateStr, txList) ->
                         stickyHeader {
-                            val totalIncome = txList.filter { it.type == "INCOME" }.sumOf { it.amount }
-                            val totalExpense = txList.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                            val summary = dailySummaries[dateStr] ?: Pair(0.0, 0.0)
+                            val totalIncome = summary.first
+                            val totalExpense = summary.second
 
                             Row(
                                 modifier = Modifier
@@ -874,6 +1099,18 @@ fun HistoryScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onBackground
                                     )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    IconButton(
+                                        onClick = { onNavigateToTimeline(dateStr) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Timeline,
+                                            contentDescription = "Timeline",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
 
                                 Column(
@@ -959,7 +1196,8 @@ fun HistoryScreen(
                         },
                         onDeleteTransaction = { tx ->
                             transactionToDelete = tx
-                        }
+                        },
+                        onNavigateToTimeline = onNavigateToTimeline
                     )
                 }
             }
@@ -1105,7 +1343,7 @@ fun RemovableTransactionItem(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = java.text.SimpleDateFormat("HH:mm", java.util.Locale("vi", "VN")).format(tx.timestamp),
+                    text = FormatHelper.formatTime(tx.timestamp),
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )
@@ -1390,15 +1628,19 @@ fun EditTransactionDialog(
                                             }
                                         },
                                         trailingIcon = {
-                                            IconButton(onClick = { categoryDropdownExpanded = !categoryDropdownExpanded }) {
-                                                Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
-                                            }
+                                            Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
                                         },
                                         shape = RoundedCornerShape(14.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { categoryDropdownExpanded = true }
                                             .testTag("edit_tx_category_selector")
+                                    )
+                                    // Bắt sự kiện click mượt mà phủ lên toàn bộ ô input
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .background(Color.Transparent)
+                                            .clickable { categoryDropdownExpanded = !categoryDropdownExpanded }
                                     )
 
                                     DropdownMenu(
@@ -1458,15 +1700,19 @@ fun EditTransactionDialog(
                                             }
                                         },
                                         trailingIcon = {
-                                            IconButton(onClick = { walletDropdownExpanded = !walletDropdownExpanded }) {
-                                                Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
-                                            }
+                                            Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
                                         },
                                         shape = RoundedCornerShape(14.dp),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { walletDropdownExpanded = true }
                                             .testTag("edit_tx_wallet_selector")
+                                    )
+                                    // Bắt sự kiện click mượt mà phủ lên toàn bộ ô input
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .background(Color.Transparent)
+                                            .clickable { walletDropdownExpanded = !walletDropdownExpanded }
                                     )
 
                                     DropdownMenu(
@@ -1527,63 +1773,6 @@ fun EditTransactionDialog(
                                     ) {
                                         Text(text = "Thời gian: $dateLabel", fontSize = 14.sp)
                                         Icon(imageVector = Icons.Default.CalendarToday, contentDescription = "Pick DateTime", modifier = Modifier.size(16.dp))
-                                    }
-                                }
-                            }
-
-                            // 7. Recurring Switch
-                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(imageVector = Icons.Default.Repeat, contentDescription = "Is recurring", tint = MaterialTheme.colorScheme.outline)
-                                    Text(
-                                        text = "Đặt làm giao dịch định kỳ",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                                Switch(
-                                    checked = isRecurring,
-                                    onCheckedChange = { isRecurring = it },
-                                    modifier = Modifier.testTag("edit_tx_recurrence_switch")
-                                )
-                            }
-
-                            AnimatedVisibility(visible = isRecurring) {
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "Chu kỳ giao dịch",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        listOf(
-                                            "DAILY" to "Hàng ngày",
-                                            "WEEKLY" to "Hàng tuần",
-                                            "MONTHLY" to "Hàng tháng"
-                                        ).forEach { (freq, label) ->
-                                            FilterChip(
-                                                selected = recurrencePeriod == freq,
-                                                onClick = { recurrencePeriod = freq },
-                                                label = { Text(label, fontSize = 11.sp) },
-                                                modifier = Modifier.testTag("edit_tx_recurrence_chip_$freq")
-                                            )
-                                        }
                                     }
                                 }
                             }
@@ -1799,7 +1988,7 @@ fun CalendarHeaderRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "Tháng ${selectedMonth + 1}",
+                        text = "${selectedMonth + 1}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
@@ -1817,7 +2006,7 @@ fun CalendarHeaderRow(
                 ) {
                     (0..11).forEach { mIdx ->
                         DropdownMenuItem(
-                            text = { Text("Tháng ${mIdx + 1}", fontSize = 12.sp) },
+                            text = { Text("${mIdx + 1}", fontSize = 12.sp) },
                             onClick = {
                                 onMonthChange(mIdx)
                                 monthDropdownShow = false
@@ -1987,7 +2176,7 @@ fun CalendarCell(
     val cellBgColor = when {
         isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
         isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-        isFuture -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f)
+        isFuture -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
         hasTransactions -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f)
         else -> Color.Transparent
     }
@@ -2000,7 +2189,7 @@ fun CalendarCell(
     }
 
     val contentAlpha = if (day.isCurrentMonth) {
-        if (isFuture) 0.45f else 1.0f
+        if (isFuture) 0.5f else 1.0f
     } else {
         0.35f
     }
@@ -2083,7 +2272,8 @@ fun DayTransactionsInline(
     day: CalendarDay,
     transactions: List<Transaction>,
     onEditTransaction: (Transaction) -> Unit,
-    onDeleteTransaction: (Transaction) -> Unit
+    onDeleteTransaction: (Transaction) -> Unit,
+    onNavigateToTimeline: (String) -> Unit = {}
 ) {
     val dateLabel = "%02d/%02d/%d".format(day.dayOfMonth, day.month + 1, day.year)
     val totalIncome = transactions.filter { it.type == "INCOME" }.sumOf { it.amount }
@@ -2103,12 +2293,28 @@ fun DayTransactionsInline(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "Giao dịch ngày $dateLabel",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Giao dịch ngày $dateLabel",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (transactions.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        androidx.compose.material3.IconButton(
+                            onClick = { onNavigateToTimeline(dateLabel) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Timeline,
+                                contentDescription = "Timeline",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
                 Column(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                     modifier = Modifier.padding(top = 4.dp)

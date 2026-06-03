@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -115,6 +116,25 @@ fun ReportsScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Quay lại"
+                            )
+                        }
+                    },
+                    actions = {
+                        val exportContext = androidx.compose.ui.platform.LocalContext.current
+                        IconButton(
+                            onClick = {
+                                com.example.ui.ExcelExportHelper.exportTransactionsToCsv(
+                                    context = exportContext,
+                                    transactions = monthTransactions,
+                                    onWarning = { viewModel.showWarningNotification(it) },
+                                    onError = { viewModel.showErrorNotification(it) }
+                                )
+                            },
+                            modifier = Modifier.testTag("report_export_csv_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Xuất Excel"
                             )
                         }
                     }

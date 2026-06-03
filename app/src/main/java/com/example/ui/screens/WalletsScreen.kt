@@ -25,6 +25,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.Wallet
+import com.example.data.Transaction
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
 import com.example.ui.IconMapper
@@ -55,7 +57,7 @@ fun WalletsScreen(
                     onClick = {
                         walletToDelete?.let { wallet ->
                             viewModel.deleteWallet(wallet)
-                            android.widget.Toast.makeText(context, "Xóa ví thành công", android.widget.Toast.LENGTH_SHORT).show()
+                            viewModel.showSuccessNotification("Xóa ví thành công")
                         }
                         walletToDelete = null
                     }
@@ -213,7 +215,7 @@ fun WalletsScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(walletTxs) { tx ->
-                        RecentTransactionItem(tx = tx)
+                        WalletRecentTransactionItem(tx = tx)
                     }
                 }
             }
@@ -226,9 +228,80 @@ fun WalletsScreen(
                 onDismiss = { showAddDialog = false },
                 onAddWallet = { name, type, startingBalance, color, icon ->
                     viewModel.addWallet(name, type, startingBalance, color, icon)
-                    android.widget.Toast.makeText(context, "Thêm ví/tài khoản thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                    viewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
                     showAddDialog = false
                 }
+            )
+        }
+    }
+}
+
+@Composable
+fun WalletRecentTransactionItem(
+    tx: Transaction,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(FormatHelper.parseColor(tx.categoryColor)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = IconMapper.getIconByName(tx.categoryIcon),
+                contentDescription = tx.categoryName,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = tx.categoryName,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = if (tx.note.isNotBlank()) "${tx.walletName} - ${tx.note}" else tx.walletName,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = if (tx.type == "EXPENSE") "-${FormatHelper.formatVND(tx.amount)}"
+                       else "+${FormatHelper.formatVND(tx.amount)}",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (tx.type == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "${FormatHelper.formatDate(tx.timestamp)} ${FormatHelper.formatTime(tx.timestamp)}",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

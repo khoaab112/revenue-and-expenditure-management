@@ -68,7 +68,7 @@ fun SavingsVaultScreen(
                     onClick = {
                         savingsWalletToDelete?.let { wallet ->
                             viewModel.deleteWallet(wallet)
-                            android.widget.Toast.makeText(context, "Xóa hũ tiết kiệm thành công", android.widget.Toast.LENGTH_SHORT).show()
+                            viewModel.showSuccessNotification("Xóa hũ tiết kiệm thành công")
                             if (selectedVaultDetails?.id == wallet.id) {
                                 selectedVaultDetails = null
                             }
@@ -179,7 +179,7 @@ fun SavingsVaultScreen(
                                             colorHex = "#9C27B0", // Savings Purple standard
                                             iconName = "Savings"
                                         )
-                                        android.widget.Toast.makeText(context, "Khởi tạo hũ tích lũy thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                                        viewModel.showSuccessNotification("Khởi tạo hũ tích lũy thành công!")
                                         newSavingsWalletName = ""
                                         newSavingsWalletGoalStr = ""
                                         showQuickAddWallet = false
@@ -526,9 +526,9 @@ fun SavingsVaultScreen(
                                             note = ""
                                             selectedDailyWalletId = null
                                             focusManager.clearFocus()
-                                            android.widget.Toast.makeText(context, "Thực hiện giao dịch thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                                            viewModel.showSuccessNotification("Thực hiện giao dịch thành công!")
                                         } else {
-                                            android.widget.Toast.makeText(context, "Vui lòng nhập số tiền lớn hơn 0", android.widget.Toast.LENGTH_SHORT).show()
+                                            viewModel.showWarningNotification("Vui lòng nhập số tiền lớn hơn 0")
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth().testTag("add_savings_transaction_confirm"),

@@ -31,6 +31,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
+import com.example.ui.AppNotification
+import com.example.ui.NotificationType
 import com.example.ui.screens.*
 import com.example.ui.theme.MyApplicationTheme
 
@@ -44,6 +46,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val ADD_TRANSACTION = "add_transaction"
     const val BANK_NOTIFICATION_HISTORY = "bank_notification_history"
+    const val TIMELINE = "timeline"
 }
 
 class MainActivity : ComponentActivity() {
@@ -64,7 +67,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         // Note: Full recomposition will happen if we pass state, but this simple approach is fine
-        // if the app is heavily recreated or we just rely on the new intent firing onCreate mostly.
+        // if the app is heavily recreated.
         // Actually to handle onNewIntent reliably during foreground, we can just send an event to viewModel.
         if (intent.getBooleanExtra("OPEN_BANK_NOTIFICATIONS", false)) {
             viewModel.triggerOpenBankNotifications()
@@ -432,7 +435,7 @@ fun MainContent(
                                             val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
                                             context.startActivity(intent)
                                         } catch (e: Exception) {
-                                            android.widget.Toast.makeText(context, "Không thể mở cài đặt", android.widget.Toast.LENGTH_SHORT).show()
+                                            viewModel.showErrorNotification("Không thể mở cài đặt")
                                         }
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -561,6 +564,111 @@ fun MainContent(
                     }
                 }
             }
+
+            // Custom Global Notifications Overlay - Displayed in top-right corner
+            val appNotifications by viewModel.appNotifications.collectAsState()
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.statusBars),
+                contentAlignment = Alignment.TopEnd
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier
+                        .padding(top = 16.dp, end = 16.dp)
+                        .widthIn(max = 340.dp)
+                ) {
+                    appNotifications.forEach { notification ->
+                        key(notification.id) {
+                            var visible by remember { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                visible = true
+                            }
+                            AnimatedVisibility(
+                                visible = visible,
+                                enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                            ) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("notification_card_${notification.type.name.lowercase()}"),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = when (notification.type) {
+                                            NotificationType.SUCCESS -> Color(0xFFE8F5E9)
+                                            NotificationType.WARNING -> Color(0xFFFFF8E1)
+                                            NotificationType.ERROR -> Color(0xFFFFEBEE)
+                                        }
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        when (notification.type) {
+                                            NotificationType.SUCCESS -> Color(0xFF81C784)
+                                            NotificationType.WARNING -> Color(0xFFFFD54F)
+                                            NotificationType.ERROR -> Color(0xFFE57373)
+                                        }
+                                    ),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                                            .fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = when (notification.type) {
+                                                NotificationType.SUCCESS -> Icons.Default.CheckCircle
+                                                NotificationType.WARNING -> Icons.Default.Warning
+                                                NotificationType.ERROR -> Icons.Default.Error
+                                            },
+                                            contentDescription = null,
+                                            tint = when (notification.type) {
+                                                NotificationType.SUCCESS -> Color(0xFF2E7D32)
+                                                NotificationType.WARNING -> Color(0xFFF57F17)
+                                                NotificationType.ERROR -> Color(0xFFC62828)
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = when (notification.type) {
+                                                    NotificationType.SUCCESS -> "Thành công"
+                                                    NotificationType.WARNING -> "Cảnh báo"
+                                                    NotificationType.ERROR -> "Lỗi"
+                                                },
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = when (notification.type) {
+                                                    NotificationType.SUCCESS -> Color(0xFF1B5E20)
+                                                    NotificationType.WARNING -> Color(0xFFE65100)
+                                                    NotificationType.ERROR -> Color(0xFFB71C1C)
+                                                }
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = notification.message,
+                                                fontSize = 12.sp,
+                                                color = when (notification.type) {
+                                                    NotificationType.SUCCESS -> Color(0xFF2E7D32)
+                                                    NotificationType.WARNING -> Color(0xFF5D4037)
+                                                    NotificationType.ERROR -> Color(0xFF7F0000)
+                                                },
+                                                lineHeight = 16.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         }
     }
@@ -612,7 +720,12 @@ fun NavHostContainer(
         }
 
         composable(Routes.HISTORY) {
-            HistoryScreen(viewModel = viewModel)
+            HistoryScreen(
+                viewModel = viewModel,
+                onNavigateToTimeline = { dateStr -> 
+                    navController.navigate("${Routes.TIMELINE}/${android.net.Uri.encode(dateStr)}")
+                }
+            )
         }
 
         composable(Routes.STATS) {
@@ -646,6 +759,18 @@ fun NavHostContainer(
             BankNotificationHistoryScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "${Routes.TIMELINE}/{dateStr}",
+            arguments = listOf(androidx.navigation.navArgument("dateStr") { type = androidx.navigation.NavType.StringType })
+        ) { backStackEntry ->
+            val dateStr = backStackEntry.arguments?.getString("dateStr") ?: ""
+            TimelineScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                initialDateStr = dateStr
             )
         }
 

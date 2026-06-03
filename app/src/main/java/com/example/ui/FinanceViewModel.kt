@@ -43,9 +43,36 @@ data class SmartWalletMapping(
     val lastConfirmed: Long
 )
 
+enum class NotificationType {
+    SUCCESS, WARNING, ERROR
+}
+
+data class AppNotification(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val message: String,
+    val type: NotificationType,
+    val durationMs: Long = 3500L
+)
+
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: FinanceRepository
+
+    private val _appNotifications = MutableStateFlow<List<AppNotification>>(emptyList())
+    val appNotifications: StateFlow<List<AppNotification>> = _appNotifications.asStateFlow()
+
+    fun showNotification(message: String, type: NotificationType) {
+        val newNotification = AppNotification(message = message, type = type)
+        _appNotifications.value = _appNotifications.value + newNotification
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(newNotification.durationMs)
+            _appNotifications.value = _appNotifications.value.filter { it.id != newNotification.id }
+        }
+    }
+
+    fun showSuccessNotification(message: String) = showNotification(message, NotificationType.SUCCESS)
+    fun showWarningNotification(message: String) = showNotification(message, NotificationType.WARNING)
+    fun showErrorNotification(message: String) = showNotification(message, NotificationType.ERROR)
 
     // Notification listener flows
     private val _notificationReaderEnabled = MutableStateFlow(false)
@@ -93,6 +120,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     // PIN Protection Flow
     private val _isPinEnabled = MutableStateFlow(false)
     val isPinEnabled: StateFlow<Boolean> = _isPinEnabled.asStateFlow()
+
+    private val _isAiScannerEnabled = MutableStateFlow(false)
+    val isAiScannerEnabled: StateFlow<Boolean> = _isAiScannerEnabled.asStateFlow()
 
     private val _focusedWalletId = MutableStateFlow<Int?>(null)
     val focusedWalletId: StateFlow<Int?> = _focusedWalletId.asStateFlow()
@@ -237,9 +267,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val pinHashSetting = repository.getSetting("pin_hash")
         val widgetsSetting = repository.getSetting("widgets_enabled")
         val startScreenSetting = repository.getSetting("start_screen")
+        val aiScannerSetting = repository.getSetting("ai_scanner_enabled")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
+        _isAiScannerEnabled.value = aiScannerSetting?.value == "true"
         _savedPinHash.value = pinHashSetting?.value ?: ""
         _widgetsEnabled.value = widgetsSetting?.value == "true"
         
@@ -532,25 +564,24 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             try {
                 val parsed = com.example.service.NotificationParser.parse(title, text, packageName)
-                val wallets = repository.allWallets.firstOrNull() ?: emptyList()
-                val matchedWallet = wallets.find { it.name.lowercase().contains(parsed.bankName.lowercase()) }
-                    ?: wallets.find { it.name.lowercase().contains(parsed.detectedWalletName.lowercase()) }
-                    ?: wallets.find { it.type == "BANK" }
-                    ?: wallets.firstOrNull()
-
                 if (parsed.success) {
+                    val wallets = repository.allWallets.firstOrNull() ?: emptyList()
+                    val matchedWallet = wallets.find { it.name.lowercase().contains(parsed.bankName.lowercase()) }
+                        ?: wallets.find { it.name.lowercase().contains(parsed.detectedWalletName.lowercase()) }
+                        ?: wallets.find { it.type == "BANK" }
+                        ?: wallets.firstOrNull()
+
                     val walletLabel = matchedWallet?.name ?: parsed.detectedWalletName
                     saveLocalLog(title, text, parsed, "PENDING", walletLabel)
+                    
+                    // Reload logs
+                    loadNotificationLogs()
                 } else {
-                    val walletLabel = matchedWallet?.name ?: "Không xác định"
-                    saveLocalLog(title, text, parsed, "FAILED_PARSE", walletLabel)
+                    showWarningNotification("Nội dung tin nhắn không khớp cú pháp ngân hàng nào. Không lưu vào danh sách chờ!")
                 }
-                
-                // Reload logs
-                loadNotificationLogs()
-
             } catch (e: Exception) {
                 e.printStackTrace()
+                showErrorNotification("Lỗi mô phỏng: ${e.localizedMessage}")
             }
         }
     }
@@ -591,7 +622,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         repository.saveSetting("notification_logs", newList.toString())
     }
 
-    fun confirmPendingNotificationLog(log: NotificationLog, walletId: Int, categoryName: String) {
+    fun confirmPendingNotificationLog(log: NotificationLog, walletId: Int, categoryName: String, overrideAmount: Double? = null) {
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
             val catDetails = getCategoryByName(categoryName)
@@ -663,7 +694,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 walletId = walletId,
                 walletName = wallet.name,
                 type = log.type,
-                amount = log.amount,
+                amount = overrideAmount ?: log.amount,
                 categoryName = categoryName,
                 categoryIcon = catDetails.iconName,
                 categoryColor = catDetails.colorHex,
@@ -950,6 +981,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             _isPinEnabled.value = false
             _savedPinHash.value = ""
             _isAppUnlocked.value = true
+        }
+    }
+
+    fun setAiScannerEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.saveSetting("ai_scanner_enabled", if (enabled) "true" else "false")
+            _isAiScannerEnabled.value = enabled
         }
     }
 
@@ -1576,7 +1614,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 val clip = android.content.ClipData.newPlainText("Sổ Chi Tiêu JSON Backup", jsonString)
                 clipboard.setPrimaryClip(clip)
-                android.widget.Toast.makeText(context, "Đã sao chép nội dung JSON vào Clipboard!", android.widget.Toast.LENGTH_LONG).show()
+                showSuccessNotification("Đã sao chép nội dung JSON vào Clipboard!")
             } catch (ex: Exception) {
                 ex.printStackTrace()
             }
@@ -1740,7 +1778,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 
                 addLog("Đã xóa hoàn tất và khôi phục cài đặt gốc thành công!")
                 _syncStatus.value = "SUCCESS_CLEAR"
-                android.widget.Toast.makeText(context, "Xóa toàn bộ dữ liệu & thiết lập lại thành công", android.widget.Toast.LENGTH_SHORT).show()
+                showSuccessNotification("Xóa toàn bộ dữ liệu & thiết lập lại thành công")
             } catch (e: Exception) {
                 _syncStatus.value = "ERROR"
                 e.printStackTrace()
@@ -1892,7 +1930,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
                 addLog("🎉 KHÔI PHỤC DỮ LIỆU THÀNH CÔNG HOÀN TOÀN!")
                 _syncStatus.value = "SUCCESS"
-                android.widget.Toast.makeText(context, "Khôi phục dữ liệu từ bản sao lưu thành công!", android.widget.Toast.LENGTH_LONG).show()
+                showSuccessNotification("Khôi phục dữ liệu từ bản sao lưu thành công!")
             } catch (e: Exception) {
                 addLog("Lỗi khôi phục: ${e.localizedMessage ?: "File JSON lỗi cấu trúc."}")
                 _syncStatus.value = "ERROR"
