@@ -1,6 +1,19 @@
 # Quản Lý Chi Tiêu (Finance Manager)
 
-Đây là mã nguồn dự án ứng dụng Android quản lý tài chính cá nhân, hỗ trợ theo dõi thu chi, quản lý ví, hạn mức chi tiêu (budget), dòng thời gian (timeline), và nhiều tính năng khác. Ứng dụng được xây dựng hoàn toàn bằng **Kotlin** và giao diện **Jetpack Compose**.
+Đây là mã nguồn dự án ứng dụng Android quản lý tài chính cá nhân toàn diện, giúp bạn dễ dàng theo dõi dòng tiền, kiểm soát ngân sách và tối ưu hóa thói quen chi tiêu. Ứng dụng được thiết kế với giao diện hiện đại, trực quan mang lại trải nghiệm mượt mà, được xây dựng hoàn toàn bằng ngôn ngữ **Kotlin** và bộ công cụ giao diện UI hiện đại **Jetpack Compose**.
+
+## 🌟 Chức năng chính (Features)
+- **Bảng điều khiển (Dashboard):** Xem nhanh tổng quan số dư tài khoản, báo cáo thu chi trong tháng, các hạn mức ngân sách và mục tiêu tiết kiệm nổi bật.
+- **Quản lý Giao dịch:** Thêm, xem, sửa, xoá giao dịch thu/chi nhanh chóng với danh mục và biểu tượng (icon) phong phú. Hỗ trợ tạo giao dịch chuyển tiền nhanh giữa các ví.
+- **Dòng thời gian (Timeline) & Lịch sử:** Xem lịch sử giao dịch trực quan theo từng ngày với biểu đồ dạng dòng thời gian đẹp mắt ghép nối sát sao với tổng thu/chi theo ngày.
+- **Quản lý Ví (Wallets):** Ghi chép nhiều tài khoản/ví riêng biệt.
+- **Hạn mức chi tiêu (Budgets):** Đặt hạn mức chi tiêu định kỳ theo tháng cho nhiều danh mục. Theo dõi lượng tiền còn lại với biểu đồ thanh sọc (striped progress) trực quan và màu sắc cảnh báo khi sắp vượt quá tiêu chuẩn.
+- **Mục tiêu tiết kiệm (Savings):** Khởi tạo và đồng hành những mục tiêu tài chính, theo dõi tiến độ hoàn thành các quỹ tiết kiệm của bản thân.
+- **Quét thông báo (Scan Notifications):** Hỗ trợ công cụ đọc và bóc tách biến động số dư từ những SMS hoặc thông báo đẩy của ngân hàng để nhập liệu tự động vào sổ cái.
+- **Báo cáo (Reports):** Hệ thống tạo báo cáo thu/chi trực quan qua biểu đồ tròn, biểu đồ cột; cho phép người dùng tùy chọn theo khoảng thời gian, nhóm ví, và các hạng mục phân tích.
+- **Bảo mật bằng mã PIN:** Khóa nhanh ứng dụng để bảo vệ quyền riêng tư số liệu trước truy cập trái phép bằng mật khẩu PIN 4 chữ số.
+
+---
 
 ## Yêu cầu công cụ
 Để mở và chạy được mã nguồn này trên máy tính của bạn, bạn cần:
@@ -44,3 +57,46 @@ Nếu bạn muốn đóng gói app chính thức:
 3. Dưới mục *Key store path*, bấm **Create new...** để tạo một tệp chìa khóa (keystore) bảo mật cho app. Điền mật khẩu và thông tin cá nhân.
 4. Bấm **Next**, tích chọn bản **release** -> Chọn **Create**.
 5. Đợi hệ thống build xong, chọn **locate** để mở thư mục chứa file `app-release.apk`. Đây là phiên bản nén tốt nhất, chạy mượt nhất, đã được ký bảo mật của bạn.
+
+---
+
+## Hướng dẫn Build bằng Command Line (Terminal) trên Ubuntu / Linux
+
+Hoàn toàn được! Bạn không bắt buộc phải dùng giao diện (GUI) của Android Studio. Trên Ubuntu, bạn có thể build dự án hoàn toàn thông qua công cụ dòng lệnh **Gradle Wrapper** được tích hợp sẵn trong mã nguồn.
+
+### 1. Chuẩn bị môi trường (Prerequisites)
+Bạn cần cài đặt Java (JDK 17) và tải Android SDK.
+Mở Terminal trên Ubuntu và cài đặt JDK 17 bằng dòng lệnh:
+```bash
+sudo apt update
+sudo apt install openjdk-17-jdk
+```
+*(Lưu ý: Bạn cũng cần thiết lập biến môi trường `ANDROID_HOME` trỏ tới thư mục chứa Android SDK của bạn).*
+
+### 2. Cấp quyền thực thi cho Gradle Wrapper
+Mở Terminal, di chuyển (cd) vào thư mục gốc của dự án vừa giải nén và chạy lệnh sau để cấp quyền thực thi cho file `gradlew`:
+```bash
+chmod +x gradlew
+```
+
+### 3. Lệnh Build APK
+Để tạo APK, bạn chạy công cụ `gradlew` ngay trong Terminal:
+
+**Tạo bản Debug APK (Dùng để test):**
+```bash
+./gradlew assembleDebug
+```
+Sau khi dòng lệnh chạy thành công (`BUILD SUCCESSFUL`), file cài đặt sẽ nằm ở: 
+`app/build/outputs/apk/debug/app-debug.apk`
+
+**Tạo bản Release APK (Bản chính thức):**
+```bash
+./gradlew assembleRelease
+```
+File apk sẽ nằm ở: 
+`app/build/outputs/apk/release/app-release-unsigned.apk` (Lưu ý nó sẽ là bản unsigned, bạn cần thiết lập cấu hình ký (signing tools) trong `build.gradle` hoặc dùng công cụ `apksigner` của Android SDK để ký nếu muốn đưa lên thiết bị thật hoặc store).
+
+Nếu bạn muốn dọn dẹp các file cache của lần build cũ trước khi build mới:
+```bash
+./gradlew clean assembleDebug
+```
