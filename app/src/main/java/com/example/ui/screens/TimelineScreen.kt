@@ -1,10 +1,12 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -80,6 +82,8 @@ fun TimelineScreen(
                         totalIncome = totalIncome,
                         totalExpense = totalExpense
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TimelineDailySummaryTable(dayTransactions = dayTransactions)
                     Spacer(modifier = Modifier.height(16.dp))
                 }
                 
@@ -213,6 +217,144 @@ fun TimelineTransactionUpdated(tx: Transaction, isLast: Boolean) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
+    val categoryStats = remember(dayTransactions) {
+        dayTransactions.groupBy { Triple(it.categoryName, it.categoryIcon, it.categoryColor) }
+            .map { (cat, txs) ->
+                val income = txs.filter { it.type == "INCOME" }.sumOf { it.amount }
+                val expense = txs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                Triple(cat, income, expense)
+            }
+            .filter { it.second > 0 || it.third > 0 }
+    }
+
+    val hasIncome = categoryStats.any { it.second > 0 }
+    val hasExpense = categoryStats.any { it.third > 0 }
+
+    if (categoryStats.isEmpty()) return
+
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp))
+    ) {
+        // Header Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.weight(0.8f).fillMaxHeight().padding(8.dp)) 
+            
+            if (hasIncome) {
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(borderColor))
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Thu", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+            if (hasExpense) {
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(borderColor))
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Chi", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+        }
+        
+        HorizontalDivider(color = borderColor)
+
+        // Data Rows
+        categoryStats.forEachIndexed { index, stat ->
+            val (cat, income, expense) = stat
+            val rowBgColor = try {
+                FormatHelper.parseColor(cat.third).copy(alpha = 0.15f)
+            } catch (e: Exception) {
+                Color.Transparent
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+                    .background(rowBgColor),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Category Col
+                Row(
+                    modifier = Modifier.weight(0.8f).fillMaxHeight().padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(FormatHelper.parseColor(cat.third)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = IconMapper.getIconByName(cat.second),
+                            contentDescription = cat.first,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    Text(
+                        text = cat.first, 
+                        fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (hasIncome) {
+                    Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(borderColor))
+                    // Income Col
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Text(
+                            text = if (income > 0) FormatHelper.formatVND(income) else "",
+                            fontSize = 12.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                if (hasExpense) {
+                    Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(borderColor))
+                    // Expense Col
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Text(
+                            text = if (expense > 0) FormatHelper.formatVND(expense) else "",
+                            fontSize = 12.sp,
+                            color = Color(0xFFC62828),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+            if (index < categoryStats.size - 1) {
+                HorizontalDivider(color = borderColor)
             }
         }
     }

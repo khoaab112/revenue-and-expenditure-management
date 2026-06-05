@@ -622,7 +622,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         repository.saveSetting("notification_logs", newList.toString())
     }
 
-    fun confirmPendingNotificationLog(log: NotificationLog, walletId: Int, categoryName: String, overrideAmount: Double? = null) {
+    fun confirmPendingNotificationLog(log: NotificationLog, walletId: Int, categoryName: String, overrideAmount: Double? = null, overrideNote: String? = null) {
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
             val catDetails = getCategoryByName(categoryName)
@@ -698,7 +698,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 categoryName = categoryName,
                 categoryIcon = catDetails.iconName,
                 categoryColor = catDetails.colorHex,
-                note = log.note.ifEmpty { "Ghi từ thông báo" },
+                note = overrideNote?.takeIf { it.isNotBlank() } ?: log.note.takeIf { it.isNotBlank() } ?: "Ghi từ thông báo",
                 timestamp = log.timestamp
             )
             repository.insertTransaction(tx)

@@ -20,43 +20,24 @@
 - **Android Studio**: Tải xuống và cài đặt phiên bản mới nhất (Google khuyến nghị bản Ladybug hoặc Koala).
 - **Java Development Kit (JDK 17)**: Thường được tích hợp sẵn khi cài Android Studio.
 
-## Hướng dẫn cài đặt và chạy dự án (Run chạy thử nghiệm)
+## Hướng dẫn cài đặt và xuất file trực tiếp (File APK)
 
-1. **Tải mã nguồn về máy**: Tải thư mục chứa tất cả các tệp tin của dự án (.zip) từ AI Studio hoặc từ Github và giải nén.
-2. **Mở dự án trong Android Studio**:
-   - Mở phần mềm Android Studio.
-   - Ở màn hình Welcome, chọn **Open** (hoặc vào menu `File > Open...`).
-   - Điều hướng tới thư mục mã nguồn vừa giải nén và nhấn **OK**.
-3. **Đồng bộ hóa Gradle (Sync):** 
-   - Khi vừa mở, Android Studio sẽ tự động tải thư viện và cấu hình dự án (Gradle Sync). Hãy đảm bảo máy tính bạn có kết nối internet và chờ đến khi thanh tiến trình chạy xong.
-4. **Thiết bị chạy (Device):**
-   - **Máy ảo (Emulator):** Vào `Tools -> Device Manager` -> Bấm `Create Device` để tạo 1 chiếc điện thoại ảo Android.
-   - **Máy thật:** Cắm cáp điện thoại Android vào máy tính. Trên điện thoại, vào Cài đặt -> Tùy chọn nhà phát triển -> Bật **Gỡ lỗi USB** (USB Debugging).
-5. **Chạy ứng dụng:**
-   - Click vào nút **Run** (hình tam giác màu xanh lá cây) trên thanh công cụ phía trên cùng, hoặc nhấn `Shift + F10`.
-   - Ứng dụng sẽ được biên dịch và cài đặt tự động lên máy thật hoặc máy ảo.
+Để lấy mã nguồn và tạo ra file cài đặt `.apk` nhanh chóng, bạn hãy thực hiện theo đúng 4 bước cơ bản sau:
 
----
-
-## Hướng dẫn xuất file cài đặt (APK)
-
-Nếu bạn muốn tạo file `.apk` để gửi cho bạn bè cài đặt hoặc lưu trữ mà không cần đưa lên CH Play:
-
-### Build APK gỡ lỗi (Debug APK) - Nhanh gọn
-Đây là cách tạo APK nhanh nhất để test trên điện thoại khác:
-1. Mở Android Studio.
-2. Trên menu trên cùng, chọn **Build** -> **Build Bundle(s) / APK(s)** -> **Build APK(s)**.
-3. Chờ công cụ Gradle xử lý ở dưới cùng màn hình. Khi hoàn tất (khoảng 1 - vài phút), sẽ có một pop-up thông báo hiển thị ở góc dưới bên phải.
-4. Bấm vào chữ **locate** trên pop-up thông báo. Hệ thống sẽ mở thư mục chứa file APK (thường nằm theo đường dẫn: `app/build/outputs/apk/debug/app-debug.apk`).
-5. Bạn có thể gửi file `app-debug.apk` vào điện thoại qua Zalo, Drive, hoặc copy qua cáp để cài đặt (nhớ cho phép điện thoại cài đặt từ "Nguồn không xác định").
-
-### Build APK phát hành (Release APK / Signed APK) - Đủ chuẩn đẩy lên CH Play
-Nếu bạn muốn đóng gói app chính thức:
-1. Chọn menu **Build** -> **Generate Signed Bundle / APK...**
-2. Chọn **APK** (nếu muốn lấy file cài) hoặc **Android App Bundle** (nếu muốn đẩy lên Google Play) -> Bấm **Next**.
-3. Dưới mục *Key store path*, bấm **Create new...** để tạo một tệp chìa khóa (keystore) bảo mật cho app. Điền mật khẩu và thông tin cá nhân.
-4. Bấm **Next**, tích chọn bản **release** -> Chọn **Create**.
-5. Đợi hệ thống build xong, chọn **locate** để mở thư mục chứa file `app-release.apk`. Đây là phiên bản nén tốt nhất, chạy mượt nhất, đã được ký bảo mật của bạn.
+1. **Tải mã nguồn về máy (Clone):** Clone dự án từ Github hoặc tải file `.zip` mã nguồn về và giải nén.
+2. **Giải mã file Keystore (Rất quan trọng):** 
+   - Mở Terminal hoặc Command Prompt (cmd) ngay tại thư mục gốc của dự án.
+   - Chạy dòng lệnh sau để giải mã file keystore, giúp gradle có thể build được:
+     - Trên Windows (cmd/PowerShell): `certutil -decode debug.keystore.base64 debug.keystore`
+     - Trên MacOS / Linux (Terminal): `base64 --decode debug.keystore.base64 > debug.keystore`
+3. **Mở dự án:**
+   - Khởi động Android Studio.
+   - Chọn **Open** (hoặc `File -> Open...`), sau đó điều hướng đến thư mục dự án vừa clone và chờ Android Studio đồng bộ xong Gradle.
+4. **Build lấy file APK:**
+   - Trên thanh menu của Android Studio, chọn **Build** -> **Generate Signed Bundle / APK...**
+   - Chọn **APK** rổi bấm **Next**.
+   - (Bạn có thể tạo key mới hoặc để cấu hình mặc định) tiếp tục bấm **Next** và chọn **Create**. 
+   - Khi hoàn tất, một thông báo sẽ hiện ở góc dưới bên phải màn hình. Bấm chữ **locate** trên thông báo đó để mở thư mục, ở đó sẽ có file `.apk` cài đặt để bạn sao chép thẳng vào điện thoại.
 
 ---
 

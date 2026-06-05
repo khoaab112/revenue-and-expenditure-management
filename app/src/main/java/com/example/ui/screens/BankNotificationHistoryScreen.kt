@@ -3,6 +3,8 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,8 +14,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -22,9 +27,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,7 +47,7 @@ import java.util.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun BankNotificationHistoryScreen(
     viewModel: FinanceViewModel,
@@ -112,6 +120,9 @@ fun BankNotificationHistoryScreen(
         }
     }
 
+    var showSidebar by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -142,13 +153,28 @@ fun BankNotificationHistoryScreen(
                             )
                         }
                     }
+                    IconButton(onClick = { showSidebar = !showSidebar }, modifier = Modifier.padding(end = 4.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(Color(0xFF1E2A40), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Cài đặt & Quyền",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
         },
-        modifier = modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -159,195 +185,51 @@ fun BankNotificationHistoryScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             
-            // --- SECTION 1: CÀI ĐẶT THÔNG BÁO THỰC TẾ & MÔ PHỎNG ---
+            // Nút Quét Thủ Công ở trên cùng
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Header & Toggle Switch
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.NotificationsActive,
-                                        contentDescription = "Notification Reader",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = "Đọc tin ngân hàng tự động",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Tự ghi chép khi nổ thông báo app ngân hàng, MoMo...",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            Switch(
-                                checked = notificationReaderEnabled,
-                                onCheckedChange = { isChecked ->
-                                    viewModel.setNotificationReaderEnabled(isChecked)
-                                    if (isChecked) {
-                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                                            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                                postNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                                            }
-                                        }
+                Button(
+                    onClick = {
+                        if (isCheckingNotifications) return@Button
+                        isCheckingNotifications = true
+                        coroutineScope.launch {
+                            delay(1200)
+                            viewModel.scanNotificationsManual(
+                                context = context,
+                                onSuccess = { count ->
+                                    isCheckingNotifications = false
+                                    if (count > 0) {
+                                        viewModel.showSuccessNotification("Quét thành công! Đã thêm $count giao dịch.")
+                                    } else {
+                                        viewModel.showWarningNotification("Quét xong! Không tìm thấy thông báo mới.")
                                     }
                                 },
-                                modifier = Modifier.testTag("notification_reader_switch")
+                                onError = { errorMessage ->
+                                    isCheckingNotifications = false
+                                    viewModel.showErrorNotification(errorMessage)
+                                }
                             )
                         }
-
-                        // Permission Warning Banner if not enabled/permitted
-                        if (!isPermitted) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = "Permission Needed",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Yêu cầu quyền hệ thống",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            color = MaterialTheme.colorScheme.onErrorContainer
-                                        )
-                                        Text(
-                                            text = "Để đọc tự động, vui lòng bật quyền truy cập thông báo trong cài đặt Android.",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onErrorContainer
-                                        )
-                                    }
-                                    Button(
-                                        onClick = {
-                                            try {
-                                                val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-                                                context.startActivity(intent)
-                                            } catch (e: Exception) {
-                                                viewModel.showErrorNotification("Không thể mở cài đặt")
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                        modifier = Modifier.height(36.dp)
-                                    ) {
-                                        Text("Cấp quyền", fontSize = 11.sp)
-                                    }
-                                }
-                            }
-                        } else if (notificationReaderEnabled) {
-                            // Success Banner show status
-                            Surface(
-                                color = Color(0xFFE8F5E9),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = "Ready Status",
-                                        tint = Color(0xFF2E7D32),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Text(
-                                        text = "TRẠNG THÁI: Đã kích hoạt & Đang lắng nghe thông báo biến động số dư!",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF2E7D32)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Manual Notification Scan Button
-                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                        
-                        Button(
-                            onClick = {
-                                if (isCheckingNotifications) return@Button
-                                isCheckingNotifications = true
-                                coroutineScope.launch {
-                                    delay(1200) // Assure a minimum period of loading state indicator is visible to the user
-                                    viewModel.scanNotificationsManual(
-                                        context = context,
-                                        onSuccess = { count ->
-                                            isCheckingNotifications = false
-                                            if (count > 0) {
-                                                viewModel.showSuccessNotification("Quét thành công! Đã tự động thêm $count giao dịch mới.")
-                                            } else {
-                                                viewModel.showWarningNotification("Quét xong! Không tìm thấy thông báo giao dịch mới nào trên thanh trạng thái.")
-                                            }
-                                        },
-                                        onError = { errorMessage ->
-                                            isCheckingNotifications = false
-                                            viewModel.showErrorNotification(errorMessage)
-                                        }
-                                    )
-                                }
-                            },
-                            enabled = !isCheckingNotifications,
-                            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("manual_scan_notifications_button"),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        ) {
-                            if (isCheckingNotifications) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Đang quét tìm thông báo...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            } else {
-                                Icon(imageVector = Icons.Default.Search, contentDescription = "Scan", modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Quét thông báo (Thủ công)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
+                    },
+                    enabled = !isCheckingNotifications,
+                    modifier = Modifier.fillMaxWidth().height(44.dp).testTag("manual_scan_notifications_button"),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                ) {
+                    if (isCheckingNotifications) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Đang quét...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    } else {
+                        Icon(imageVector = Icons.Default.Search, contentDescription = "Scan", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Quét thủ công", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -552,6 +434,10 @@ fun BankNotificationHistoryScreen(
                             mutableStateOf(String.format("%.0f", log.amount))
                         }
 
+                        var customNoteStr by remember(log) {
+                            mutableStateOf(log.note)
+                        }
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -568,19 +454,22 @@ fun BankNotificationHistoryScreen(
                                 defaultElevation = 2.dp
                             )
                         ) {
-                            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                            Box(modifier = Modifier.fillMaxWidth()) {
                                 // Left Color Strip
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .width(4.dp)
-                                        .background(
-                                            if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
-                                        )
-                                )
+                                Box(modifier = Modifier.matchParentSize()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(4.dp)
+                                            .fillMaxHeight()
+                                            .background(
+                                                if (log.type == "INCOME") Color(0xFF2E7D32) else Color(0xFFC62828)
+                                            )
+                                            .align(Alignment.CenterStart)
+                                    )
+                                }
 
                                 // Card Content
-                                Column(modifier = Modifier.padding(10.dp).weight(1f)) {
+                                Column(modifier = Modifier.padding(start = 14.dp, top = 10.dp, end = 10.dp, bottom = 10.dp).fillMaxWidth()) {
                                     // Top Row: Bank Info and Pending Badge
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -826,13 +715,13 @@ fun BankNotificationHistoryScreen(
                                                         wallets
                                                     }
 
-                                                    Row(
+                                                    androidx.compose.foundation.layout.FlowRow(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .horizontalScroll(rememberScrollState())
                                                             .padding(vertical = 4.dp),
+                                                        maxItemsInEachRow = 3,
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
+                                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
                                                         sortedWallets.forEach { w ->
                                                             val selected = selectedWalletId == w.id
@@ -921,12 +810,13 @@ fun BankNotificationHistoryScreen(
                                                     )
                                                 }
 
-                                                Row(
+                                                androidx.compose.foundation.layout.FlowRow(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .horizontalScroll(rememberScrollState())
                                                         .padding(vertical = 4.dp),
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    maxItemsInEachRow = 4,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     categories.filter { it.type == log.type || it.type == "BOTH" }.forEach { cat ->
                                                         val selected = selectedCategoryName == cat.name
@@ -984,59 +874,99 @@ fun BankNotificationHistoryScreen(
 
                                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
-                                            // AMOUNT EDITING FIELD (Số tiền đổi thành VND và chuyển xuống cuối dòng kèm trợ giúp định dạng)
-                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            // LƯỢT NHẬP SỐ TIỀN & GHI CHÚ
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                // Hàng 1: Nhập Số tiền
                                                 Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Text(
-                                                        text = "VND:",
-                                                        fontSize = 12.sp,
+                                                        text = "Số tiền:",
+                                                        fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        modifier = Modifier.width(60.dp)
                                                     )
-
-                                                    Column(modifier = Modifier.weight(1f)) {
-                                                        OutlinedTextField(
-                                                            value = customAmountStr,
-                                                            onValueChange = { input ->
-                                                                val filtered = input.filter { it.isDigit() }
-                                                                if (filtered.length <= 12) {
-                                                                    customAmountStr = filtered
+                                                    BasicTextField(
+                                                        value = customAmountStr,
+                                                        onValueChange = { input ->
+                                                            val filtered = input.filter { it.isDigit() }
+                                                            if (filtered.length <= 12) {
+                                                                customAmountStr = filtered
+                                                            }
+                                                        },
+                                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                        textStyle = TextStyle(
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        ),
+                                                        singleLine = true,
+                                                        modifier = Modifier.weight(1f),
+                                                        decorationBox = { innerTextField ->
+                                                            Box(
+                                                                Modifier
+                                                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                                                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
+                                                                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                                                            ) {
+                                                                if (customAmountStr.isEmpty()) {
+                                                                    Text("0", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.5f), fontSize = 13.sp)
                                                                 }
-                                                            },
-                                                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                                                            ),
-                                                            modifier = Modifier
-                                                                .fillMaxWidth(),
-                                                            textStyle = androidx.compose.ui.text.TextStyle(
-                                                                fontSize = 12.sp,
-                                                                fontWeight = FontWeight.Bold
-                                                            ),
-                                                            singleLine = true,
-                                                            shape = RoundedCornerShape(6.dp),
-                                                            colors = OutlinedTextFieldDefaults.colors(
-                                                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                                                            )
-                                                        )
-
-                                                        if (customAmountStr.isNotEmpty()) {
-                                                            val parsedVal = customAmountStr.toDoubleOrNull() ?: 0.0
-                                                            Text(
-                                                                text = FormatHelper.formatVND(parsedVal),
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.ExtraBold,
-                                                                color = MaterialTheme.colorScheme.primary,
-                                                                modifier = Modifier.padding(top = 4.dp, start = 4.dp)
-                                                            )
+                                                                innerTextField()
+                                                            }
                                                         }
+                                                    )
+                                                    val parsedVal = customAmountStr.toDoubleOrNull() ?: 0.0
+                                                    if (parsedVal > 0) {
+                                                        Text(
+                                                            text = FormatHelper.formatVND(parsedVal),
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.padding(start = 8.dp).widthIn(max = 80.dp),
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
                                                     }
+                                                }
+
+                                                // Hàng 2: Nhập Ghi chú
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "Ghi chú:",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        modifier = Modifier.width(60.dp)
+                                                    )
+                                                    BasicTextField(
+                                                        value = customNoteStr,
+                                                        onValueChange = { customNoteStr = it },
+                                                        textStyle = TextStyle(
+                                                            fontSize = 12.sp,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        ),
+                                                        singleLine = true,
+                                                        modifier = Modifier.weight(1f),
+                                                        decorationBox = { innerTextField ->
+                                                            Box(
+                                                                Modifier
+                                                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                                                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
+                                                                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                                                            ) {
+                                                                if (customNoteStr.isEmpty()) {
+                                                                    Text("Nhập ghi chú...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.5f), fontSize = 12.sp)
+                                                                }
+                                                                innerTextField()
+                                                            }
+                                                        }
+                                                    )
                                                 }
                                             }
 
@@ -1058,7 +988,7 @@ fun BankNotificationHistoryScreen(
                                                             return@Button
                                                         }
                                                         val finalAmount = customAmountStr.toDoubleOrNull() ?: log.amount
-                                                        viewModel.confirmPendingNotificationLog(log, selectedWalletId, selectedCategoryName, finalAmount)
+                                                        viewModel.confirmPendingNotificationLog(log, selectedWalletId, selectedCategoryName, finalAmount, customNoteStr)
                                                         viewModel.showSuccessNotification("Xác nhận giao dịch thành công!")
                                                     },
                                                     modifier = Modifier
@@ -1436,5 +1366,198 @@ fun BankNotificationHistoryScreen(
                 }
             }
         )
+    }
+    
+    // Sidebar Overlay
+    AnimatedVisibility(
+        visible = showSidebar,
+        enter = slideInHorizontally(initialOffsetX = { it }),
+        exit = slideOutHorizontally(targetOffsetX = { it }),
+        modifier = Modifier.align(Alignment.CenterEnd)
+    ) {
+        // CATCH CLICK EVENTS ON BACKGROUND
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable { showSidebar = false }
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(320.dp)
+                    .align(Alignment.CenterEnd)
+                    .pointerInput(Unit) { }, // consume clicks
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header with close button
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Cài đặt thông báo", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        IconButton(onClick = { showSidebar = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Đóng")
+                        }
+                    }
+
+                    // --- SECTION 1: CÀI ĐẶT THÔNG BÁO THỰC TẾ & MÔ PHỎNG ---
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Header & Toggle Switch
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.NotificationsActive,
+                                            contentDescription = "Notification Reader",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Đọc tin tự động",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Tự động ghi chép khi nổ thông báo",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Switch(
+                                    checked = notificationReaderEnabled,
+                                    onCheckedChange = { isChecked ->
+                                        viewModel.setNotificationReaderEnabled(isChecked)
+                                        if (isChecked) {
+                                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                                    postNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                                }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.testTag("notification_reader_switch")
+                                )
+                            }
+
+                            // Permission Warning Banner if not enabled/permitted
+                            if (!isPermitted) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = "Permission Needed",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Yêu cầu quyền",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                                )
+                                                Text(
+                                                    text = "Xin vui lòng bật quyền truy cập thông báo trong cài đặt Android.",
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                                )
+                                            }
+                                        }
+                                        Button(
+                                            onClick = {
+                                                try {
+                                                    val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    viewModel.showErrorNotification("Không thể mở cài đặt")
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                            modifier = Modifier.height(36.dp).fillMaxWidth()
+                                        ) {
+                                            Text("Cấp quyền nhanh", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            } else if (notificationReaderEnabled) {
+                                // Success Banner show status
+                                Surface(
+                                    color = Color(0xFFE8F5E9),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Ready Status",
+                                            tint = Color(0xFF2E7D32),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "Đã kích hoạt & Đang lắng nghe thông báo biến động số dư!",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF2E7D32)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     }
 }
