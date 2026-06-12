@@ -1,104 +1,114 @@
 package com.example.ui
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
 object IconMapper {
     fun getIconByName(name: String): ImageVector {
         return when (name) {
-            "Restaurant" -> Icons.Default.Restaurant
-            "DirectionsCar" -> Icons.Default.DirectionsCar
-            "ShoppingBag" -> Icons.Default.ShoppingBag
-            "Receipt" -> Icons.Default.Receipt
-            "SportsEsports" -> Icons.Default.SportsEsports
-            "School" -> Icons.Default.School
-            "LocalHospital" -> Icons.Default.LocalHospital
-            "Home" -> Icons.Default.Home
-            "Work" -> Icons.Default.Work
-            "CardGiftcard" -> Icons.Default.CardGiftcard
-            "Storefront" -> Icons.Default.Storefront
-            "Payments" -> Icons.Default.Payments
-            "AccountBalance" -> Icons.Default.AccountBalance
-            "AccountBalanceWallet" -> Icons.Default.AccountBalanceWallet
-            "Savings" -> Icons.Default.Savings
-            "TrendingUp" -> Icons.Default.TrendingUp
-            "TrendingDown" -> Icons.Default.TrendingDown
-            "Lock" -> Icons.Default.Lock
-            "Settings" -> Icons.Default.Settings
+            // New Categories added for user request:
+            "LocalGasStation" -> Icons.Outlined.LocalGasStation
+            "Commute" -> Icons.Outlined.Commute
+            "ShoppingCart" -> Icons.Outlined.ShoppingCart
+            "Bed" -> Icons.Outlined.Bed
+            "MedicalServices" -> Icons.Outlined.MedicalServices
+            "Sick" -> Icons.Outlined.Sick
+            "Medication" -> Icons.Outlined.Medication
+            
+            // Existing
+            "Restaurant" -> Icons.Outlined.Restaurant
+            "DirectionsCar" -> Icons.Outlined.DirectionsCar
+            "ShoppingBag" -> Icons.Outlined.ShoppingBag
+            "Receipt" -> Icons.Outlined.Receipt
+            "SportsEsports" -> Icons.Outlined.SportsEsports
+            "School" -> Icons.Outlined.School
+            "LocalHospital" -> Icons.Outlined.LocalHospital
+            "Home" -> Icons.Outlined.Home
+            "Work" -> Icons.Outlined.Work
+            "CardGiftcard" -> Icons.Outlined.CardGiftcard
+            "Storefront" -> Icons.Outlined.Storefront
+            "Payments" -> Icons.Outlined.Payments
+            "AccountBalance" -> Icons.Outlined.AccountBalance
+            "AccountBalanceWallet" -> Icons.Outlined.AccountBalanceWallet
+            "Savings" -> Icons.Outlined.Savings
+            "TrendingUp" -> Icons.Outlined.TrendingUp
+            "TrendingDown" -> Icons.Outlined.TrendingDown
+            "Lock" -> Icons.Outlined.Lock
+            "Settings" -> Icons.Outlined.Settings
             
             // Bank
-            "Business" -> Icons.Default.Business
-            "Domain" -> Icons.Default.Domain
-            "CurrencyExchange" -> Icons.Default.CurrencyExchange
-            "AssuredWorkload" -> Icons.Default.AssuredWorkload
-            "SwapHoriz" -> Icons.Default.SwapHoriz
-            "CorporateFare" -> Icons.Default.CorporateFare
-            "CreditCard" -> Icons.Default.CreditCard
+            "Business" -> Icons.Outlined.Business
+            "Domain" -> Icons.Outlined.Domain
+            "CurrencyExchange" -> Icons.Outlined.CurrencyExchange
+            "AssuredWorkload" -> Icons.Outlined.AssuredWorkload
+            "SwapHoriz" -> Icons.Outlined.SwapHoriz
+            "CorporateFare" -> Icons.Outlined.CorporateFare
+            "CreditCard" -> Icons.Outlined.CreditCard
 
             // Cash
-            "Money" -> Icons.Default.Money
-            "AttachMoney" -> Icons.Default.AttachMoney
-            "Wallet" -> Icons.Default.Wallet
-            "PriceCheck" -> Icons.Default.PriceCheck
-            "LocalAtm" -> Icons.Default.LocalAtm
-            "PointOfSale" -> Icons.Default.PointOfSale
+            "Money" -> Icons.Outlined.Money
+            "AttachMoney" -> Icons.Outlined.AttachMoney
+            "Wallet" -> Icons.Outlined.Wallet
+            "PriceCheck" -> Icons.Outlined.PriceCheck
+            "LocalAtm" -> Icons.Outlined.LocalAtm
+            "PointOfSale" -> Icons.Outlined.PointOfSale
 
             // E-Wallet
-            "PhonelinkRing" -> Icons.Default.PhonelinkRing
-            "Contactless" -> Icons.Default.Contactless
-            "QrCode" -> Icons.Default.QrCode
-            "PhoneAndroid" -> Icons.Default.PhoneAndroid
-            "Security" -> Icons.Default.Security
-            "TapAndPlay" -> Icons.Default.TapAndPlay
-            "Nfc" -> Icons.Default.Nfc
-            "MobileScreenShare" -> Icons.Default.MobileScreenShare
+            "PhonelinkRing" -> Icons.Outlined.PhonelinkRing
+            "Contactless" -> Icons.Outlined.Contactless
+            "QrCode" -> Icons.Outlined.QrCode
+            "PhoneAndroid" -> Icons.Outlined.PhoneAndroid
+            "Security" -> Icons.Outlined.Security
+            "TapAndPlay" -> Icons.Outlined.TapAndPlay
+            "Nfc" -> Icons.Outlined.Nfc
+            "MobileScreenShare" -> Icons.Outlined.MobileScreenShare
 
             // Savings
-            "Inventory" -> Icons.Default.Inventory
-            "CurrencyBitcoin" -> Icons.Default.CurrencyBitcoin
-            "MonetizationOn" -> Icons.Default.MonetizationOn
-            "Star" -> Icons.Default.Star
-            "WorkspacePremium" -> Icons.Default.WorkspacePremium
-            "Redeem" -> Icons.Default.Redeem
+            "Inventory" -> Icons.Outlined.Inventory
+            "CurrencyBitcoin" -> Icons.Outlined.CurrencyBitcoin
+            "MonetizationOn" -> Icons.Outlined.MonetizationOn
+            "Star" -> Icons.Outlined.Star
+            "WorkspacePremium" -> Icons.Outlined.WorkspacePremium
+            "Redeem" -> Icons.Outlined.Redeem
             
             // New modern & attractive icons
-            "Coffee" -> Icons.Default.Coffee
-            "LocalBar" -> Icons.Default.LocalBar
-            "Flight" -> Icons.Default.Flight
-            "Checkroom" -> Icons.Default.Checkroom
-            "FitnessCenter" -> Icons.Default.FitnessCenter
-            "Pets" -> Icons.Default.Pets
-            "ChildCare" -> Icons.Default.ChildCare
-            "FaceRetouchingNatural" -> Icons.Default.FaceRetouchingNatural
-            "Spa" -> Icons.Default.Spa
-            "Movie" -> Icons.Default.Movie
-            "Theaters" -> Icons.Default.Theaters
-            "LibraryMusic" -> Icons.Default.LibraryMusic
-            "Headphones" -> Icons.Default.Headphones
-            "VideogameAsset" -> Icons.Default.VideogameAsset
-            "LocalPizza" -> Icons.Default.LocalPizza
-            "LocalCafe" -> Icons.Default.LocalCafe
-            "LocalDining" -> Icons.Default.LocalDining
-            "Brush" -> Icons.Default.Brush
-            "Palette" -> Icons.Default.Palette
-            "Computer" -> Icons.Default.Computer
-            "PhoneIphone" -> Icons.Default.PhoneIphone
-            "CameraAlt" -> Icons.Default.CameraAlt
-            "Map" -> Icons.Default.Map
-            "CrueltyFree" -> Icons.Default.CrueltyFree
-            "PedalBike" -> Icons.Default.PedalBike
-            "AutoAwesome" -> Icons.Default.AutoAwesome
-            "Celebration" -> Icons.Default.Celebration
-            "Cake" -> Icons.Default.Cake
-            "EmojiEmotions" -> Icons.Default.EmojiEmotions
-            "Favorite" -> Icons.Default.Favorite
-            "Mood" -> Icons.Default.Mood
-            "SelfImprovement" -> Icons.Default.SelfImprovement
-            "EmojiObjects" -> Icons.Default.EmojiObjects
-            "RocketLaunch" -> Icons.Default.RocketLaunch
+            "Coffee" -> Icons.Outlined.Coffee
+            "LocalBar" -> Icons.Outlined.LocalBar
+            "Flight" -> Icons.Outlined.Flight
+            "Checkroom" -> Icons.Outlined.Checkroom
+            "FitnessCenter" -> Icons.Outlined.FitnessCenter
+            "Pets" -> Icons.Outlined.Pets
+            "ChildCare" -> Icons.Outlined.ChildCare
+            "FaceRetouchingNatural" -> Icons.Outlined.FaceRetouchingNatural
+            "Spa" -> Icons.Outlined.Spa
+            "Movie" -> Icons.Outlined.Movie
+            "Theaters" -> Icons.Outlined.Theaters
+            "LibraryMusic" -> Icons.Outlined.LibraryMusic
+            "Headphones" -> Icons.Outlined.Headphones
+            "VideogameAsset" -> Icons.Outlined.VideogameAsset
+            "LocalPizza" -> Icons.Outlined.LocalPizza
+            "LocalCafe" -> Icons.Outlined.LocalCafe
+            "LocalDining" -> Icons.Outlined.LocalDining
+            "Brush" -> Icons.Outlined.Brush
+            "Palette" -> Icons.Outlined.Palette
+            "Computer" -> Icons.Outlined.Computer
+            "PhoneIphone" -> Icons.Outlined.PhoneIphone
+            "CameraAlt" -> Icons.Outlined.CameraAlt
+            "Map" -> Icons.Outlined.Map
+            "CrueltyFree" -> Icons.Outlined.CrueltyFree
+            "PedalBike" -> Icons.Outlined.PedalBike
+            "AutoAwesome" -> Icons.Outlined.AutoAwesome
+            "Celebration" -> Icons.Outlined.Celebration
+            "Cake" -> Icons.Outlined.Cake
+            "EmojiEmotions" -> Icons.Outlined.EmojiEmotions
+            "Favorite" -> Icons.Outlined.Favorite
+            "Mood" -> Icons.Outlined.Mood
+            "SelfImprovement" -> Icons.Outlined.SelfImprovement
+            "EmojiObjects" -> Icons.Outlined.EmojiObjects
+            "RocketLaunch" -> Icons.Outlined.RocketLaunch
             
-            else -> Icons.Default.Category
+            else -> Icons.Outlined.Category
         }
     }
 }

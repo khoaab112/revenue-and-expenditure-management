@@ -1239,10 +1239,24 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val cat = getCategoryByName(categoryName)
             
-            // Calculate current month's spending for this category to seed spentAmount!
+            // Collect child categories for seeding
+            val allCats = categoriesList.value
+            val familyCategories = mutableSetOf(categoryName)
+            var added = true
+            while (added) {
+                added = false
+                for (c in allCats) {
+                    if (c.name !in familyCategories && c.parentName in familyCategories) {
+                        familyCategories.add(c.name)
+                        added = true
+                    }
+                }
+            }
+            
+            // Calculate current month's spending for this category and its children to seed spentAmount!
             val txs = repository.allTransactions.firstOrNull() ?: emptyList()
             val spent = txs.filter {
-                it.type == "EXPENSE" && it.categoryName == categoryName && isTimestampInMonth(it.timestamp, month)
+                it.type == "EXPENSE" && it.categoryName in familyCategories && isTimestampInMonth(it.timestamp, month)
             }.sumOf { it.amount }
 
             repository.insertBudget(

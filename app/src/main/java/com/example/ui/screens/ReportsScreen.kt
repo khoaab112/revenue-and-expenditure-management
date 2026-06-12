@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.TrendingDown
@@ -100,45 +100,46 @@ fun ReportsScreen(
     Scaffold(
         topBar = {
             if (onNavigateBack != null) {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = "Thống kê & Báo cáo",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testTag("report_back_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Quay lại"
                         )
-                    },
-                    navigationIcon = {
-                        IconButton(
-                            onClick = onNavigateBack,
-                            modifier = Modifier.testTag("report_back_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Quay lại"
-                            )
-                        }
-                    },
-                    actions = {
-                        val exportContext = androidx.compose.ui.platform.LocalContext.current
-                        IconButton(
-                            onClick = {
-                                com.example.ui.ExcelExportHelper.exportTransactionsToCsv(
-                                    context = exportContext,
-                                    transactions = monthTransactions,
-                                    onWarning = { viewModel.showWarningNotification(it) },
-                                    onError = { viewModel.showErrorNotification(it) }
-                                )
-                            },
-                            modifier = Modifier.testTag("report_export_csv_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Xuất Excel"
-                            )
-                        }
                     }
-                )
+                    Text(
+                        text = "Thống kê & Báo cáo",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    val exportContext = androidx.compose.ui.platform.LocalContext.current
+                    IconButton(
+                        onClick = {
+                            com.example.ui.ExcelExportHelper.exportTransactionsToCsv(
+                                context = exportContext,
+                                transactions = monthTransactions,
+                                onWarning = { viewModel.showWarningNotification(it) },
+                                onError = { viewModel.showErrorNotification(it) }
+                            )
+                        },
+                        modifier = Modifier.testTag("report_export_csv_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Xuất Excel"
+                        )
+                    }
+                }
             }
         }
     ) { innerPadding ->

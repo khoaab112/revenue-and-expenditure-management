@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
+import com.example.ui.IconMapper
 import com.example.ui.components.CustomMoneyInputField
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -91,14 +92,22 @@ fun SavingsVaultScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("QUẢN LÝ SỔ & HŨ TIẾT KIỆM", fontSize = 18.sp, fontWeight = FontWeight.Black) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
                 }
-            )
+                Text(
+                    text = "QUẢN LÝ SỔ & HŨ TIẾT KIỆM", 
+                    fontSize = 18.sp, 
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     ) { innerPadding ->
         LazyColumn(
@@ -422,12 +431,33 @@ fun SavingsVaultScreen(
                                     }
                                 }
 
-                                CustomMoneyInputField(
-                                    value = amountStr,
-                                    onValueChange = { amountStr = it },
-                                    label = "Số tiền",
-                                    modifier = Modifier.fillMaxWidth().testTag("savings_amount_input")
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically, 
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CustomMoneyInputField(
+                                        value = amountStr,
+                                        onValueChange = { amountStr = it },
+                                        label = "Số tiền",
+                                        modifier = Modifier.weight(1f).testTag("savings_amount_input")
+                                    )
+                                    if (!isDeposit) {
+                                        Button(
+                                            onClick = { 
+                                                amountStr = vaultDetails.balance.toLong().toString()
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp),
+                                            modifier = Modifier.height(56.dp)
+                                        ) {
+                                            Text("Rút toàn bộ", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
+                                }
 
                                 OutlinedTextField(
                                     value = note,
@@ -458,16 +488,39 @@ fun SavingsVaultScreen(
                                     }
                                     
                                     if (selectedDailyWalletId != null) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        @OptIn(ExperimentalLayoutApi::class)
+                                        androidx.compose.foundation.layout.FlowRow(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             dailyWallets.forEach { wt ->
-                                                FilterChip(
-                                                    selected = selectedDailyWalletId == wt.id,
+                                                val isSelected = selectedDailyWalletId == wt.id
+                                                Surface(
                                                     onClick = { selectedDailyWalletId = wt.id },
-                                                    label = { Text("${wt.name} (${FormatHelper.formatVND(wt.balance)})") }
-                                                )
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                                    border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = IconMapper.getIconByName(wt.iconName),
+                                                            contentDescription = wt.name,
+                                                            tint = try { FormatHelper.parseColor(wt.colorHex) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                        Text(
+                                                            text = "${wt.name} (${FormatHelper.formatVND(wt.balance)})",
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }

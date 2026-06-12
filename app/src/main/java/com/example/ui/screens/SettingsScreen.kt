@@ -84,6 +84,7 @@ fun SettingsScreen(
     var showWalletManagement by remember { mutableStateOf(false) }
     var showCategoryManagement by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var isDeveloperExpanded by remember { mutableStateOf(false) }
 
     // Developer simulation states
     var simTitle by remember { mutableStateOf("Vietcombank") }
@@ -632,20 +633,34 @@ fun SettingsScreen(
         }
 
         // 6. [DEVELOPER]
-        Text(
-            text = "[DEVELOPER]",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { isDeveloperExpanded = !isDeveloperExpanded }
+                .padding(top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            Text(
+                text = "[DEVELOPER]",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Icon(
+                imageVector = if (isDeveloperExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = "Toggle Developer",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        if (isDeveloperExpanded) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -773,6 +788,7 @@ fun SettingsScreen(
                 }
             }
         }
+    }
     }
 
     // Beautiful Interactive State Dialog for sync feedback

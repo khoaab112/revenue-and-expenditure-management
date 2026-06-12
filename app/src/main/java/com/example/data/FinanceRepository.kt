@@ -120,16 +120,45 @@ class FinanceRepository(private val dao: FinanceDao) {
         val monthStr = String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
         
         // Find existing budgets for this month
-        val budgets = dao.getAllBudgets().firstOrNull()?.filter { it.categoryName == category && it.month == monthStr }
-        if (!budgets.isNullOrEmpty()) {
-            for (budget in budgets) {
-                val newSpent = if (isAddition) {
-                    budget.spentAmount + amount
-                } else {
-                    budget.spentAmount - amount
+        val allBudgetsForMonth = dao.getAllBudgets().firstOrNull()?.filter { it.month == monthStr }
+        if (allBudgetsForMonth.isNullOrEmpty()) return
+
+        // To support parent-child categories, we need to know the hierarchy
+        val catSetting = dao.getSetting("custom_categories")
+        val categoryHierarchy = mutableMapOf<String, String?>() // child -> parent
+        if (catSetting != null) {
+            val parts = catSetting.value.split(";;")
+            for (p in parts) {
+                val segs = p.split("|")
+                if (segs.size >= 4) {
+                    val catName = segs[0]
+                    val parentName = if (segs.size >= 5 && segs[4].isNotEmpty()) segs[4] else null
+                    categoryHierarchy[catName] = parentName
                 }
-                dao.updateBudget(budget.copy(spentAmount = Math.max(0.0, newSpent)))
             }
+        }
+
+        val categoriesForBudgetUpdate = mutableSetOf<String>()
+        categoriesForBudgetUpdate.add(category)
+        var currentCat = category
+        while (true) {
+            val parent = categoryHierarchy[currentCat]
+            if (parent != null) {
+                categoriesForBudgetUpdate.add(parent)
+                currentCat = parent // Walk up
+            } else {
+                break
+            }
+        }
+
+        val matchedBudgets = allBudgetsForMonth.filter { it.categoryName in categoriesForBudgetUpdate }
+        for (budget in matchedBudgets) {
+            val newSpent = if (isAddition) {
+                budget.spentAmount + amount
+            } else {
+                budget.spentAmount - amount
+            }
+            dao.updateBudget(budget.copy(spentAmount = Math.max(0.0, newSpent)))
         }
     }
 

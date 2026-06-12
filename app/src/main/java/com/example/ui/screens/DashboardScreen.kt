@@ -735,7 +735,7 @@ fun DashboardScreen(
 
                     // Vượt ngân sách
                     budgets.forEach { bug ->
-                        val spent = currentMonthTransactions.filter { it.categoryName == bug.categoryName && it.type == "EXPENSE" }.sumOf { it.amount }
+                        val spent = bug.spentAmount
                         if (bug.limitAmount > 0) {
                             val ratio = spent / bug.limitAmount
                             if (ratio >= 1.0) {
@@ -908,7 +908,7 @@ fun DashboardScreen(
                     }
 
                     budgets.forEach { b ->
-                        val sp = currentMonthTransactions.filter { it.categoryName == b.categoryName && it.type == "EXPENSE" }.sumOf { it.amount }
+                        val sp = b.spentAmount
                         if (b.limitAmount > 0 && sp > b.limitAmount) score -= 10
                     }
                     
