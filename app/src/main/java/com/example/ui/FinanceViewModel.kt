@@ -121,6 +121,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isPinEnabled = MutableStateFlow(false)
     val isPinEnabled: StateFlow<Boolean> = _isPinEnabled.asStateFlow()
 
+    private val _isCloudSyncEnabled = MutableStateFlow(false)
+    val isCloudSyncEnabled: StateFlow<Boolean> = _isCloudSyncEnabled.asStateFlow()
+
     private val _isAiScannerEnabled = MutableStateFlow(false)
     val isAiScannerEnabled: StateFlow<Boolean> = _isAiScannerEnabled.asStateFlow()
 
@@ -268,9 +271,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val widgetsSetting = repository.getSetting("widgets_enabled")
         val startScreenSetting = repository.getSetting("start_screen")
         val aiScannerSetting = repository.getSetting("ai_scanner_enabled")
+        val cloudSyncSetting = repository.getSetting("cloud_sync_enabled")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
+        _isCloudSyncEnabled.value = cloudSyncSetting?.value == "true"
         _isAiScannerEnabled.value = aiScannerSetting?.value == "true"
         _savedPinHash.value = pinHashSetting?.value ?: ""
         _widgetsEnabled.value = widgetsSetting?.value == "true"
@@ -926,9 +931,58 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateCategory(oldCategory: FinanceCategory, newName: String, newIconName: String, newColorHex: String, newType: String, newParentName: String? = null) {
+        viewModelScope.launch {
+            val currentList = _categoriesList.value.toMutableList()
+            
+            // Check if user is renaming to a name that already exists (and it's not the same old name)
+            if (newName.lowercase() != oldCategory.name.lowercase() && currentList.any { it.name.lowercase() == newName.lowercase() }) {
+                // Return if name conflict
+                return@launch
+            }
+
+            // Find index to update
+            val index = currentList.indexOfFirst { it.name.lowercase() == oldCategory.name.lowercase() }
+            if (index != -1) {
+                // Replace category
+                currentList[index] = FinanceCategory(newName, newIconName, newColorHex, newType, newParentName)
+                
+                // Also update any child category's parentName if the parent was renamed!
+                if (newName != oldCategory.name) {
+                    for (i in currentList.indices) {
+                        if (currentList[i].parentName?.lowercase() == oldCategory.name.lowercase()) {
+                            currentList[i] = currentList[i].copy(parentName = newName)
+                        }
+                    }
+                }
+
+                repository.saveSetting("custom_categories", serializeCategories(currentList))
+                _categoriesList.value = currentList
+                
+                // Cascade update to transactions and budgets
+                repository.updateCategoryInRelatedData(oldCategory.name, newName, newIconName, newColorHex)
+            }
+        }
+    }
+
     fun deleteCategory(category: FinanceCategory) {
         viewModelScope.launch {
-            val currentList = _categoriesList.value.filter { it.name.lowercase() != category.name.lowercase() }
+            val currentList = _categoriesList.value.toMutableList()
+            val iterator = currentList.iterator()
+            while (iterator.hasNext()) {
+                val cat = iterator.next()
+                if (cat.name.lowercase() == category.name.lowercase()) {
+                    iterator.remove()
+                }
+            }
+            
+            // If the deleted category was a parent, detach its children (set parentName = null) so they are not orphaned
+            for (i in currentList.indices) {
+                if (currentList[i].parentName?.lowercase() == category.name.lowercase()) {
+                    currentList[i] = currentList[i].copy(parentName = null)
+                }
+            }
+            
             repository.saveSetting("custom_categories", serializeCategories(currentList))
             _categoriesList.value = currentList
         }
@@ -981,6 +1035,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             _isPinEnabled.value = false
             _savedPinHash.value = ""
             _isAppUnlocked.value = true
+        }
+    }
+
+    fun toggleCloudSync(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.saveSetting("cloud_sync_enabled", enabled.toString())
+            _isCloudSyncEnabled.value = enabled
         }
     }
 

@@ -412,7 +412,99 @@ fun SettingsScreen(
 
 
 
-        // 4. SAO LƯU CỰC BỘ
+        // 4. ĐỒNG BỘ ĐÁM MÂY
+        Text(
+            text = "ĐỒNG BỘ ĐÁM MÂY (CLOUD SYNC)",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Surface(
+                    color = Color(0xFFE3F2FD),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.CloudSync, contentDescription = "Cloud", tint = Color(0xFF1976D2), modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Tự động đồng bộ với Google Drive", fontWeight = FontWeight.Bold, color = Color(0xFF1976D2), fontSize = 14.sp)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Bật tính năng này để ứng dụng tự động sao lưu dữ liệu ngầm mỗi ngày lên Google Drive của bạn một cách an toàn mà không cần phải thực hiện thủ công.",
+                            color = Color(0xFF0D47A1),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                val isCloudSyncEnabled by viewModel.isCloudSyncEnabled.collectAsState()
+                val signInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    if (result.resultCode == android.app.Activity.RESULT_OK) {
+                        try {
+                            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                            task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                            viewModel.toggleCloudSync(true)
+                            com.example.service.CloudSyncWorker.setupPeriodicSync(context)
+                            viewModel.showSuccessNotification("Đã kết nối Google Drive và bật đồng bộ!")
+                        } catch (e: Exception) {
+                            viewModel.showWarningNotification("Lỗi đăng nhập Google: ${e.message}")
+                        }
+                    } else {
+                        viewModel.showWarningNotification("Đăng nhập bị hủy.")
+                        viewModel.toggleCloudSync(false)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Đồng bộ ngầm (Backgound Sync)", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text(text = if (isCloudSyncEnabled) "Tự động trên Google Drive" else "Chưa kích hoạt", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = isCloudSyncEnabled,
+                        onCheckedChange = { enable ->
+                            if (enable) {
+                                val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                    .requestEmail()
+                                    .requestScopes(com.google.android.gms.common.api.Scope("https://www.googleapis.com/auth/drive.file"))
+                                    .build()
+                                val client = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                                signInLauncher.launch(client.signInIntent)
+                            } else {
+                                androidx.work.WorkManager.getInstance(context).cancelUniqueWork("CloudSyncService")
+                                viewModel.toggleCloudSync(false)
+                                val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+                                com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso).signOut()
+                                viewModel.showSuccessNotification("Đã tắt đồng bộ đám mây")
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        // 5. SAO LƯU CỰC BỘ
         Text(
             text = "SAO LƯU CỰC BỘ (LOCAL BACKUP)",
             fontSize = 12.sp,
@@ -1720,6 +1812,33 @@ fun CategoryManagementDialog(
     var isCustomColorActive by remember { mutableStateOf(false) }
     var customColorHex by remember { mutableStateOf("#9C27B0") }
     var categoryToDelete by remember { mutableStateOf<FinanceCategory?>(null) }
+    var categoryToEdit by remember { mutableStateOf<FinanceCategory?>(null) }
+    
+    LaunchedEffect(categoryToEdit) {
+        val editCat = categoryToEdit
+        if (editCat != null) {
+            name = editCat.name
+            parentName = editCat.parentName
+            type = editCat.type
+            selectedIcon = editCat.iconName
+            selectedColor = editCat.colorHex
+            
+            // Check if it's custom
+            val colorPalette = listOf(
+                "#F44336", "#E91E63", "#9C27B0", "#673AB7",
+                "#3F51B5", "#2196F3", "#03A9F4", "#00BCD4",
+                "#009688", "#4CAF50", "#8BC34A", "#FFEB3B",
+                "#FF9800", "#795548", "#607D8B", "#455A64"
+            )
+            if (!colorPalette.contains(editCat.colorHex)) {
+                isCustomColorActive = true
+                customColorHex = editCat.colorHex
+            } else {
+                isCustomColorActive = false
+            }
+            showAddForm = true
+        }
+    }
     
     val colorPalette = listOf(
         "#F44336", "#E91E63", "#9C27B0", "#673AB7",
@@ -1771,7 +1890,14 @@ fun CategoryManagementDialog(
     }
 
     androidx.compose.ui.window.Dialog(
-        onDismissRequest = { if (showAddForm) showAddForm = false else onDismiss() },
+        onDismissRequest = { 
+            if (showAddForm) {
+                showAddForm = false
+                categoryToEdit = null
+            } else {
+                onDismiss()
+            }
+        },
         properties = androidx.compose.ui.window.DialogProperties(
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false
@@ -1803,10 +1929,13 @@ fun CategoryManagementDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            IconButton(onClick = { showAddForm = false }) {
+                            IconButton(onClick = { 
+                                showAddForm = false 
+                                categoryToEdit = null
+                            }) {
                                 Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Trở lại")
                             }
-                            Text("THÊM DANH MỤC MỚI", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text(if(categoryToEdit == null) "THÊM DANH MỤC MỚI" else "SỬA DANH MỤC", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
                     } else {
                         Row(
@@ -1822,7 +1951,14 @@ fun CategoryManagementDialog(
                             Text("QUẢN LÝ DANH MỤC LƯỚI", fontSize = 16.sp, fontWeight = FontWeight.Black)
                         }
                     }
-                    IconButton(onClick = { if (showAddForm) showAddForm = false else onDismiss() }) {
+                    IconButton(onClick = { 
+                        if (showAddForm) {
+                            showAddForm = false 
+                            categoryToEdit = null
+                        } else {
+                            onDismiss()
+                        }
+                    }) {
                         Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
                     }
                 }
@@ -1891,7 +2027,15 @@ fun CategoryManagementDialog(
                     }
 
                     Button(
-                        onClick = { showAddForm = true },
+                        onClick = { 
+                            categoryToEdit = null
+                            name = ""
+                            parentName = null
+                            type = selectedTypeTab
+                            isCustomColorActive = false
+                            selectedColor = colorPalette[0]
+                            showAddForm = true
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
@@ -1950,11 +2094,19 @@ fun CategoryManagementDialog(
                             viewModel = viewModel,
                             typeTab = selectedTypeTab,
                             onAddSubcategory = { parentNameValue ->
+                                categoryToEdit = null
+                                name = ""
+                                isCustomColorActive = false
+                                selectedColor = colorPalette[0]
+                                type = selectedTypeTab
                                 parentName = parentNameValue
                                 showAddForm = true
                             },
                             onDeleteRequest = { cat ->
                                 categoryToDelete = cat
+                            },
+                            onEditRequest = { cat ->
+                                categoryToEdit = cat
                             }
                         )
                     }
@@ -2210,8 +2362,14 @@ fun CategoryManagementDialog(
                     Button(
                         onClick = {
                             if (name.isNotBlank()) {
-                                viewModel.addCategory(name, selectedIcon, selectedColor, type, parentName)
-                                viewModel.showSuccessNotification("Thêm danh mục thành công!")
+                                if (categoryToEdit == null) {
+                                    viewModel.addCategory(name, selectedIcon, selectedColor, type, parentName)
+                                    viewModel.showSuccessNotification("Thêm danh mục thành công!")
+                                } else {
+                                    viewModel.updateCategory(categoryToEdit!!, name, selectedIcon, selectedColor, type, parentName)
+                                    viewModel.showSuccessNotification("Cập nhật danh mục thành công!")
+                                }
+                                categoryToEdit = null
                                 name = ""
                                 parentName = null
                                 showAddForm = false
@@ -2246,7 +2404,8 @@ fun SortableCategoryList(
     viewModel: FinanceViewModel,
     typeTab: String,
     onAddSubcategory: (parentName: String) -> Unit,
-    onDeleteRequest: (FinanceCategory) -> Unit
+    onDeleteRequest: (FinanceCategory) -> Unit,
+    onEditRequest: (FinanceCategory) -> Unit
 ) {
     val roots = remember(categories) { categories.filter { it.parentName == null } }
     val listState = remember(roots) { mutableStateListOf<FinanceCategory>().apply { addAll(roots) } }
@@ -2410,6 +2569,17 @@ fun SortableCategoryList(
 
                                 if (listState.size > 1) {
                                     IconButton(
+                                        onClick = { onEditRequest(cat) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Sửa danh mục",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    IconButton(
                                         onClick = { onDeleteRequest(cat) },
                                         modifier = Modifier.size(36.dp)
                                     ) {
@@ -2473,16 +2643,29 @@ fun SortableCategoryList(
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                         }
-                                        IconButton(
-                                            onClick = { onDeleteRequest(subCat) },
-                                            modifier = Modifier.size(28.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Delete subcategory",
-                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(
+                                                onClick = { onEditRequest(subCat) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Edit,
+                                                    contentDescription = "Edit subcategory",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { onDeleteRequest(subCat) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Delete subcategory",
+                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }

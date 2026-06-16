@@ -97,6 +97,35 @@ fun ReportsScreen(
             }.sortedByDescending { it.amount }
     }
 
+    // Group incomes by category
+    val categoryIncomes = remember(monthTransactions) {
+        monthTransactions
+            .filter { it.type == "INCOME" }
+            .groupBy { it.categoryName }
+            .map { (catName, txs) ->
+                val sum = txs.sumOf { it.amount }
+                CategorySpend(
+                    name = catName,
+                    amount = sum,
+                    colorHex = txs.first().categoryColor,
+                    iconName = txs.first().categoryIcon,
+                    percentage = if (totalIncome > 0) (sum / totalIncome * 100).toFloat() else 0f
+                )
+            }.sortedByDescending { it.amount }
+    }
+
+    var selectedCategoryForHistory by remember { mutableStateOf<String?>(null) }
+    var selectedReportType by remember { mutableStateOf("EXPENSE") } // or INCOME
+
+    if (selectedCategoryForHistory != null) {
+        com.example.ui.components.CategoryTransactionsDialog(
+            categoryName = selectedCategoryForHistory!!,
+            monthKey = activeMonth,
+            viewModel = viewModel,
+            onDismiss = { selectedCategoryForHistory = null }
+        )
+    }
+
     Scaffold(
         topBar = {
             if (onNavigateBack != null) {
@@ -344,6 +373,17 @@ fun ReportsScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f))) {
+                Box(modifier = Modifier.weight(1f).clickable { selectedReportType = "EXPENSE" }.background(if (selectedReportType == "EXPENSE") MaterialTheme.colorScheme.primary else Color.Transparent).padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                    Text("Khoản chi", fontWeight = FontWeight.Bold, color = if (selectedReportType == "EXPENSE") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                }
+                Box(modifier = Modifier.weight(1f).clickable { selectedReportType = "INCOME" }.background(if (selectedReportType == "INCOME") MaterialTheme.colorScheme.primary else Color.Transparent).padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                    Text("Khoản thu", fontWeight = FontWeight.Bold, color = if (selectedReportType == "INCOME") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Category detail breakdown list
             Text(
                 text = "Chi tiết theo danh mục",
@@ -356,12 +396,14 @@ fun ReportsScreen(
                 modifier = Modifier.fillMaxWidth().testTag("report_category_spending_list"),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                categoryExpenses.forEach { cat ->
+                val displayCategories = if (selectedReportType == "EXPENSE") categoryExpenses else categoryIncomes
+                displayCategories.forEach { cat ->
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
+                            .clickable { selectedCategoryForHistory = cat.name }
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {

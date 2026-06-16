@@ -56,6 +56,7 @@ fun BudgetsSection(
     val categoriesList by viewModel.categoriesList.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var budgetToDelete by remember { mutableStateOf<Budget?>(null) }
+    var selectedCategoryForHistory by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
     val displayBudgetMonth = remember(activeMonth) {
@@ -155,7 +156,8 @@ fun BudgetsSection(
                         BudgetItemCard(
                             budget = budget,
                             onDelete = { budgetToDelete = budget },
-                            onToggleRecurring = { viewModel.toggleBudgetRecurring(budget) }
+                            onToggleRecurring = { viewModel.toggleBudgetRecurring(budget) },
+                            onClick = { selectedCategoryForHistory = budget.categoryName }
                         )
                     }
                 }
@@ -197,6 +199,15 @@ fun BudgetsSection(
                 }
             )
         }
+
+        if (selectedCategoryForHistory != null) {
+            com.example.ui.components.CategoryTransactionsDialog(
+                categoryName = selectedCategoryForHistory!!,
+                monthKey = activeMonth,
+                viewModel = viewModel,
+                onDismiss = { selectedCategoryForHistory = null }
+            )
+        }
     }
 }
 
@@ -205,6 +216,7 @@ fun BudgetItemCard(
     budget: Budget,
     onDelete: () -> Unit,
     onToggleRecurring: () -> Unit,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val ratio = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat() else 0f
@@ -219,7 +231,7 @@ fun BudgetItemCard(
     }
 
     Card(
-        modifier = modifier.fillMaxWidth().testTag("budget_card_${budget.id}"),
+        modifier = modifier.fillMaxWidth().testTag("budget_card_${budget.id}").clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
