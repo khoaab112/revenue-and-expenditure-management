@@ -212,6 +212,12 @@ class FinanceRepository(private val dao: FinanceDao) {
         dao.insertSetting(AppSetting(key, value))
     }
 
+    // --- Events ---
+    val allEvents: Flow<List<Event>> = dao.getAllEvents()
+    suspend fun insertEvent(event: Event): Long = dao.insertEvent(event)
+    suspend fun updateEvent(event: Event) = dao.updateEvent(event)
+    suspend fun deleteEvent(event: Event) = dao.deleteEvent(event)
+
     // --- Seeding helper ---
     suspend fun checkAndSeedDatabase() {
         val wallets = dao.getAllWallets().firstOrNull()
@@ -242,6 +248,7 @@ class FinanceRepository(private val dao: FinanceDao) {
         dao.deleteAllWallets()
         dao.deleteAllBudgets()
         dao.deleteAllSavingsGoals()
+        dao.deleteAllEvents()
     }
 
     suspend fun deleteAllSettings() = dao.deleteAllSettings()
@@ -250,4 +257,5 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun insertTransactionDirect(transaction: Transaction) = dao.insertTransaction(transaction)
     suspend fun insertBudgetDirect(budget: Budget) = dao.insertBudget(budget)
     suspend fun insertSavingsGoalDirect(goal: SavingsGoal) = dao.insertSavingsGoal(goal)
+    suspend fun insertEventDirect(event: Event) = dao.insertEvent(event)
 }

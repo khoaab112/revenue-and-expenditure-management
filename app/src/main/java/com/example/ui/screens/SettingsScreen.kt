@@ -70,6 +70,7 @@ fun isNotificationServiceEnabled(context: android.content.Context): Boolean {
 fun SettingsScreen(
     viewModel: FinanceViewModel,
     onNavigateToBankNotificationHistory: () -> Unit = {},
+    onNavigateToEvents: () -> Unit = {},
     onNavigateToStats: () -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -83,6 +84,7 @@ fun SettingsScreen(
     var showPinSetupDialog by remember { mutableStateOf(false) }
     var showWalletManagement by remember { mutableStateOf(false) }
     var showCategoryManagement by remember { mutableStateOf(false) }
+    var showEventManagement by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
     var isDeveloperExpanded by remember { mutableStateOf(false) }
 
@@ -121,12 +123,98 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onBackground
         )
 
-        // 1. NÂNG CAO
+        // 1. QUẢN LÝ
+        Text(
+            text = "QUẢN LÝ",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Wallet Management
+                ListItem(
+                    headlineContent = { Text("Quản lý ví", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Thêm, sửa đổi hoặc xóa tài khoản & ví giao dịch") },
+                    leadingContent = {
+                        Icon(imageVector = Icons.Default.AccountBalanceWallet, contentDescription = "Wallets", tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier
+                        .clickable { showWalletManagement = true }
+                        .testTag("manage_wallets_item")
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Category Management
+                ListItem(
+                    headlineContent = { Text("Quản lý hạng mục chi tiêu", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Quản lý dải danh mục thu chi của bạn") },
+                    leadingContent = {
+                        Icon(imageVector = Icons.Default.Category, contentDescription = "Categories", tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier
+                        .clickable { showCategoryManagement = true }
+                        .testTag("manage_categories_item")
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Events Management
+                ListItem(
+                    headlineContent = { Text("Sự kiện", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Quản lý các sự kiện, dịp đặc biệt để gom nhóm chi tiêu") },
+                    leadingContent = {
+                        Icon(imageVector = Icons.Default.Event, contentDescription = "Events", tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier
+                        .clickable { onNavigateToEvents() }
+                        .testTag("manage_events_item")
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Savings Management
+                ListItem(
+                    headlineContent = { Text("Quản lý bộ tiết kiệm", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Tách riêng các giao dịch và ví tích lũy của hũ độc lập") },
+                    leadingContent = {
+                        Icon(imageVector = Icons.Default.Savings, contentDescription = "Savings", tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier
+                        .clickable { onNavigateToSavings() }
+                        .testTag("manage_savings_item")
+                )
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Statistics & Analytical Reports
+                ListItem(
+                    headlineContent = { Text("Thống kê & Báo cáo", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Xem biểu đồ phân tích thu chi và báo cáo tài chính trực quan") },
+                    leadingContent = {
+                        Icon(imageVector = Icons.Default.PieChart, contentDescription = "Statistics", tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier
+                        .clickable { onNavigateToStats() }
+                        .testTag("navigate_stats_item")
+                )
+            }
+        }
+
+        // 2. NÂNG CAO
         Text(
             text = "NÂNG CAO",
             fontSize = 12.sp,
             fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
         )
 
         Card(
@@ -333,78 +421,6 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
-        }
-
-        // 2. QUẢN LÝ CHUYÊN SÂU
-        Text(
-            text = "QUẢN LÝ CHUYÊN SÂU",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                // Wallet Management
-                ListItem(
-                    headlineContent = { Text("Quản lý ví", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("Thêm, sửa đổi hoặc xóa tài khoản & ví giao dịch") },
-                    leadingContent = {
-                        Icon(imageVector = Icons.Default.AccountBalanceWallet, contentDescription = "Wallets", tint = MaterialTheme.colorScheme.primary)
-                    },
-                    modifier = Modifier
-                        .clickable { showWalletManagement = true }
-                        .testTag("manage_wallets_item")
-                )
-
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                // Category Management
-                ListItem(
-                    headlineContent = { Text("Quản lý hạng mục chi tiêu", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("Quản lý dải danh mục thu chi của bạn") },
-                    leadingContent = {
-                        Icon(imageVector = Icons.Default.Category, contentDescription = "Categories", tint = MaterialTheme.colorScheme.primary)
-                    },
-                    modifier = Modifier
-                        .clickable { showCategoryManagement = true }
-                        .testTag("manage_categories_item")
-                )
-
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                // Savings Management
-                ListItem(
-                    headlineContent = { Text("Quản lý bộ tiết kiệm", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("Tách riêng các giao dịch và ví tích lũy của hũ độc lập") },
-                    leadingContent = {
-                        Icon(imageVector = Icons.Default.Savings, contentDescription = "Savings", tint = MaterialTheme.colorScheme.primary)
-                    },
-                    modifier = Modifier
-                        .clickable { onNavigateToSavings() }
-                        .testTag("manage_savings_item")
-                )
-
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                // Statistics & Analytical Reports
-                ListItem(
-                    headlineContent = { Text("Thống kê & Báo cáo", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("Xem biểu đồ phân tích thu chi và báo cáo tài chính trực quan") },
-                    leadingContent = {
-                        Icon(imageVector = Icons.Default.PieChart, contentDescription = "Statistics", tint = MaterialTheme.colorScheme.primary)
-                    },
-                    modifier = Modifier
-                        .clickable { onNavigateToStats() }
-                        .testTag("navigate_stats_item")
-                )
             }
         }
 

@@ -27,7 +27,19 @@ data class Transaction(
     val note: String,
     val timestamp: Long,
     val isRecurring: Boolean = false,
-    val recurrencePeriod: String = "NONE" // NONE, DAILY, WEEKLY, MONTHLY
+    val recurrencePeriod: String = "NONE", // NONE, DAILY, WEEKLY, MONTHLY
+    val eventId: Int? = null
+)
+
+@Entity(tableName = "events")
+data class Event(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val description: String,
+    val startDate: Long,
+    val endDate: Long? = null,
+    val limitAmount: Double? = null,
+    val colorHex: String = "#FF9800"
 )
 
 @Entity(tableName = "budgets")

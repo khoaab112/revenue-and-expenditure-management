@@ -76,6 +76,22 @@ interface FinanceDao {
     @Delete
     suspend fun deleteSavingsGoal(goal: SavingsGoal)
 
+    // ---- Events ----
+    @Query("SELECT * FROM events ORDER BY startDate DESC")
+    fun getAllEvents(): Flow<List<Event>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEvent(event: Event): Long
+
+    @Update
+    suspend fun updateEvent(event: Event)
+
+    @Delete
+    suspend fun deleteEvent(event: Event)
+
+    @Query("DELETE FROM events")
+    suspend fun deleteAllEvents()
+
     // ---- App Settings ----
     @Query("SELECT * FROM settings")
     suspend fun getAllSettings(): List<AppSetting>
