@@ -47,6 +47,7 @@ object Routes {
     const val ADD_TRANSACTION = "add_transaction"
     const val BANK_NOTIFICATION_HISTORY = "bank_notification_history"
     const val TIMELINE = "timeline"
+    const val EVENTS = "events"
 }
 
 class MainActivity : ComponentActivity() {
@@ -750,8 +751,16 @@ fun NavHostContainer(
             SettingsScreen(
                 viewModel = viewModel,
                 onNavigateToBankNotificationHistory = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
+                onNavigateToEvents = { navController.navigate(Routes.EVENTS) },
                 onNavigateToStats = { navController.navigate(Routes.STATS) },
                 onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) }
+            )
+        }
+
+        composable(Routes.EVENTS) {
+            com.example.ui.components.EventManagementScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
             )
         }
 

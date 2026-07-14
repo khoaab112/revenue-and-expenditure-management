@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -25,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -215,6 +218,22 @@ fun AddTransactionScreen(
     // Transfer Setup
     var isTransfer by remember { mutableStateOf(false) }
     var transferWalletId by remember { mutableStateOf<Int?>(null) }
+
+    val events by viewModel.allEvents.collectAsState()
+    var isEventTransaction by remember { mutableStateOf(false) }
+    var selectedEventId by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(events) {
+        val now = System.currentTimeMillis()
+        val activeEvents = events.filter {
+            now >= it.startDate && (it.endDate == null || now <= it.endDate + 86400000L - 1)
+        }
+        if (activeEvents.isNotEmpty() && selectedEventId == null && !isEventTransaction) {
+            val nearestStart = activeEvents.maxByOrNull { it.startDate }
+            selectedEventId = nearestStart?.id
+            isEventTransaction = true
+        }
+    }
 
     // Date Picker Setup
     val calendar = remember { Calendar.getInstance() }
@@ -732,52 +751,381 @@ fun AddTransactionScreen(
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Thêm tính năng chuyển tiền nhanh giữa các ví
-            Card(
+            // Layout 2 options side by side
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isTransfer) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
-                                     else MaterialTheme.colorScheme.surface
-                ),
-                border = BorderStroke(1.dp, if (isTransfer) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Feature 1: Transfer
+                Card(
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isTransfer) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
+                                         else MaterialTheme.colorScheme.surface
+                    ),
+                    border = BorderStroke(1.dp, if (isTransfer) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Icon(
-                            imageVector = Icons.Default.SwapHoriz,
-                            contentDescription = "Transfer",
-                            tint = if (isTransfer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Chuyển tiền nhanh giữa các ví",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { 
+                                isTransfer = !isTransfer 
+                                if (isTransfer) isEventTransaction = false
+                            }
+                            .padding(start = 12.dp, end = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.SwapHoriz,
+                                contentDescription = "Transfer",
+                                tint = if (isTransfer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Tạo đồng thời 2 giao dịch Thu và Chi đối ứng",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Chuyển tiền qua ví",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
+                        Switch(
+                            checked = isTransfer,
+                            onCheckedChange = { 
+                                isTransfer = it 
+                                if (it) isEventTransaction = false
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.primary
+                            ),
+                            modifier = Modifier.scale(0.7f).testTag("transfer_quick_switch")
+                        )
                     }
-                    Switch(
-                        checked = isTransfer,
-                        onCheckedChange = { isTransfer = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary
+                }
+                
+                // Feature 2: Event
+                Card(
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isEventTransaction) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
+                                         else MaterialTheme.colorScheme.surface
+                    ),
+                    border = BorderStroke(1.dp, if (isEventTransaction) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { 
+                                isEventTransaction = !isEventTransaction 
+                                if (isEventTransaction) isTransfer = false
+                            }
+                            .padding(start = 12.dp, end = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Event,
+                                contentDescription = "Event",
+                                tint = if (isEventTransaction) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Sự kiện",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Switch(
+                            checked = isEventTransaction,
+                            onCheckedChange = { 
+                                isEventTransaction = it 
+                                if (it) isTransfer = false
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.primary
+                            ),
+                            modifier = Modifier.scale(0.7f)
+                        )
+                    }
+                }
+            }
+            
+            // Thêm tính năng chọn Event
+            val activeEventsForSelection = events.filter {
+                val now = System.currentTimeMillis()
+                now >= it.startDate && (it.endDate == null || now <= it.endDate + 86400000L - 1)
+            }.sortedBy { it.startDate }
+
+            val isOptionExpanded = isEventTransaction || isTransfer
+            if (isOptionExpanded) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .animateContentSize(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
                         ),
-                        modifier = Modifier.testTag("transfer_quick_switch")
-                    )
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            if (isEventTransaction) {
+                                var showQuickCreate by remember { mutableStateOf(false) }
+        
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    items(activeEventsForSelection) { event ->
+                                            val isSelected = event.id == selectedEventId
+                                            val eventColor = try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary }
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(if (isSelected) eventColor.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface)
+                                                    .border(if (isSelected) 2.dp else 1.dp, if (isSelected) eventColor else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                                    .clickable { selectedEventId = event.id }
+                                            ) {
+                                                Text(
+                                                    event.name,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (isSelected) eventColor else MaterialTheme.colorScheme.onSurface,
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                                )
+                                                
+                                                if (isSelected) {
+                                                    Box(
+                                                        modifier = Modifier.matchParentSize()
+                                                    ) {
+                                                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                                                            val sizePx = 24.dp.toPx()
+                                                            val path = androidx.compose.ui.graphics.Path().apply {
+                                                                moveTo(size.width, 0f)
+                                                                lineTo(size.width, sizePx)
+                                                                lineTo(size.width - sizePx, 0f)
+                                                                close()
+                                                            }
+                                                            drawPath(path, color = eventColor)
+                                                        }
+                                                        Icon(
+                                                            Icons.Default.Check,
+                                                            contentDescription = null,
+                                                            tint = Color.White,
+                                                            modifier = Modifier
+                                                                .size(12.dp)
+                                                                .align(Alignment.TopEnd)
+                                                                .offset(x = (-2).dp, y = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        item {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                                    .clickable { showQuickCreate = true }
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Tạo mới", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+        
+                                    if (showQuickCreate) {
+                                        var newEventName by remember { mutableStateOf("") }
+                                        var newEventDesc by remember { mutableStateOf("") }
+                                        AlertDialog(
+                                            onDismissRequest = { showQuickCreate = false },
+                                            title = { Text("Tạo sự kiện mới", fontWeight = FontWeight.Bold) },
+                                            text = {
+                                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    OutlinedTextField(
+                                                        value = newEventName,
+                                                        onValueChange = { newEventName = it },
+                                                        label = { Text("Tên sự kiện (*)") },
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+                                                }
+                                            },
+                                            confirmButton = {
+                                                Button(
+                                                    onClick = {
+                                                        if (newEventName.isNotBlank()) {
+                                                            viewModel.addEvent(
+                                                                name = newEventName,
+                                                                description = newEventDesc,
+                                                                startDate = System.currentTimeMillis(),
+                                                                endDate = null,
+                                                                limitAmount = null
+                                                            )
+                                                            viewModel.showSuccessNotification("Đã tạo $newEventName")
+                                                            showQuickCreate = false
+                                                        } else {
+                                                            viewModel.showWarningNotification("Vui lòng nhập tên")
+                                                        }
+                                                    }
+                                                ) { Text("Lưu") }
+                                            },
+                                            dismissButton = {
+                                                TextButton(onClick = { showQuickCreate = false }) { Text("Hủy") }
+                                            }
+                                        )
+                                    }
+                            } else if (isTransfer) {
+                                val transferLabel = if (selectedType == "EXPENSE") "Ví nhận tiền (Đích)" else "Ví rút tiền (Nguồn)"
+                                Text(
+                                    text = transferLabel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                
+                                if (wallets.isEmpty()) {
+                                    Text(
+                                        text = "Không tìm thấy ví khả dụng.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontSize = 13.sp
+                                    )
+                                } else {
+                                    // Filter out the primary selected wallet to avoid transfer to self!
+                                    val availableTransferWallets = wallets.filter { it.id != selectedWalletId }
+                                    if (availableTransferWallets.isEmpty()) {
+                                        Text(
+                                            text = "Vui lòng tạo thêm ví khác để chuyển tiền.",
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontSize = 13.sp
+                                        )
+                                    } else {
+                                        val chunkedTransferWallets = availableTransferWallets.chunked(2)
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            chunkedTransferWallets.forEach { rowWallets ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    rowWallets.forEach { wt ->
+                                                        val isSelected = transferWalletId == wt.id
+                                                        val accentColor = FormatHelper.parseColor(wt.colorHex)
+                                                        val cardColor = if (isSelected) accentColor.copy(alpha = 0.15f)
+                                                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                                        val borderColor = if (isSelected) accentColor
+                                                                          else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                                                        
+                                                        Card(
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .height(48.dp)
+                                                                .clip(RoundedCornerShape(12.dp))
+                                                                .clickable { transferWalletId = wt.id }
+                                                                .testTag("tx_transfer_wallet_chip_${wt.id}"),
+                                                            colors = CardDefaults.cardColors(containerColor = cardColor),
+                                                            border = BorderStroke(if (isSelected) 1.8.dp else 1.dp, borderColor)
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                            ) {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(24.dp)
+                                                                        .background(accentColor.copy(alpha = 0.15f), CircleShape),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = IconMapper.getIconByName(wt.iconName),
+                                                                        contentDescription = wt.name,
+                                                                        tint = accentColor,
+                                                                        modifier = Modifier.size(14.dp)
+                                                                    )
+                                                                }
+                                                                Column(modifier = Modifier.weight(1f)) {
+                                                                    Text(
+                                                                        text = wt.name,
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                                        maxLines = 1,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
+                                                                    Text(
+                                                                        text = FormatHelper.formatVND(wt.balance),
+                                                                        fontSize = 9.sp,
+                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    )
+                                                                }
+                                                                if (isSelected) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.CheckCircle,
+                                                                        contentDescription = "Selected",
+                                                                        tint = accentColor,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    if (rowWallets.size < 2) {
+                                                        Spacer(modifier = Modifier.weight(1f))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    val surfaceColor = MaterialTheme.colorScheme.surface
+                    val borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    val isLeft = isTransfer
+                    
+                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(9.dp)) {
+                        val triangleW = 16.dp.toPx()
+                        val triangleH = 8.dp.toPx()
+                        val cardY = 8.dp.toPx()
+                        
+                        val centerOffset = if (isLeft) (size.width / 2f - 4.dp.toPx()) / 2f 
+                                            else size.width - (size.width / 2f - 4.dp.toPx()) / 2f
+                                            
+                        val fillPath = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(centerOffset, 0f)
+                            lineTo(centerOffset + triangleW / 2f, cardY + 2.5f) 
+                            lineTo(centerOffset - triangleW / 2f, cardY + 2.5f)
+                            close()
+                        }
+                        drawPath(fillPath, color = surfaceColor)
+                        
+                        drawLine(
+                            color = borderColor,
+                            start = androidx.compose.ui.geometry.Offset(centerOffset, 0f),
+                            end = androidx.compose.ui.geometry.Offset(centerOffset + triangleW / 2f, cardY),
+                            strokeWidth = 1.5.dp.toPx()
+                        )
+                        drawLine(
+                            color = borderColor,
+                            start = androidx.compose.ui.geometry.Offset(centerOffset, 0f),
+                            end = androidx.compose.ui.geometry.Offset(centerOffset - triangleW / 2f, cardY),
+                            strokeWidth = 1.5.dp.toPx()
+                        )
+                    }
                 }
             }
 
@@ -881,112 +1229,6 @@ fun AddTransactionScreen(
         } // Closed wrapping Column
 
         if (isTransfer) {
-            val transferLabel = if (selectedType == "EXPENSE") "Ví nhận tiền (Đích)" else "Ví rút tiền (Nguồn)"
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = transferLabel,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                if (wallets.isEmpty()) {
-                    Text(
-                        text = "Không tìm thấy ví khả dụng.",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 13.sp
-                    )
-                } else {
-                    // Filter out the primary selected wallet to avoid transfer to self!
-                    val availableTransferWallets = wallets.filter { it.id != selectedWalletId }
-                    if (availableTransferWallets.isEmpty()) {
-                        Text(
-                            text = "Vui lòng tạo thêm ví khác để thực hiện chuyển tiền.",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 13.sp
-                        )
-                    } else {
-                        val chunkedTransferWallets = availableTransferWallets.chunked(2)
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            chunkedTransferWallets.forEach { rowWallets ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    rowWallets.forEach { wt ->
-                                        val isSelected = transferWalletId == wt.id
-                                        val accentColor = FormatHelper.parseColor(wt.colorHex)
-                                        val cardColor = if (isSelected) accentColor.copy(alpha = 0.15f)
-                                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                        val borderColor = if (isSelected) accentColor
-                                                          else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-                                        
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(52.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable { transferWalletId = wt.id }
-                                                .testTag("tx_transfer_wallet_chip_${wt.id}"),
-                                            colors = CardDefaults.cardColors(containerColor = cardColor),
-                                            border = BorderStroke(if (isSelected) 1.8.dp else 1.dp, borderColor)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(28.dp)
-                                                        .background(accentColor.copy(alpha = 0.15f), CircleShape),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(
-                                                        imageVector = IconMapper.getIconByName(wt.iconName),
-                                                        contentDescription = wt.name,
-                                                        tint = accentColor,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = wt.name,
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    Text(
-                                                        text = FormatHelper.formatVND(wt.balance),
-                                                        fontSize = 9.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                if (isSelected) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.CheckCircle,
-                                                        contentDescription = "Selected",
-                                                        tint = accentColor,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if (rowWallets.size < 2) {
-                                        Spacer(modifier = Modifier.weight(1f))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             // Thông báo chuyển tiền
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1379,6 +1621,7 @@ fun AddTransactionScreen(
             }
         }
 
+        // --- activeEventsForSelection is defined above ---
         val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
         val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
@@ -1472,7 +1715,8 @@ fun AddTransactionScreen(
                             note = note,
                             timestamp = selectedTimestamp,
                             isRecurring = false,
-                            recurrencePeriod = "NONE"
+                            recurrencePeriod = "NONE",
+                            eventId = if (isEventTransaction) selectedEventId else null
                         )
                         viewModel.showSuccessNotification("Thêm giao dịch mới thành công!")
                         
@@ -1504,7 +1748,8 @@ fun AddTransactionScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(100.dp))
+        Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.ime))
     }
 
     if (showManualAiDialog) {

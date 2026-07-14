@@ -438,6 +438,9 @@ fun BankNotificationHistoryScreen(
                             mutableStateOf(log.note)
                         }
 
+                        var walletDropdownExpanded by remember(log) { mutableStateOf(false) }
+                        var isCategoriesExpanded by remember(log) { mutableStateOf(false) }
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -683,7 +686,7 @@ fun BankNotificationHistoryScreen(
                                                 )
                                             }
 
-                                            // WALLET CHIPS ROW WITH PINNED SELECTED WALLET FIRST (No more details about balance)
+                                            // WALLET DROPDOWN BOX
                                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
@@ -711,79 +714,106 @@ fun BankNotificationHistoryScreen(
                                                         modifier = Modifier.padding(vertical = 4.dp)
                                                     )
                                                 } else {
-                                                    val sortedWallets = remember(wallets) {
-                                                        wallets
-                                                    }
-
-                                                    androidx.compose.foundation.layout.FlowRow(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(vertical = 4.dp),
-                                                        maxItemsInEachRow = 3,
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ExposedDropdownMenuBox(
+                                                        expanded = walletDropdownExpanded,
+                                                        onExpandedChange = { walletDropdownExpanded = !walletDropdownExpanded },
+                                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                                                     ) {
-                                                        sortedWallets.forEach { w ->
-                                                            val selected = selectedWalletId == w.id
-                                                            val walletColor = try {
-                                                                Color(android.graphics.Color.parseColor(w.colorHex))
-                                                            } catch (e: Exception) {
-                                                                MaterialTheme.colorScheme.primary
-                                                            }
+                                                        val selectedWallet = wallets.find { it.id == selectedWalletId }
+                                                        val walletColor = try {
+                                                            Color(android.graphics.Color.parseColor(selectedWallet?.colorHex ?: "#1976D2"))
+                                                        } catch (e: Exception) {
+                                                            MaterialTheme.colorScheme.primary
+                                                        }
 
-                                                            Card(
+                                                        Card(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(44.dp)
+                                                                .menuAnchor(),
+                                                            colors = CardDefaults.cardColors(containerColor = walletColor),
+                                                            shape = RoundedCornerShape(8.dp),
+                                                        ) {
+                                                            Row(
                                                                 modifier = Modifier
-                                                                    .width(110.dp)
-                                                                    .height(38.dp)
-                                                                    .clickable { selectedWalletId = w.id }
-                                                                    .border(
-                                                                        width = if (selected) 2.dp else 1.dp,
-                                                                        color = if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.2f),
-                                                                        shape = RoundedCornerShape(8.dp)
-                                                                    ),
-                                                                colors = CardDefaults.cardColors(
-                                                                    containerColor = walletColor
-                                                                ),
-                                                                shape = RoundedCornerShape(8.dp),
-                                                                elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 3.dp else 0.dp)
+                                                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                                                    .fillMaxSize(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
                                                             ) {
                                                                 Row(
-                                                                    modifier = Modifier
-                                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                                        .fillMaxSize(),
-                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                                     verticalAlignment = Alignment.CenterVertically
                                                                 ) {
-                                                                    Icon(
-                                                                        imageVector = IconMapper.getIconByName(w.iconName),
-                                                                        contentDescription = "Icon",
-                                                                        tint = Color.White.copy(alpha = 0.9f),
-                                                                        modifier = Modifier.size(13.dp)
-                                                                    )
-                                                                    Text(
-                                                                        text = w.name,
-                                                                        fontWeight = FontWeight.Bold,
-                                                                        fontSize = 11.sp,
-                                                                        color = Color.White,
-                                                                        maxLines = 1,
-                                                                        overflow = TextOverflow.Ellipsis,
-                                                                        modifier = Modifier.weight(1f)
-                                                                    )
-                                                                    if (selected) {
+                                                                    if (selectedWallet != null) {
                                                                         Icon(
-                                                                            imageVector = Icons.Default.CheckCircle,
-                                                                            contentDescription = "Selected",
+                                                                            imageVector = IconMapper.getIconByName(selectedWallet.iconName),
+                                                                            contentDescription = "Icon",
                                                                             tint = Color.White,
-                                                                            modifier = Modifier.size(12.dp)
-                                                                        )
-                                                                    } else if (w.id == matchedWallet?.id) {
-                                                                        Text(
-                                                                            text = "⚡",
-                                                                            fontSize = 10.sp,
-                                                                            color = Color.White
+                                                                            modifier = Modifier.size(16.dp)
                                                                         )
                                                                     }
+                                                                    Text(
+                                                                        text = selectedWallet?.name ?: "Chọn ví...",
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        fontSize = 13.sp,
+                                                                        color = Color.White,
+                                                                        maxLines = 1,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
                                                                 }
+                                                                Icon(
+                                                                    imageVector = Icons.Default.ArrowDropDown,
+                                                                    contentDescription = "Mở rộng",
+                                                                    tint = Color.White
+                                                                )
+                                                            }
+                                                        }
+
+                                                        ExposedDropdownMenu(
+                                                            expanded = walletDropdownExpanded,
+                                                            onDismissRequest = { walletDropdownExpanded = false }
+                                                        ) {
+                                                            wallets.forEach { w ->
+                                                                val wColor = try {
+                                                                    Color(android.graphics.Color.parseColor(w.colorHex))
+                                                                } catch (e: Exception) {
+                                                                    MaterialTheme.colorScheme.primary
+                                                                }
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Row(
+                                                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                                            verticalAlignment = Alignment.CenterVertically
+                                                                        ) {
+                                                                            Box(
+                                                                                modifier = Modifier
+                                                                                    .size(24.dp)
+                                                                                    .background(wColor, CircleShape),
+                                                                                contentAlignment = Alignment.Center
+                                                                            ) {
+                                                                                Icon(
+                                                                                    imageVector = IconMapper.getIconByName(w.iconName),
+                                                                                    contentDescription = "Icon",
+                                                                                    tint = Color.White,
+                                                                                    modifier = Modifier.size(12.dp)
+                                                                                )
+                                                                            }
+                                                                            Text(
+                                                                                text = w.name,
+                                                                                fontWeight = if (w.id == selectedWalletId) FontWeight.Bold else FontWeight.Medium,
+                                                                                fontSize = 13.sp
+                                                                            )
+                                                                            if (w.id == matchedWallet?.id) {
+                                                                                Text(text = "⚡", fontSize = 10.sp)
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    onClick = {
+                                                                        selectedWalletId = w.id
+                                                                        walletDropdownExpanded = false
+                                                                    }
+                                                                )
                                                             }
                                                         }
                                                     }
@@ -810,15 +840,19 @@ fun BankNotificationHistoryScreen(
                                                     )
                                                 }
 
+                                                val filteredCategories = categories.filter { it.type == log.type || it.type == "BOTH" }
+                                                val showExpandButton = !isCategoriesExpanded && filteredCategories.size > 11
+                                                val displayCategories = if (isCategoriesExpanded) filteredCategories else filteredCategories.take(11)
+
                                                 androidx.compose.foundation.layout.FlowRow(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .padding(vertical = 4.dp),
+                                                        .padding(top = 4.dp, bottom = 0.dp),
                                                     maxItemsInEachRow = 4,
                                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
-                                                    categories.filter { it.type == log.type || it.type == "BOTH" }.forEach { cat ->
+                                                    displayCategories.forEach { cat ->
                                                         val selected = selectedCategoryName == cat.name
                                                         val catColor = try {
                                                             Color(android.graphics.Color.parseColor(cat.colorHex))
@@ -869,65 +903,87 @@ fun BankNotificationHistoryScreen(
                                                             }
                                                         }
                                                     }
+                                                    
+                                                    if (showExpandButton) {
+                                                        Card(
+                                                            modifier = Modifier
+                                                                .height(32.dp)
+                                                                .clickable { isCategoriesExpanded = true },
+                                                            colors = CardDefaults.cardColors(
+                                                                containerColor = MaterialTheme.colorScheme.tertiary
+                                                            ),
+                                                            shape = RoundedCornerShape(16.dp)
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier
+                                                                    .padding(horizontal = 12.dp, vertical = 2.dp)
+                                                                    .fillMaxHeight(),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                            ) {
+                                                                Text("Xem thêm", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onTertiary)
+                                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onTertiary)
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
-
-                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
                                             // LƯỢT NHẬP SỐ TIỀN & GHI CHÚ
                                             Column(modifier = Modifier.fillMaxWidth()) {
                                                 // Hàng 1: Nhập Số tiền
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text = "Số tiền:",
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface,
-                                                        modifier = Modifier.width(60.dp)
-                                                    )
-                                                    BasicTextField(
-                                                        value = customAmountStr,
-                                                        onValueChange = { input ->
-                                                            val filtered = input.filter { it.isDigit() }
-                                                            if (filtered.length <= 12) {
-                                                                customAmountStr = filtered
-                                                            }
-                                                        },
-                                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                        textStyle = TextStyle(
-                                                            fontSize = 13.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.onSurface
-                                                        ),
-                                                        singleLine = true,
-                                                        modifier = Modifier.weight(1f),
-                                                        decorationBox = { innerTextField ->
-                                                            Box(
-                                                                Modifier
-                                                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
-                                                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
-                                                                    .padding(horizontal = 8.dp, vertical = 8.dp)
-                                                            ) {
-                                                                if (customAmountStr.isEmpty()) {
-                                                                    Text("0", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.5f), fontSize = 13.sp)
-                                                                }
-                                                                innerTextField()
-                                                            }
-                                                        }
-                                                    )
+                                                Column(modifier = Modifier.fillMaxWidth().padding(top = 0.dp, bottom = 4.dp)) {
                                                     val parsedVal = customAmountStr.toDoubleOrNull() ?: 0.0
                                                     if (parsedVal > 0) {
+                                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                                            Text(
+                                                                text = FormatHelper.formatVND(parsedVal),
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.padding(bottom = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
                                                         Text(
-                                                            text = FormatHelper.formatVND(parsedVal),
+                                                            text = "Số tiền:",
                                                             fontSize = 11.sp,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            color = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.padding(start = 8.dp).widthIn(max = 80.dp),
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                            modifier = Modifier.width(60.dp)
+                                                        )
+                                                        BasicTextField(
+                                                            value = customAmountStr,
+                                                            onValueChange = { input ->
+                                                                val filtered = input.filter { it.isDigit() }
+                                                                if (filtered.length <= 12) {
+                                                                    customAmountStr = filtered
+                                                                }
+                                                            },
+                                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                            textStyle = TextStyle(
+                                                                fontSize = 12.sp,
+                                                                color = MaterialTheme.colorScheme.onSurface
+                                                            ),
+                                                            singleLine = true,
+                                                            modifier = Modifier.weight(1f),
+                                                            decorationBox = { innerTextField ->
+                                                                Box(
+                                                                    Modifier
+                                                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                                                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
+                                                                        .padding(horizontal = 8.dp, vertical = 8.dp)
+                                                                ) {
+                                                                    if (customAmountStr.isEmpty()) {
+                                                                        Text("0", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.5f), fontSize = 12.sp)
+                                                                    }
+                                                                    innerTextField()
+                                                                }
+                                                            }
                                                         )
                                                     }
                                                 }

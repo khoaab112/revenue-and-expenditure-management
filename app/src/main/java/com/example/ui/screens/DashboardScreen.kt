@@ -47,7 +47,10 @@ fun DashboardScreen(
     val activeMonth by viewModel.activeMonth.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
     val budgets by viewModel.allBudgets.collectAsState()
+    val events by viewModel.allEvents.collectAsState()
     
+    var eventToView by remember { mutableStateOf<com.example.data.Event?>(null) }
+
     val currentMonthBudgets = remember(budgets, activeMonth) {
         budgets.filter { it.month == activeMonth }
     }
@@ -243,6 +246,66 @@ fun DashboardScreen(
                         modifier = Modifier.height(34.dp)
                     ) {
                         Text("Duyệt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // --- Events Widget ---
+        val ongoingEvents = events.filter {
+            val now = System.currentTimeMillis()
+            now >= it.startDate && (it.endDate == null || now <= it.endDate + 86400000L - 1)
+        }
+        if (ongoingEvents.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Sự kiện đang diễn ra",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                items(ongoingEvents) { event ->
+                    val eventTransactions = viewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
+                    val spentAmount = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                    val progress = if ((event.limitAmount ?: 0.0) > 0.0) {
+                        (spentAmount / event.limitAmount!!).toFloat().coerceIn(0f, 1f)
+                    } else 0f
+                    
+                    Card(
+                        modifier = Modifier
+                            .width(280.dp)
+                            .clickable { eventToView = event }
+                            .testTag("dashboard_event_card_${event.id}"),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val eventColor = try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary }
+                                Icon(Icons.Default.Event, contentDescription = null, tint = eventColor)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(event.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = eventColor)
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            if ((event.limitAmount ?: 0.0) > 0.0) {
+                                Text("Đã chi: ${FormatHelper.formatVND(spentAmount)} / ${FormatHelper.formatVND(event.limitAmount!!)}", fontSize = 12.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                StripedProgressIndicator(
+                                    progress = progress,
+                                    modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                                    color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            } else {
+                                Text("Đã chi: ${FormatHelper.formatVND(spentAmount)}", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
                     }
                 }
             }
@@ -998,6 +1061,80 @@ fun DashboardScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    if (eventToView != null) {
+        val event = eventToView!!
+        val eventTransactions = viewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
+        val limit = event.limitAmount ?: 0.0
+        val spent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+        
+        AlertDialog(
+            onDismissRequest = { eventToView = null },
+            title = { Text(text = event.name, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (event.description.isNotBlank()) {
+                        Text(event.description, fontSize = 14.sp)
+                    }
+                    val startStr = FormatHelper.formatDate(event.startDate)
+                    val endStr = event.endDate?.let { FormatHelper.formatDate(it) } ?: "Không tính"
+                    Text("Thời gian: $startStr - $endStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+
+                    if (limit > 0) {
+                        Text("Tiến độ chi tiêu:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                        val progress = (spent / limit).toFloat().coerceIn(0f, 1f)
+                        StripedProgressIndicator(
+                            progress = progress,
+                            modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                            color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        Text(
+                            text = "${FormatHelper.formatVND(spent)} / ${FormatHelper.formatVND(limit)}",
+                            fontSize = 12.sp,
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                    } else {
+                        Text("Đã chi: ${FormatHelper.formatVND(spent)}", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    }
+
+                    if (eventTransactions.isNotEmpty()) {
+                        Text("Lịch sử giao dịch liên quan:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.heightIn(max = 200.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(eventTransactions.sortedByDescending { it.timestamp }) { tx ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(tx.categoryName, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        Text(FormatHelper.formatDate(tx.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                                    }
+                                    Text(
+                                        text = "${if (tx.type == "EXPENSE") "-" else "+"}${FormatHelper.formatVND(tx.amount)}",
+                                        color = if (tx.type == "EXPENSE") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                                androidx.compose.material3.HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            }
+                        }
+                    } else {
+                        Text("Chưa có giao dịch.", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { eventToView = null }) {
+                    Text("Đóng")
+                }
+            }
+        )
     }
 }
 

@@ -53,6 +53,7 @@ import android.app.TimePickerDialog
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
 import com.example.ui.IconMapper
+import androidx.compose.runtime.saveable.rememberSaveable
 import java.util.Calendar
 import java.util.Locale
 import java.text.SimpleDateFormat
@@ -103,19 +104,20 @@ fun HistoryScreen(
     }
 
     // --- DISPLAY MODE STATES ---
-    var displayMode by remember { mutableStateOf("CALENDAR") } // LIST, CALENDAR
-    var selectedCalendarDay by remember { 
-        mutableStateOf<CalendarDay?>(
-            Calendar.getInstance().let {
-                CalendarDay(
-                    year = it.get(Calendar.YEAR),
-                    month = it.get(Calendar.MONTH),
-                    dayOfMonth = it.get(Calendar.DAY_OF_MONTH),
-                    isCurrentMonth = true
-                )
-            }
-        ) 
+    var displayMode by rememberSaveable { mutableStateOf("CALENDAR") } // LIST, CALENDAR
+    var selectedCalendarYear by rememberSaveable { mutableIntStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
+    var selectedCalendarMonth by rememberSaveable { mutableIntStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
+    var selectedCalendarDayOfMonth by rememberSaveable { mutableIntStateOf(Calendar.getInstance().get(Calendar.DAY_OF_MONTH)) }
+
+    var selectedCalendarDay = remember(selectedCalendarYear, selectedCalendarMonth, selectedCalendarDayOfMonth) {
+        CalendarDay(
+            year = selectedCalendarYear,
+            month = selectedCalendarMonth,
+            dayOfMonth = selectedCalendarDayOfMonth,
+            isCurrentMonth = true // Not strictly used for tracking selection
+        )
     }
+
     var showDayDetailDialog by remember { mutableStateOf<CalendarDay?>(null) }
     var showQuickActionMenuByDay by remember { mutableStateOf<CalendarDay?>(null) }
     var showQuickAddDialogByDay by remember { mutableStateOf<CalendarDay?>(null) }
@@ -123,13 +125,17 @@ fun HistoryScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
 
     // --- TIME FILTER STATES ---
-    var activeTimeFilterMode by remember { mutableStateOf("MONTH") } // ALL, WEEK, DAY, MONTH, YEAR, RANGE
-    var selectedCustomDate by remember { mutableStateOf<Calendar?>(null) }
-    var selectedCustomMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) } // 0 to 11
-    var selectedCustomMonthYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
-    var selectedCustomYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
-    var selectedRangeStart by remember { mutableStateOf<Calendar?>(null) }
-    var selectedRangeEnd by remember { mutableStateOf<Calendar?>(null) }
+    var activeTimeFilterMode by rememberSaveable { mutableStateOf("MONTH") } // ALL, WEEK, DAY, MONTH, YEAR, RANGE
+    var selectedCustomDateMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    var selectedCustomMonth by rememberSaveable { mutableIntStateOf(Calendar.getInstance().get(Calendar.MONTH)) } // 0 to 11
+    var selectedCustomMonthYear by rememberSaveable { mutableIntStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
+    var selectedCustomYear by rememberSaveable { mutableIntStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
+    var selectedRangeStartMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    var selectedRangeEndMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    val selectedCustomDate: Calendar? = selectedCustomDateMillis?.let { Calendar.getInstance().apply { timeInMillis = it } }
+    val selectedRangeStart: Calendar? = selectedRangeStartMillis?.let { Calendar.getInstance().apply { timeInMillis = it } }
+    val selectedRangeEnd: Calendar? = selectedRangeEndMillis?.let { Calendar.getInstance().apply { timeInMillis = it } }
 
     LaunchedEffect(displayMode) {
         if (displayMode == "CALENDAR") {
@@ -147,7 +153,7 @@ fun HistoryScreen(
                 val newCal = Calendar.getInstance().apply {
                     set(year, month, dayOfMonth)
                 }
-                selectedCustomDate = newCal
+                selectedCustomDateMillis = newCal.timeInMillis
                 activeTimeFilterMode = "DAY"
             },
             currentCal.get(Calendar.YEAR),
@@ -415,9 +421,9 @@ fun HistoryScreen(
                                 android.app.DatePickerDialog(
                                     pickerContext,
                                     { _, year, month, dayOfMonth ->
-                                        selectedRangeStart = Calendar.getInstance().apply {
+                                        selectedRangeStartMillis = Calendar.getInstance().apply {
                                             set(year, month, dayOfMonth)
-                                        }
+                                        }.timeInMillis
                                     },
                                     currentCal.get(Calendar.YEAR),
                                     currentCal.get(Calendar.MONTH),
@@ -446,9 +452,9 @@ fun HistoryScreen(
                                 android.app.DatePickerDialog(
                                     pickerContext,
                                     { _, year, month, dayOfMonth ->
-                                        selectedRangeEnd = Calendar.getInstance().apply {
+                                        selectedRangeEndMillis = Calendar.getInstance().apply {
                                             set(year, month, dayOfMonth)
-                                        }
+                                        }.timeInMillis
                                     },
                                     currentCal.get(Calendar.YEAR),
                                     currentCal.get(Calendar.MONTH),
@@ -518,8 +524,8 @@ fun HistoryScreen(
     }
 
     // Grouping transactions by calendar date key for instant calendar day lookup
-    val transactionsByDayKey = remember(filteredTransactions) {
-        filteredTransactions.groupBy { tx ->
+    val transactionsByDayKey = remember(dailyTransactions) {
+        dailyTransactions.groupBy { tx ->
             val cal = Calendar.getInstance().apply { timeInMillis = tx.timestamp }
             "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH)}-${cal.get(Calendar.DAY_OF_MONTH)}"
         }
@@ -1176,30 +1182,32 @@ fun HistoryScreen(
                     transactionsByDayKey = transactionsByDayKey,
                     selectedCalendarDay = selectedCalendarDay,
                     onDayClick = { day ->
-                        selectedCalendarDay = day
+                        selectedCalendarYear = day.year
+                        selectedCalendarMonth = day.month
+                        selectedCalendarDayOfMonth = day.dayOfMonth
                     },
                     onDayLongPress = { day ->
-                        selectedCalendarDay = day
+                        selectedCalendarYear = day.year
+                        selectedCalendarMonth = day.month
+                        selectedCalendarDayOfMonth = day.dayOfMonth
                         showQuickActionMenuByDay = day
                     }
                 )
 
-                if (selectedCalendarDay != null) {
-                    val dayVal = selectedCalendarDay!!
-                    val dayKey = "${dayVal.year}-${dayVal.month}-${dayVal.dayOfMonth}"
-                    val dayTxs = transactionsByDayKey[dayKey] ?: emptyList()
-                    DayTransactionsInline(
-                        day = dayVal,
-                        transactions = dayTxs,
-                        onEditTransaction = { tx ->
-                            editingTransaction = tx
-                        },
-                        onDeleteTransaction = { tx ->
-                            transactionToDelete = tx
-                        },
-                        onNavigateToTimeline = onNavigateToTimeline
-                    )
-                }
+                val dayVal = selectedCalendarDay
+                val dayKey = "${dayVal.year}-${dayVal.month}-${dayVal.dayOfMonth}"
+                val dayTxs = transactionsByDayKey[dayKey] ?: emptyList()
+                DayTransactionsInline(
+                    day = dayVal,
+                    transactions = dayTxs,
+                    onEditTransaction = { tx ->
+                        editingTransaction = tx
+                    },
+                    onDeleteTransaction = { tx ->
+                        transactionToDelete = tx
+                    },
+                    onNavigateToTimeline = onNavigateToTimeline
+                )
             }
         }
     }

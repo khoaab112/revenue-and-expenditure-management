@@ -56,6 +56,13 @@ interface FinanceDao {
     @Delete
     suspend fun deleteBudget(budget: Budget)
 
+    // Cascading updates for Categories since they are String-based
+    @Query("UPDATE transactions SET categoryName = :newName, categoryIcon = :newIcon, categoryColor = :newColor WHERE categoryName = :oldName")
+    suspend fun updateCategoryInTransactions(oldName: String, newName: String, newIcon: String, newColor: String)
+
+    @Query("UPDATE budgets SET categoryName = :newName, categoryIcon = :newIcon, categoryColor = :newColor WHERE categoryName = :oldName")
+    suspend fun updateCategoryInBudgets(oldName: String, newName: String, newIcon: String, newColor: String)
+
     // ---- Savings Goals ----
     @Query("SELECT * FROM savings_goals ORDER BY targetDate ASC")
     fun getAllSavingsGoals(): Flow<List<SavingsGoal>>
@@ -68,6 +75,22 @@ interface FinanceDao {
 
     @Delete
     suspend fun deleteSavingsGoal(goal: SavingsGoal)
+
+    // ---- Events ----
+    @Query("SELECT * FROM events ORDER BY startDate DESC")
+    fun getAllEvents(): Flow<List<Event>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEvent(event: Event): Long
+
+    @Update
+    suspend fun updateEvent(event: Event)
+
+    @Delete
+    suspend fun deleteEvent(event: Event)
+
+    @Query("DELETE FROM events")
+    suspend fun deleteAllEvents()
 
     // ---- App Settings ----
     @Query("SELECT * FROM settings")

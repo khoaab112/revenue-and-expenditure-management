@@ -108,6 +108,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     val allTransactions: StateFlow<List<Transaction>>
     val allBudgets: StateFlow<List<Budget>>
     val allSavingsGoals: StateFlow<List<SavingsGoal>>
+    val allEvents: StateFlow<List<Event>>
 
     val dailyWallets: StateFlow<List<Wallet>>
     val savingsWallets: StateFlow<List<Wallet>>
@@ -120,6 +121,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     // PIN Protection Flow
     private val _isPinEnabled = MutableStateFlow(false)
     val isPinEnabled: StateFlow<Boolean> = _isPinEnabled.asStateFlow()
+
+    private val _isCloudSyncEnabled = MutableStateFlow(false)
+    val isCloudSyncEnabled: StateFlow<Boolean> = _isCloudSyncEnabled.asStateFlow()
 
     private val _isAiScannerEnabled = MutableStateFlow(false)
     val isAiScannerEnabled: StateFlow<Boolean> = _isAiScannerEnabled.asStateFlow()
@@ -222,6 +226,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         allSavingsGoals = repository.allSavingsGoals
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+        allEvents = repository.allEvents
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
         // Setup filter flow
         val filterCriteriaFlow = combine(
             _searchQuery,
@@ -268,9 +275,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val widgetsSetting = repository.getSetting("widgets_enabled")
         val startScreenSetting = repository.getSetting("start_screen")
         val aiScannerSetting = repository.getSetting("ai_scanner_enabled")
+        val cloudSyncSetting = repository.getSetting("cloud_sync_enabled")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
+        _isCloudSyncEnabled.value = cloudSyncSetting?.value == "true"
         _isAiScannerEnabled.value = aiScannerSetting?.value == "true"
         _savedPinHash.value = pinHashSetting?.value ?: ""
         _widgetsEnabled.value = widgetsSetting?.value == "true"
@@ -926,9 +935,58 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateCategory(oldCategory: FinanceCategory, newName: String, newIconName: String, newColorHex: String, newType: String, newParentName: String? = null) {
+        viewModelScope.launch {
+            val currentList = _categoriesList.value.toMutableList()
+            
+            // Check if user is renaming to a name that already exists (and it's not the same old name)
+            if (newName.lowercase() != oldCategory.name.lowercase() && currentList.any { it.name.lowercase() == newName.lowercase() }) {
+                // Return if name conflict
+                return@launch
+            }
+
+            // Find index to update
+            val index = currentList.indexOfFirst { it.name.lowercase() == oldCategory.name.lowercase() }
+            if (index != -1) {
+                // Replace category
+                currentList[index] = FinanceCategory(newName, newIconName, newColorHex, newType, newParentName)
+                
+                // Also update any child category's parentName if the parent was renamed!
+                if (newName != oldCategory.name) {
+                    for (i in currentList.indices) {
+                        if (currentList[i].parentName?.lowercase() == oldCategory.name.lowercase()) {
+                            currentList[i] = currentList[i].copy(parentName = newName)
+                        }
+                    }
+                }
+
+                repository.saveSetting("custom_categories", serializeCategories(currentList))
+                _categoriesList.value = currentList
+                
+                // Cascade update to transactions and budgets
+                repository.updateCategoryInRelatedData(oldCategory.name, newName, newIconName, newColorHex)
+            }
+        }
+    }
+
     fun deleteCategory(category: FinanceCategory) {
         viewModelScope.launch {
-            val currentList = _categoriesList.value.filter { it.name.lowercase() != category.name.lowercase() }
+            val currentList = _categoriesList.value.toMutableList()
+            val iterator = currentList.iterator()
+            while (iterator.hasNext()) {
+                val cat = iterator.next()
+                if (cat.name.lowercase() == category.name.lowercase()) {
+                    iterator.remove()
+                }
+            }
+            
+            // If the deleted category was a parent, detach its children (set parentName = null) so they are not orphaned
+            for (i in currentList.indices) {
+                if (currentList[i].parentName?.lowercase() == category.name.lowercase()) {
+                    currentList[i] = currentList[i].copy(parentName = null)
+                }
+            }
+            
             repository.saveSetting("custom_categories", serializeCategories(currentList))
             _categoriesList.value = currentList
         }
@@ -981,6 +1039,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             _isPinEnabled.value = false
             _savedPinHash.value = ""
             _isAppUnlocked.value = true
+        }
+    }
+
+    fun toggleCloudSync(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.saveSetting("cloud_sync_enabled", enabled.toString())
+            _isCloudSyncEnabled.value = enabled
         }
     }
 
@@ -1194,7 +1259,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         note: String,
         timestamp: Long,
         isRecurring: Boolean = false,
-        recurrencePeriod: String = "NONE"
+        recurrencePeriod: String = "NONE",
+        eventId: Int? = null
     ) {
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
@@ -1210,7 +1276,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 note = note.ifEmpty { categoryName },
                 timestamp = timestamp,
                 isRecurring = isRecurring,
-                recurrencePeriod = recurrencePeriod
+                recurrencePeriod = recurrencePeriod,
+                eventId = eventId
             )
             repository.insertTransaction(tx)
         }
@@ -1340,6 +1407,32 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         _activeMonth.value = month
     }
 
+    // --- EVENTS SERVICES ---
+    fun addEvent(name: String, description: String, startDate: Long, endDate: Long?, limitAmount: Double?, colorHex: String = "#FF9800") {
+        viewModelScope.launch {
+            repository.insertEvent(Event(
+                name = name,
+                description = description,
+                startDate = startDate,
+                endDate = endDate,
+                limitAmount = limitAmount,
+                colorHex = colorHex
+            ))
+        }
+    }
+
+    fun updateEvent(event: Event) {
+        viewModelScope.launch {
+            repository.updateEvent(event)
+        }
+    }
+
+    fun deleteEvent(event: Event) {
+        viewModelScope.launch {
+            repository.deleteEvent(event)
+        }
+    }
+
     // --- GOOGLE CLOUD SYNC SERVICES ---
     fun clearSyncLogs() {
         _syncStatus.value = ""
@@ -1363,8 +1456,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 val transactionsList = repository.allTransactions.first()
                 val budgetsList = repository.getAllBudgets().first()
                 val savingsGoalsList = repository.allSavingsGoals.first()
+                val eventsList = repository.allEvents.first()
 
-                addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy.")
+                addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy, ${eventsList.size} sự kiện.")
 
                 val root = org.json.JSONObject()
                 root.put("version", 2)
@@ -1401,6 +1495,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     obj.put("timestamp", t.timestamp)
                     obj.put("isRecurring", t.isRecurring)
                     obj.put("recurrencePeriod", t.recurrencePeriod)
+                    obj.put("eventId", t.eventId)
                     transactionsArray.put(obj)
                 }
                 root.put("transactions", transactionsArray)
@@ -1434,6 +1529,21 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     savingsGoalsArray.put(obj)
                 }
                 root.put("savingsGoals", savingsGoalsArray)
+
+                // Events
+                val eventsArray = org.json.JSONArray()
+                eventsList.forEach { e ->
+                    val obj = org.json.JSONObject()
+                    obj.put("id", e.id)
+                    obj.put("name", e.name)
+                    obj.put("description", e.description)
+                    obj.put("startDate", e.startDate)
+                    e.endDate?.let { obj.put("endDate", it) }
+                    e.limitAmount?.let { obj.put("limitAmount", it) }
+                    obj.put("colorHex", e.colorHex)
+                    eventsArray.put(obj)
+                }
+                root.put("events", eventsArray)
 
                 // Application & Protection Settings
                 val settingsObj = org.json.JSONObject()
@@ -1868,7 +1978,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             note = obj.optString("note", ""),
                             timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                             isRecurring = obj.optBoolean("isRecurring", false),
-                            recurrencePeriod = obj.optString("recurrencePeriod", "NONE")
+                            recurrencePeriod = obj.optString("recurrencePeriod", "NONE"),
+                            eventId = if (obj.has("eventId") && !obj.isNull("eventId")) obj.optInt("eventId") else null
                         )
                         repository.insertTransactionDirect(t)
                     }
@@ -1909,6 +2020,25 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             note = obj.optString("note", "")
                         )
                         repository.insertSavingsGoalDirect(s)
+                    }
+                }
+
+                // 4.5 Events
+                val eventsArray = root.optJSONArray("events")
+                if (eventsArray != null) {
+                    addLog("Đang nhập lại ${eventsArray.length()} sự kiện...")
+                    for (i in 0 until eventsArray.length()) {
+                        val obj = eventsArray.getJSONObject(i)
+                        val e = com.example.data.Event(
+                            id = obj.optInt("id", 0),
+                            name = obj.optString("name", "Sự kiện"),
+                            description = obj.optString("description", ""),
+                            startDate = obj.optLong("startDate", System.currentTimeMillis()),
+                            endDate = if (obj.has("endDate") && !obj.isNull("endDate")) obj.optLong("endDate") else null,
+                            limitAmount = if (obj.has("limitAmount") && !obj.isNull("limitAmount")) obj.optDouble("limitAmount") else null,
+                            colorHex = obj.optString("colorHex", "#2196F3")
+                        )
+                        repository.insertEventDirect(e)
                     }
                 }
 

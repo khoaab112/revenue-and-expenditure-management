@@ -329,7 +329,26 @@ object NotificationParser {
     }
 
     private fun extractNote(text: String, bankName: String, type: String): String {
-        return "Giao dịch qua $bankName"
+        val lowerText = text.lowercase()
+        // Typical prefixes showing transaction note
+        val indicators = listOf("nội dung:", "noidung:", "lý do:", "gd:", "nd:", "ref:", "mô tả:", "nội dung gd:", "noi dung:")
+        for (indicator in indicators) {
+            val idx = lowerText.lastIndexOf(indicator)
+            if (idx != -1) {
+                val rem = text.substring(idx + indicator.length).trim()
+                // Clean characters often found inside SMS
+                return cleanNoteString(rem)
+            }
+        }
+
+        // Fallback: If it's a MoMo or simple app, search for quoted text or text in parentheses
+        val quotePattern = java.util.regex.Pattern.compile(""""([^"]+)"""")
+        val qMatcher = quotePattern.matcher(text)
+        if (qMatcher.find()) {
+            return cleanNoteString(qMatcher.group(1) ?: "")
+        }
+
+        return if (type == "INCOME") "Giao dịch cộng $bankName" else "Giao dịch trừ $bankName"
     }
 
     private fun cleanNoteString(input: String): String {

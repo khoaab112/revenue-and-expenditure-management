@@ -4,6 +4,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import java.util.Calendar
 
+import kotlinx.coroutines.flow.first
+import org.json.JSONObject
+
 class FinanceRepository(private val dao: FinanceDao) {
 
     // --- Wallets ---
@@ -169,6 +172,32 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun updateBudget(budget: Budget) = dao.updateBudget(budget)
     suspend fun deleteBudget(budget: Budget) = dao.deleteBudget(budget)
 
+    suspend fun updateCategoryInRelatedData(oldName: String, newName: String, newIcon: String, newColor: String) {
+        dao.updateCategoryInTransactions(oldName, newName, newIcon, newColor)
+        dao.updateCategoryInBudgets(oldName, newName, newIcon, newColor)
+    }
+
+    suspend fun exportAllDataAsJson(): String {
+        val wallets = dao.getAllWallets().first()
+        val transactions = dao.getAllTransactions().first()
+        val budgets = dao.getAllBudgets().first()
+        val goals = dao.getAllSavingsGoals().first()
+        val settingsList = dao.getAllSettings()
+        
+        val moshi = com.squareup.moshi.Moshi.Builder()
+            .add(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
+            .build()
+        val map = mapOf(
+            "wallets" to moshi.adapter<List<Wallet>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Wallet::class.java)).toJson(wallets),
+            "transactions" to moshi.adapter<List<Transaction>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Transaction::class.java)).toJson(transactions),
+            "budgets" to moshi.adapter<List<Budget>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Budget::class.java)).toJson(budgets),
+            "goals" to moshi.adapter<List<SavingsGoal>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, SavingsGoal::class.java)).toJson(goals),
+            "settings" to settingsList.associate { it.key to it.value }
+        )
+        
+        return JSONObject(map).toString()
+    }
+
     // --- Savings Goals ---
     val allSavingsGoals: Flow<List<SavingsGoal>> = dao.getAllSavingsGoals()
     suspend fun insertSavingsGoal(goal: SavingsGoal): Long = dao.insertSavingsGoal(goal)
@@ -182,6 +211,12 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun saveSetting(key: String, value: String) {
         dao.insertSetting(AppSetting(key, value))
     }
+
+    // --- Events ---
+    val allEvents: Flow<List<Event>> = dao.getAllEvents()
+    suspend fun insertEvent(event: Event): Long = dao.insertEvent(event)
+    suspend fun updateEvent(event: Event) = dao.updateEvent(event)
+    suspend fun deleteEvent(event: Event) = dao.deleteEvent(event)
 
     // --- Seeding helper ---
     suspend fun checkAndSeedDatabase() {
@@ -213,6 +248,7 @@ class FinanceRepository(private val dao: FinanceDao) {
         dao.deleteAllWallets()
         dao.deleteAllBudgets()
         dao.deleteAllSavingsGoals()
+        dao.deleteAllEvents()
     }
 
     suspend fun deleteAllSettings() = dao.deleteAllSettings()
@@ -221,4 +257,5 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun insertTransactionDirect(transaction: Transaction) = dao.insertTransaction(transaction)
     suspend fun insertBudgetDirect(budget: Budget) = dao.insertBudget(budget)
     suspend fun insertSavingsGoalDirect(goal: SavingsGoal) = dao.insertSavingsGoal(goal)
+    suspend fun insertEventDirect(event: Event) = dao.insertEvent(event)
 }
