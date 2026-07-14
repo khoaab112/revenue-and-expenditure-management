@@ -157,7 +157,7 @@ class BankNotificationListenerService : NotificationListenerService() {
         android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
     )
 
-    val builder = android.app.Notification.Builder(context, channelId)
+    val builder = androidx.core.app.NotificationCompat.Builder(context, channelId)
         .setSmallIcon(android.R.drawable.ic_dialog_info) // Fallback icon
         .setContentTitle("Ví của tôi")
         .setContentText(contentText)

@@ -543,7 +543,7 @@ fun DashboardScreen(
 
                 if (currentMonthBudgets.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        currentMonthBudgets.take(3).forEach { budget ->
+                        currentMonthBudgets.forEach { budget ->
                             val progress = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat().coerceIn(0f, 1f) else 0f
                             val isExceeded = budget.spentAmount >= budget.limitAmount
                             val progressColor = if (isExceeded) MaterialTheme.colorScheme.error else FormatHelper.parseColor(budget.categoryColor)
@@ -762,7 +762,7 @@ fun DashboardScreen(
                 }
 
                 // Insights section list
-                val computedInsights = remember(transactions, currentMonthTransactions, totalIncome, totalExpense, wallets, savingsWallets, budgets, savingsGoals) {
+                val computedInsights = remember(transactions, currentMonthTransactions, totalIncome, totalExpense, wallets, savingsWallets, currentMonthBudgets, savingsGoals) {
                     val insightsList = mutableListOf<SmartSpendingInsight>()
                     val exps = transactions.filter { it.type == "EXPENSE" }
                     
@@ -770,8 +770,8 @@ fun DashboardScreen(
                     val MS_DAY = 24 * 60 * 60 * 1000L
                     
                     // --- 1. RISK ALERTS (Cảnh báo rủi ro) ---
-                    // Ví đang âm / sắp âm
-                    val lowestWallet = wallets.minByOrNull { it.balance }
+                    // Ví đang âm / sắp âm (loại trừ Thẻ tín dụng vì mặc định là số âm)
+                    val lowestWallet = wallets.filter { it.type != "CREDIT" }.minByOrNull { it.balance }
                     if (lowestWallet != null) {
                         if (lowestWallet.balance <= 0.0) {
                             insightsList.add(
@@ -797,7 +797,7 @@ fun DashboardScreen(
                     }
 
                     // Vượt ngân sách
-                    budgets.forEach { bug ->
+                    currentMonthBudgets.forEach { bug ->
                         val spent = bug.spentAmount
                         if (bug.limitAmount > 0) {
                             val ratio = spent / bug.limitAmount

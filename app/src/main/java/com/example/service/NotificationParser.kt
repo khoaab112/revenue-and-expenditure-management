@@ -239,12 +239,18 @@ object NotificationParser {
     }
 
     private fun getCleanText(text: String): String {
-        var cleanText = text.replace("đ", "vnd")
-            .replace("d", "vnd")
-            .replace("$", "usd")
+        var cleanText = text.lowercase()
+        // Replace 'đ' and 'd' safely only if they are used as currency (e.g. after a number)
+        cleanText = cleanText.replace(Regex("""(?i)\bđ\b"""), "vnd")
+        cleanText = cleanText.replace(Regex("""(?i)(?<=\d)\s*d\b"""), "vnd")
+        cleanText = cleanText.replace(Regex("""(?i)(?<=\d)\s*đ\b"""), "vnd")
+        cleanText = cleanText.replace("$", "usd")
             .replace("€", "eur")
             .replace("£", "gbp")
-            .lowercase()
+
+        // Remove the Account Balance (Số dư) so it doesn't get mistakenly parsed as the transaction amount
+        val balanceRegex = Regex("""\b(?:sd|số dư|so du|sodu)\s*(?:cuối|cuoi)?\s*[:]?\s*[+-]?\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:vnd|đ|d|usd|eur|gbp)?\b""")
+        cleanText = cleanText.replace(balanceRegex, " ")
 
         // Remove account/card masks containing 'xxx' (e.g. 82xxx686)
         cleanText = cleanText.replace(Regex("""\b\w*xxx\w*\b"""), "")
@@ -293,7 +299,7 @@ object NotificationParser {
             Pattern.compile("""(?:usd|eur|gbp)\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
             
             // 4. Number preceded by a direct transaction indicator to parse values safely
-            Pattern.compile("""\b(?:số tiền|so tien|sotien|trị giá|tri gia|tiền|tien|thanh toán|thanh toan|biến động|bien dong|giao dịch|giao dich|giá trị|gia tri|cộng|co:|nợ:)\s*:?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b""")
+            Pattern.compile("""\b(?:số tiền|so tien|sotien|trị giá|tri gia|tiền|tien|thanh toán|thanh toan|biến động|bien dong|giao dịch|giao dich|gd|gd:|ps|ps:|phát sinh|phat sinh|giá trị|gia tri|cộng|co:|nợ:)\s*:?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b""")
         )
 
         for (pattern in patterns) {

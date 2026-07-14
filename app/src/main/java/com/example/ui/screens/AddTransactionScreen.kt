@@ -251,10 +251,11 @@ fun AddTransactionScreen(
         hasManuallySelected = false
     }
 
-    // Auto-select first wallet if available
+    // Auto-select CASH wallet if available, otherwise first wallet
     LaunchedEffect(wallets) {
         if (selectedWalletId == null && wallets.isNotEmpty()) {
-            selectedWalletId = wallets.first().id
+            val cashWallet = wallets.find { it.type == "CASH" }
+            selectedWalletId = cashWallet?.id ?: wallets.first().id
         }
     }
 

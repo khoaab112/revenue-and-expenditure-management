@@ -1215,16 +1215,18 @@ fun WalletManagementDialog(
         "#009688", "#4CAF50", "#8BC34A", "#FFEB3B",
         "#FF9800", "#795548", "#607D8B", "#455A64"
     )
-    val bankIcons = listOf("AccountBalance", "Business", "Domain", "CurrencyExchange", "AssuredWorkload", "SwapHoriz", "CorporateFare", "CreditCard")
+    val bankIcons = listOf("AccountBalance", "Business", "Domain", "CurrencyExchange", "AssuredWorkload", "SwapHoriz", "CorporateFare", "AccountBalanceWallet")
     val cashIcons = listOf("Payments", "AccountBalanceWallet", "Money", "AttachMoney", "Wallet", "PriceCheck", "LocalAtm", "PointOfSale")
     val walletIcons = listOf("PhonelinkRing", "Contactless", "QrCode", "PhoneAndroid", "Security", "TapAndPlay", "Nfc", "MobileScreenShare")
     val savingsIcons = listOf("Savings", "Inventory", "CurrencyBitcoin", "MonetizationOn", "Star", "WorkspacePremium", "Redeem", "CardGiftcard")
+    val creditIcons = listOf("CreditCard", "CreditScore", "Payment", "Receipt")
 
     val iconPalette = when (walletType) {
         "BANK" -> bankIcons
         "CASH" -> cashIcons
         "WALLET" -> walletIcons
         "SAVINGS" -> savingsIcons
+        "CREDIT" -> creditIcons
         else -> cashIcons
     }
     
@@ -1234,7 +1236,7 @@ fun WalletManagementDialog(
         }
     }
 
-    val typeDisplayName = mapOf("CASH" to "Tiền mặt", "BANK" to "Ngân hàng", "WALLET" to "Ví điện tử", "SAVINGS" to "Tích lũy")
+    val typeDisplayName = mapOf("CASH" to "Tiền mặt", "BANK" to "Ngân hàng", "WALLET" to "Ví điện tử", "SAVINGS" to "Tích lũy", "CREDIT" to "Thẻ tín dụng")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1355,36 +1357,44 @@ fun WalletManagementDialog(
                                 Triple("CASH", "Tiền mặt", Icons.Default.Payments),
                                 Triple("BANK", "Ngân hàng", Icons.Default.AccountBalance),
                                 Triple("WALLET", "Ví điện tử", Icons.Default.AccountBalanceWallet),
-                                Triple("SAVINGS", "Tích lũy", Icons.Default.Savings)
+                                Triple("SAVINGS", "Tích lũy", Icons.Default.Savings),
+                                Triple("CREDIT", "Thẻ tín dụng", Icons.Default.CreditCard)
                             )
                             
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                types.forEach { (typeKey, label, icon) ->
-                                    val isSelected = walletType == typeKey
-                                    Card(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(72.dp)
-                                            .clickable { walletType = typeKey },
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                        ),
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.fillMaxSize().padding(8.dp),
-                                            verticalArrangement = Arrangement.Center,
-                                            horizontalAlignment = Alignment.CenterHorizontally
+                            val chunkedTypes = types.chunked(3)
+                            chunkedTypes.forEach { rowTypes ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    rowTypes.forEach { (typeKey, label, icon) ->
+                                        val isSelected = walletType == typeKey
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(72.dp)
+                                                .clickable { walletType = typeKey },
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                            ),
+                                            shape = RoundedCornerShape(12.dp),
+                                            border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
                                         ) {
-                                            Icon(imageVector = icon, contentDescription = label, modifier = Modifier.size(24.dp))
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                            Column(
+                                                modifier = Modifier.fillMaxSize().padding(8.dp),
+                                                verticalArrangement = Arrangement.Center,
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Icon(imageVector = icon, contentDescription = label, modifier = Modifier.size(24.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                            }
                                         }
+                                    }
+                                    // Fill the remaining space in the row to maintain consistent sizing
+                                    repeat(3 - rowTypes.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
                                     }
                                 }
                             }

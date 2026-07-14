@@ -373,6 +373,7 @@ fun WalletBigCard(
                                 "BANK" -> "Tài khoản ngân hàng"
                                 "WALLET" -> "Ví điện tử"
                                 "SAVINGS" -> "Hũ tiết kiệm"
+                                "CREDIT" -> "Thẻ tín dụng / Nợ"
                                 else -> wallet.type
                             },
                             fontSize = 11.sp,
@@ -432,16 +433,18 @@ fun AddWalletDialog(
     var isCustomColorActive by remember { mutableStateOf(false) }
     var customColorHex by remember { mutableStateOf("#9C27B0") }
 
-    val bankIcons = listOf("AccountBalance", "Business", "Domain", "CurrencyExchange", "AssuredWorkload", "SwapHoriz", "CorporateFare", "CreditCard")
+    val bankIcons = listOf("AccountBalance", "Business", "Domain", "CurrencyExchange", "AssuredWorkload", "SwapHoriz", "CorporateFare", "AccountBalanceWallet")
     val cashIcons = listOf("Payments", "AccountBalanceWallet", "Money", "AttachMoney", "Wallet", "PriceCheck", "LocalAtm", "PointOfSale")
     val walletIcons = listOf("PhonelinkRing", "Contactless", "QrCode", "PhoneAndroid", "Security", "TapAndPlay", "Nfc", "MobileScreenShare")
     val savingsIcons = listOf("Savings", "Inventory", "CurrencyBitcoin", "MonetizationOn", "Star", "WorkspacePremium", "Redeem", "CardGiftcard")
+    val creditIcons = listOf("CreditCard", "CreditScore", "Payment", "Receipt")
 
     val icons = when (selectedType) {
         "BANK" -> bankIcons
         "CASH" -> cashIcons
         "WALLET" -> walletIcons
         "SAVINGS" -> savingsIcons
+        "CREDIT" -> creditIcons
         else -> cashIcons
     }
     var selectedIcon by remember { mutableStateOf(icons.first()) }
@@ -481,9 +484,10 @@ fun AddWalletDialog(
                         "CASH" to "Tiền mặt",
                         "BANK" to "Ngân hàng",
                         "WALLET" to "Ví điện tử",
-                        "SAVINGS" to "Tiết kiệm"
+                        "SAVINGS" to "Tiết kiệm",
+                        "CREDIT" to "Thẻ tín dụng"
                     )
-                    val chunked = types.chunked(2)
+                    val chunked = types.chunked(3)
                     chunked.forEach { rowItems ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),

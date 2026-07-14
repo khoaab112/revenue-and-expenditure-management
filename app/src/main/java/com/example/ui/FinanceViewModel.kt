@@ -1098,9 +1098,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             val budgetMonth = budget.month
             val nextBudgetMonth = getNextMonth(budgetMonth)
             
-            if (allBud.none { it.categoryName == budget.categoryName && it.month == nextBudgetMonth }) {
-                // Create
-                addBudget(budget.categoryName, budget.limitAmount, nextBudgetMonth, true)
+            if (nextBudgetMonth <= currentMonth) {
+                if (allBud.none { it.categoryName == budget.categoryName && it.month == nextBudgetMonth }) {
+                    // Create
+                    addBudget(budget.categoryName, budget.limitAmount, nextBudgetMonth, true)
+                }
             }
         }
     }
