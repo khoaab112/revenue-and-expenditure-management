@@ -182,20 +182,28 @@ class FinanceRepository(private val dao: FinanceDao) {
         val transactions = dao.getAllTransactions().first()
         val budgets = dao.getAllBudgets().first()
         val goals = dao.getAllSavingsGoals().first()
+        val events = dao.getAllEvents().first()
         val settingsList = dao.getAllSettings()
         
         val moshi = com.squareup.moshi.Moshi.Builder()
             .add(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory())
             .build()
-        val map = mapOf(
-            "wallets" to moshi.adapter<List<Wallet>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Wallet::class.java)).toJson(wallets),
-            "transactions" to moshi.adapter<List<Transaction>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Transaction::class.java)).toJson(transactions),
-            "budgets" to moshi.adapter<List<Budget>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Budget::class.java)).toJson(budgets),
-            "goals" to moshi.adapter<List<SavingsGoal>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, SavingsGoal::class.java)).toJson(goals),
-            "settings" to settingsList.associate { it.key to it.value }
-        )
+            
+        val root = org.json.JSONObject()
+        root.put("version", 2)
+        root.put("backup_timestamp", System.currentTimeMillis())
         
-        return JSONObject(map).toString()
+        root.put("wallets", org.json.JSONArray(moshi.adapter<List<Wallet>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Wallet::class.java)).toJson(wallets)))
+        root.put("transactions", org.json.JSONArray(moshi.adapter<List<Transaction>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Transaction::class.java)).toJson(transactions)))
+        root.put("budgets", org.json.JSONArray(moshi.adapter<List<Budget>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Budget::class.java)).toJson(budgets)))
+        root.put("savingsGoals", org.json.JSONArray(moshi.adapter<List<SavingsGoal>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, SavingsGoal::class.java)).toJson(goals)))
+        root.put("events", org.json.JSONArray(moshi.adapter<List<Event>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Event::class.java)).toJson(events)))
+        
+        val settingsObj = org.json.JSONObject()
+        settingsList.forEach { settingsObj.put(it.key, it.value) }
+        root.put("app_settings", settingsObj)
+        
+        return root.toString()
     }
 
     // --- Savings Goals ---

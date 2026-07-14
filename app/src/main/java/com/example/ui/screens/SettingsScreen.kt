@@ -517,6 +517,33 @@ fun SettingsScreen(
                         }
                     )
                 }
+                
+                if (isCloudSyncEnabled) {
+                    androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.backupToDriveNow(context) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+                        ) {
+                            Icon(imageVector = androidx.compose.material.icons.Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Sao lưu ngay", fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = { viewModel.restoreFromDrive(context) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00796B))
+                        ) {
+                            Icon(imageVector = androidx.compose.material.icons.Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Khôi phục", fontSize = 13.sp)
+                        }
+                    }
+                }
             }
         }
 

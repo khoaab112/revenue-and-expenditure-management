@@ -14,7 +14,9 @@ import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -43,19 +45,62 @@ class CloudSyncWorker(
             val repository = com.example.data.FinanceRepository(database.financeDao())
             val exportedData = repository.exportAllDataAsJson()
 
+val folderName = "[APP_FINANCE]"
             val fileName = "finance_backup.json"
-            
-            // Search if file exists
             val client = OkHttpClient()
-            val searchRequest = Request.Builder()
-                .url("https://www.googleapis.com/drive/v3/files?q=name='$fileName'&spaces=drive")
+
+            // 1. Search for folder
+            var folderId: String? = null
+            val searchFolderRequest = Request.Builder()
+                .url("https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder'&spaces=drive")
+                .header("Authorization", "Bearer $token")
+                .build()
+            val searchFolderResponse = client.newCall(searchFolderRequest).execute()
+            if (searchFolderResponse.isSuccessful) {
+                val json = searchFolderResponse.body?.string()
+                json?.let {
+                    val jsonObj = JSONObject(it)
+                    val files = jsonObj.optJSONArray("files")
+                    if (files != null && files.length() > 0) {
+                        folderId = files.getJSONObject(0).getString("id")
+                    }
+                }
+            }
+
+            // 2. Create folder if not exists
+            if (folderId == null) {
+                val folderMetadata = JSONObject()
+                folderMetadata.put("name", folderName)
+                folderMetadata.put("mimeType", "application/vnd.google-apps.folder")
+                val createFolderRequest = Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files")
+                    .header("Authorization", "Bearer $token")
+                    .post(folderMetadata.toString().toRequestBody("application/json; charset=UTF-8".toMediaTypeOrNull()))
+                    .build()
+                val createFolderResponse = client.newCall(createFolderRequest).execute()
+                if (createFolderResponse.isSuccessful) {
+                    val json = createFolderResponse.body?.string()
+                    json?.let {
+                        val jsonObj = JSONObject(it)
+                        folderId = jsonObj.optString("id")
+                    }
+                }
+            }
+
+            if (folderId == null) {
+                return@withContext Result.retry() // Failed to find or create folder
+            }
+
+            // 3. Search for file INSIDE folder
+            var fileId: String? = null
+            val searchFileRequest = Request.Builder()
+                .url("https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and '${folderId}' in parents&spaces=drive")
                 .header("Authorization", "Bearer $token")
                 .build()
             
-            val searchResponse = client.newCall(searchRequest).execute()
-            var fileId: String? = null
-            if (searchResponse.isSuccessful) {
-                val json = searchResponse.body?.string()
+            val searchFileResponse = client.newCall(searchFileRequest).execute()
+            if (searchFileResponse.isSuccessful) {
+                val json = searchFileResponse.body?.string()
                 json?.let {
                     val jsonObj = JSONObject(it)
                     val files = jsonObj.optJSONArray("files")
@@ -68,11 +113,14 @@ class CloudSyncWorker(
             val metadata = JSONObject()
             metadata.put("name", fileName)
             metadata.put("mimeType", "application/json")
+            if (fileId == null) {
+                metadata.put("parents", org.json.JSONArray().put(folderId))
+            }
             
             val requestBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
-                .addFormDataPart("metadata", null, metadata.toString().toRequestBody("application/json; charset=UTF-8".toMediaType()))
-                .addFormDataPart("file", fileName, exportedData.toRequestBody("application/json; charset=UTF-8".toMediaType()))
+                .addFormDataPart("metadata", null, metadata.toString().toRequestBody("application/json; charset=UTF-8".toMediaTypeOrNull()))
+                .addFormDataPart("file", fileName, exportedData.toRequestBody("application/json; charset=UTF-8".toMediaTypeOrNull()))
                 .build()
 
             val uploadUrl = if (fileId == null) {
