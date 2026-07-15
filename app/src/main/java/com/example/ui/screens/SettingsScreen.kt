@@ -88,6 +88,7 @@ fun SettingsScreen(
     var showCategoryManagement by remember { mutableStateOf(false) }
     var showEventManagement by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var showCloudRestoreDialog by remember { mutableStateOf(false) }
     var isDeveloperExpanded by remember { mutableStateOf(false) }
 
     // Developer simulation states
@@ -440,9 +441,65 @@ fun SettingsScreen(
             }
         }
 
+        // 3. CẤU HÌNH AI & GEMINI
+        val geminiApiKey by viewModel.geminiApiKey.collectAsState()
+        var apiKeyInput by remember { mutableStateOf("") }
+        LaunchedEffect(geminiApiKey) {
+            apiKeyInput = geminiApiKey
+        }
 
+        Text(
+            text = "AI & GEMINI",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
 
-
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Cấu hình Gemini API Key",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Nhập API Key của riêng bạn để sử dụng các tính năng AI (Quét hóa đơn, Cố vấn Tài chính). Key này được lưu trữ hoàn toàn cục bộ trên thiết bị của bạn.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = apiKeyInput,
+                    onValueChange = { apiKeyInput = it },
+                    label = { Text("Gemini API Key") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        if (apiKeyInput.isNotBlank()) {
+                            IconButton(onClick = { apiKeyInput = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Xóa")
+                            }
+                        }
+                    }
+                )
+                Button(
+                    onClick = {
+                        viewModel.saveGeminiApiKey(apiKeyInput.trim())
+                    },
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Lưu API Key")
+                }
+            }
+        }
 
         // 4. ĐỒNG BỘ ĐÁM MÂY
         Text(
@@ -492,14 +549,30 @@ fun SettingsScreen(
                         try {
                             val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
                             task.getResult(com.google.android.gms.common.api.ApiException::class.java)
-                            viewModel.toggleCloudSync(true)
-                            com.example.service.CloudSyncWorker.setupPeriodicSync(context)
-                            viewModel.showSuccessNotification("Đã kết nối Google Drive và bật đồng bộ!")
+                            
+                            viewModel.checkDriveBackupConflict(context) { hasConflict ->
+                                if (hasConflict) {
+                                    showCloudRestoreDialog = true
+                                } else {
+                                    viewModel.toggleCloudSync(true)
+                                    com.example.service.CloudSyncWorker.setupPeriodicSync(context)
+                                    viewModel.showSuccessNotification("Đã kết nối Google Drive và bật đồng bộ!")
+                                }
+                            }
                         } catch (e: Exception) {
                             viewModel.showWarningNotification("Lỗi đăng nhập Google: ${e.message}")
                         }
                     } else {
-                        viewModel.showWarningNotification("Đăng nhập bị hủy.")
+                        var errorMsg = "Đăng nhập bị hủy."
+                        try {
+                            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                            task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                        } catch (apiException: com.google.android.gms.common.api.ApiException) {
+                            errorMsg = "Lỗi Google (${apiException.statusCode}): ${apiException.message}"
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                        viewModel.showWarningNotification(errorMsg)
                         viewModel.toggleCloudSync(false)
                     }
                 }
@@ -760,7 +833,7 @@ fun SettingsScreen(
                 // Application Information Row
                 ListItem(
                     headlineContent = { Text("Phiên bản", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text("v1.0.0 (Bản mẫu Offline)") },
+                    supportingContent = { Text("v1.3") },
                     leadingContent = {
                         Icon(imageVector = Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
                     }
@@ -1105,6 +1178,42 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showClearDataDialog = false }) {
                     Text("Hủy bỏ")
+                }
+            }
+        )
+    }
+
+    if (showCloudRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showCloudRestoreDialog = false 
+                viewModel.toggleCloudSync(false)
+            },
+            title = { Text("Phát hiện bản sao lưu cũ!") },
+            text = { Text("Chúng tôi phát hiện một bản sao lưu dữ liệu cũ của bạn trên Google Drive. Bạn có muốn khôi phục dữ liệu này vào ứng dụng ngay bây giờ không?\n\nLưu ý: Nếu không khôi phục, bản sao lưu cũ trên Drive sẽ bị ghi đè bởi dữ liệu trống hiện tại khi quá trình đồng bộ hoạt động.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showCloudRestoreDialog = false
+                        viewModel.restoreFromDrive(context)
+                        viewModel.toggleCloudSync(true)
+                        com.example.service.CloudSyncWorker.setupPeriodicSync(context)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Khôi phục ngay")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showCloudRestoreDialog = false
+                        viewModel.toggleCloudSync(true)
+                        com.example.service.CloudSyncWorker.setupPeriodicSync(context)
+                        viewModel.showSuccessNotification("Đã bật đồng bộ (Ghi đè dữ liệu)")
+                    }
+                ) {
+                    Text("Ghi đè dữ liệu đám mây")
                 }
             }
         )

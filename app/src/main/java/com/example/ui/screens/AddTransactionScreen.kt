@@ -115,7 +115,7 @@ fun AddTransactionScreen(
                         }
                     }
                     if (bitmap != null) {
-                        val result = com.example.service.GeminiReceiptScanner.scanReceipt(bitmap)
+                        val result = com.example.service.GeminiReceiptScanner.scanReceipt(bitmap, viewModel.geminiApiKey.value)
                         scanDurationSeconds = (System.currentTimeMillis() - startTime) / 1000.0
                         if (result.success) {
                             scannedItemsState = result.items.map {
@@ -173,7 +173,7 @@ fun AddTransactionScreen(
                 scanDurationSeconds = null
                 val startTime = System.currentTimeMillis()
                 try {
-                    val result = com.example.service.GeminiReceiptScanner.scanReceipt(bitmap)
+                    val result = com.example.service.GeminiReceiptScanner.scanReceipt(bitmap, viewModel.geminiApiKey.value)
                     scanDurationSeconds = (System.currentTimeMillis() - startTime) / 1000.0
                     if (result.success) {
                         scannedItemsState = result.items.map {

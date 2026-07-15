@@ -163,7 +163,7 @@ fun WalletsScreen(
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                         .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     sortedWallets.forEach { wallet ->
                         val isSelected = selectedWalletForTransactions?.id == wallet.id
@@ -318,25 +318,25 @@ fun WalletBigCard(
     modifier: Modifier = Modifier
 ) {
     val cardColor = FormatHelper.parseColor(wallet.colorHex)
-    val outlineBorder = if (isSelected) BorderStroke(3.dp, cardColor)
+    val outlineBorder = if (isSelected) BorderStroke(2.5.dp, cardColor)
                         else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
 
     Card(
         modifier = modifier
-            .width(260.dp)
-            .height(150.dp)
+            .width(170.dp)
+            .height(115.dp)
             .clickable { onSelect() }
             .testTag("wallet_big_${wallet.id}"),
         colors = CardDefaults.cardColors(
-            containerColor = cardColor.copy(alpha = if (isSelected) 0.3f else 0.12f)
+            containerColor = cardColor.copy(alpha = if (isSelected) 0.25f else 0.1f)
         ),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         border = outlineBorder
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
+                .padding(12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
@@ -346,12 +346,13 @@ fun WalletBigCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(cardColor),
                         contentAlignment = Alignment.Center
                     ) {
@@ -359,56 +360,61 @@ fun WalletBigCard(
                             imageVector = IconMapper.getIconByName(wallet.iconName),
                             contentDescription = wallet.name,
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = wallet.name,
-                            fontSize = 15.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = when (wallet.type) {
                                 "CASH" -> "Tiền mặt"
-                                "BANK" -> "Tài khoản ngân hàng"
+                                "BANK" -> "Ngân hàng"
                                 "WALLET" -> "Ví điện tử"
-                                "SAVINGS" -> "Hũ tiết kiệm"
-                                "CREDIT" -> "Thẻ tín dụng / Nợ"
+                                "SAVINGS" -> "Tiết kiệm"
+                                "CREDIT" -> "Tín dụng"
                                 else -> wallet.type
                             },
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                // Delete Icon (If not the last default wallet to avoid empty database issues)
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(24.dp).testTag("delete_wallet_${wallet.id}")
+                    modifier = Modifier.size(20.dp).testTag("delete_wallet_${wallet.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Xóa ví",
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
 
             Column {
                 Text(
-                    text = "Số dư tài khoản",
-                    fontSize = 12.sp,
+                    text = "Số dư",
+                    fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = FormatHelper.formatVND(wallet.balance),
-                    fontSize = 22.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

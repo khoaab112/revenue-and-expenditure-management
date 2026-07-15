@@ -50,6 +50,7 @@ object Routes {
     const val TIMELINE = "timeline"
     const val EVENTS = "events"
     const val DEBT_BOOK = "debt_book"
+    const val AI_ADVISOR = "ai_advisor"
 }
 
 class MainActivity : ComponentActivity() {
@@ -715,7 +716,8 @@ fun NavHostContainer(
                 onNavigateToBudget = { navController.navigate(Routes.BUDGET_GOAL) },
                 onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
                 onNavigateToBankNotifications = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
-                onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) }
+                onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) },
+                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) }
             )
         }
 
@@ -765,6 +767,19 @@ fun NavHostContainer(
             com.example.ui.screens.DebtBookScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.AI_ADVISOR) {
+            com.example.ui.screens.AIAdvisorScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSettings = {
+                    navController.navigate(Routes.SETTINGS) {
+                        popUpTo(Routes.DASHBOARD)
+                        launchSingleTop = true
+                    }
+                }
             )
         }
 

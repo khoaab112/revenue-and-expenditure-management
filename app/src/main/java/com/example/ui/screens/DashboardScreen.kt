@@ -42,6 +42,7 @@ fun DashboardScreen(
     onNavigateToSavings: () -> Unit = {},
     onNavigateToBankNotifications: () -> Unit = {},
     onNavigateToDebtBook: () -> Unit = {},
+    onNavigateToAIAdvisor: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val wallets by viewModel.dailyWallets.collectAsState()
@@ -304,6 +305,52 @@ fun DashboardScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // --- AI Financial Advisor Banner ---
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onNavigateToAIAdvisor() }
+                .testTag("dashboard_ai_advisor_banner"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), shape = CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "Cố vấn AI",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "[Trợ lý AI]",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
 

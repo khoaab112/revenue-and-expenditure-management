@@ -109,7 +109,15 @@ val folderName = "[APP_FINANCE]"
                     }
                 }
             }
-            
+            val localJson = JSONObject(exportedData)
+            val localTxArray = localJson.optJSONArray("transactions")
+            val isLocalTxEmpty = localTxArray == null || localTxArray.length() == 0
+
+            if (fileId != null && isLocalTxEmpty) {
+                android.util.Log.w("CloudSyncWorker", "Aborted cloud sync: local data is empty but Google Drive contains a backup file. Avoided overwriting.")
+                return@withContext Result.success()
+            }
+
             val metadata = JSONObject()
             metadata.put("name", fileName)
             metadata.put("mimeType", "application/json")

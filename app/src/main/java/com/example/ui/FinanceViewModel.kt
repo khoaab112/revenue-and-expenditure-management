@@ -130,6 +130,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isAiScannerEnabled = MutableStateFlow(false)
     val isAiScannerEnabled: StateFlow<Boolean> = _isAiScannerEnabled.asStateFlow()
 
+    private val _geminiApiKey = MutableStateFlow("")
+    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
+
+    private val _advisorResult = MutableStateFlow<com.example.service.GeminiAdvisorService.AdvisorResult?>(null)
+    val advisorResult: StateFlow<com.example.service.GeminiAdvisorService.AdvisorResult?> = _advisorResult.asStateFlow()
+
+    private val _advisorLoading = MutableStateFlow(false)
+    val advisorLoading: StateFlow<Boolean> = _advisorLoading.asStateFlow()
+
     private val _focusedWalletId = MutableStateFlow<Int?>(null)
     val focusedWalletId: StateFlow<Int?> = _focusedWalletId.asStateFlow()
 
@@ -281,11 +290,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val startScreenSetting = repository.getSetting("start_screen")
         val aiScannerSetting = repository.getSetting("ai_scanner_enabled")
         val cloudSyncSetting = repository.getSetting("cloud_sync_enabled")
+        val geminiApiKeySetting = repository.getSetting("gemini_api_key")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
         _isCloudSyncEnabled.value = cloudSyncSetting?.value == "true"
         _isAiScannerEnabled.value = aiScannerSetting?.value == "true"
+        _geminiApiKey.value = geminiApiKeySetting?.value ?: ""
         _savedPinHash.value = pinHashSetting?.value ?: ""
         _widgetsEnabled.value = widgetsSetting?.value == "true"
         
@@ -1051,6 +1062,106 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.saveSetting("cloud_sync_enabled", enabled.toString())
             _isCloudSyncEnabled.value = enabled
+        }
+    }
+
+    fun saveGeminiApiKey(key: String) {
+        viewModelScope.launch {
+            repository.saveSetting("gemini_api_key", key)
+            _geminiApiKey.value = key
+            showSuccessNotification("Đã lưu API Key thành công!")
+        }
+    }
+
+    fun runFinancialAdvisor() {
+        if (_geminiApiKey.value.isBlank()) {
+            _advisorResult.value = com.example.service.GeminiAdvisorService.AdvisorResult(
+                assessment = "",
+                warnings = emptyList(),
+                recommendations = emptyList(),
+                success = false,
+                errorMessage = "API Key chưa được cấu hình! Vui lòng cài đặt Gemini API Key trong phần Cài đặt."
+            )
+            return
+        }
+
+        _advisorLoading.value = true
+        _advisorResult.value = null
+
+        viewModelScope.launch {
+            try {
+                // 1. Gather wallets
+                val wallets = allWallets.value
+                val walletsInfo = wallets.joinToString("\n") { 
+                    "- ${it.name}: ${FormatHelper.formatVND(it.balance)} (${if (it.type == "SAVINGS") "Hũ tiết kiệm" else "Ví chi tiêu"})" 
+                }
+
+                // 2. Monthly Summary
+                val currentMonthStr = activeMonth.value // format: YYYY-MM
+                val sdf = SimpleDateFormat("yyyy-MM", Locale.US)
+                val txs = allTransactions.value.filter { 
+                    try {
+                        val date = Date(it.timestamp)
+                        sdf.format(date) == currentMonthStr
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+
+                val totalIncome = txs.filter { it.type == "INCOME" }.sumOf { it.amount }
+                val totalExpense = txs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                val monthlySummary = "Tháng: $currentMonthStr\n- Tổng Thu nhập: ${FormatHelper.formatVND(totalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(totalExpense)}"
+
+                // 3. Top Expenses
+                val topExpensesList = txs.filter { it.type == "EXPENSE" }
+                    .sortedByDescending { it.amount }
+                    .take(5)
+                val topExpenses = if (topExpensesList.isEmpty()) "Không có chi tiêu nào trong tháng này." else {
+                    topExpensesList.joinToString("\n") { 
+                        "- ${it.categoryName} (${it.note}): ${FormatHelper.formatVND(it.amount)}" 
+                    }
+                }
+
+                // 4. Debts Info
+                val debts = allDebts.value
+                val debtsInfo = if (debts.isEmpty()) "Không có khoản nợ/cho vay nào." else {
+                    debts.joinToString("\n") {
+                        val typeText = if (it.type == "DEBT") "Đi vay" else "Cho vay"
+                        "- ${it.personName} (${typeText}): Tổng ${FormatHelper.formatVND(it.totalAmount)}, Còn lại: ${FormatHelper.formatVND(it.remainingAmount)} (Loại hình: ${it.repaymentType})"
+                    }
+                }
+
+                // 5. Budgets Info
+                val budgets = allBudgets.value
+                val budgetsInfo = if (budgets.isEmpty()) "Chưa thiết lập hạn mức chi tiêu." else {
+                    budgets.joinToString("\n") { b ->
+                        val spent = txs.filter { it.type == "EXPENSE" && it.categoryName == b.categoryName }.sumOf { it.amount }
+                        "- Hạng mục ${b.categoryName}: Hạn mức ${FormatHelper.formatVND(b.limitAmount)}, Đã tiêu ${FormatHelper.formatVND(spent)}"
+                    }
+                }
+
+                // Call Service
+                val result = com.example.service.GeminiAdvisorService.getFinancialAdvice(
+                    walletsInfo = walletsInfo,
+                    monthlySummary = monthlySummary,
+                    topExpenses = topExpenses,
+                    debtsInfo = debtsInfo,
+                    budgetsInfo = budgetsInfo,
+                    customApiKey = _geminiApiKey.value
+                )
+
+                _advisorResult.value = result
+            } catch (e: Exception) {
+                _advisorResult.value = com.example.service.GeminiAdvisorService.AdvisorResult(
+                    assessment = "",
+                    warnings = emptyList(),
+                    recommendations = emptyList(),
+                    success = false,
+                    errorMessage = "Lỗi xử lý dữ liệu: ${e.message}"
+                )
+            } finally {
+                _advisorLoading.value = false
+            }
         }
     }
 
@@ -2296,7 +2407,74 @@ val folderName = "[APP_FINANCE]"
             } catch (e: Exception) {
                 e.printStackTrace()
                 addLog("Lỗi hệ thống: ${e.message}")
-                _syncStatus.value = "ERROR"
+            }
+        }
+    }
+
+    fun checkDriveBackupConflict(context: android.content.Context, callback: (Boolean) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val txs = repository.allTransactions.first()
+                if (txs.isNotEmpty()) {
+                    callback(false)
+                    return@launch
+                }
+
+                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
+                if (account == null) {
+                    callback(false)
+                    return@launch
+                }
+                val scope = "oauth2:https://www.googleapis.com/auth/drive.file"
+                val token = com.google.android.gms.auth.GoogleAuthUtil.getToken(context, account, scope)
+                
+                val folderName = "[APP_FINANCE]"
+                val fileName = "finance_backup.json"
+                val client = okhttp3.OkHttpClient()
+                
+                var folderId: String? = null
+                val searchFolderRequest = okhttp3.Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder'&spaces=drive")
+                    .header("Authorization", "Bearer ${token}")
+                    .build()
+                val searchFolderResponse = client.newCall(searchFolderRequest).execute()
+                if (searchFolderResponse.isSuccessful) {
+                    val json = searchFolderResponse.body?.string()
+                    if (json != null) {
+                        val jsonObj = org.json.JSONObject(json)
+                        val files = jsonObj.optJSONArray("files")
+                        if (files != null && files.length() > 0) {
+                            folderId = files.getJSONObject(0).getString("id")
+                        }
+                    }
+                }
+
+                if (folderId == null) {
+                    callback(false)
+                    return@launch
+                }
+
+                var fileExists = false
+                val searchFileRequest = okhttp3.Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and '${folderId}' in parents&spaces=drive")
+                    .header("Authorization", "Bearer ${token}")
+                    .build()
+                
+                val searchResponse = client.newCall(searchFileRequest).execute()
+                if (searchResponse.isSuccessful) {
+                    val json = searchResponse.body?.string()
+                    if (json != null) {
+                        val jsonObj = org.json.JSONObject(json)
+                        val files = jsonObj.optJSONArray("files")
+                        if (files != null && files.length() > 0) {
+                            fileExists = true
+                        }
+                    }
+                }
+                callback(fileExists)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                callback(false)
             }
         }
     }

@@ -134,15 +134,15 @@ object GeminiReceiptScanner {
         }
     }
 
-    suspend fun scanReceipt(bitmap: Bitmap): ScanResult = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
+    suspend fun scanReceipt(bitmap: Bitmap, customApiKey: String? = null): ScanResult = withContext(Dispatchers.IO) {
+        val apiKey = if (!customApiKey.isNullOrBlank()) customApiKey else BuildConfig.GEMINI_API_KEY
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY" || apiKey.contains("PLACEHOLDER")) {
             return@withContext ScanResult(
                 totalAmount = null,
                 note = null,
                 transactionType = null,
                 success = false,
-                errorMessage = "API Key chưa được cấu hình hợp lệ trong Secrets Panel!"
+                errorMessage = "API Key chưa được cấu hình! Vui lòng cài đặt Gemini API Key trong phần Cài đặt."
             )
         }
 

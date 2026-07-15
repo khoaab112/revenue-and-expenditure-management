@@ -22,22 +22,39 @@
 
 ## Hướng dẫn cài đặt và xuất file trực tiếp (File APK)
 
-Để lấy mã nguồn và tạo ra file cài đặt `.apk` nhanh chóng, bạn hãy thực hiện theo đúng 4 bước cơ bản sau:
+Để lấy mã nguồn và tạo ra file cài đặt `.apk` nhanh chóng, bạn hãy thực hiện theo các bước sau:
 
-1. **Tải mã nguồn về máy (Clone):** Clone dự án từ Github hoặc tải file `.zip` mã nguồn về và giải nén.
-2. **Giải mã file Keystore (Rất quan trọng):** 
-   - Mở Terminal hoặc Command Prompt (cmd) ngay tại thư mục gốc của dự án.
-   - Chạy dòng lệnh sau để giải mã file keystore, giúp gradle có thể build được:
+### Bước 1: Tải mã nguồn và Mở dự án
+1. **Tải mã nguồn về máy:** Clone dự án từ Github hoặc tải file `.zip` mã nguồn về và giải nén.
+2. **Mở dự án:** Khởi động **Android Studio**, chọn **Open** (hoặc `File -> Open...`), sau đó điều hướng đến thư mục dự án vừa giải nén và chờ Android Studio đồng bộ xong Gradle.
+
+---
+
+### Bước 2: Xuất file APK (Chọn 1 trong 2 cách sau)
+
+#### Cách 1: Xuất nhanh Debug APK (Đơn giản nhất, khuyên dùng)
+Cách này giúp bạn có file APK cài đặt ngay lập tức mà không cần quan tâm đến mật khẩu hay chứng chỉ bảo mật:
+1. Trên thanh menu của Android Studio, chọn **Build** -> **Build Bundle(s) / APK(s)** -> **Build APK(s)**.
+2. Chờ Android Studio tiến hành biên dịch trong vài phút. Khi hoàn tất, một thông báo nhỏ sẽ xuất hiện ở góc dưới bên phải màn hình.
+3. Bấm vào chữ **locate** trên thông báo đó để mở thư mục chứa file cài đặt (`app-debug.apk`). Sao chép tệp này vào điện thoại để cài đặt.
+
+#### Cách 2: Tạo Signed APK (Sử dụng Keystore đi kèm)
+Sử dụng cách này nếu bạn muốn ký số (sign) cho file cài đặt bằng tệp tin khóa bảo mật có sẵn trong dự án:
+1. **Giải mã file Keystore:**
+   - Mở Terminal hoặc Command Prompt (cmd) tại thư mục gốc của dự án.
+   - Chạy dòng lệnh sau để khôi phục tệp keystore:
      - Trên Windows (cmd/PowerShell): `certutil -decode debug.keystore.base64 debug.keystore`
      - Trên MacOS / Linux (Terminal): `base64 --decode debug.keystore.base64 > debug.keystore`
-3. **Mở dự án:**
-   - Khởi động Android Studio.
-   - Chọn **Open** (hoặc `File -> Open...`), sau đó điều hướng đến thư mục dự án vừa clone và chờ Android Studio đồng bộ xong Gradle.
-4. **Build lấy file APK:**
+2. **Ký và xuất file:**
    - Trên thanh menu của Android Studio, chọn **Build** -> **Generate Signed Bundle / APK...**
-   - Chọn **APK** rổi bấm **Next**.
-   - (Bạn có thể tạo key mới hoặc để cấu hình mặc định) tiếp tục bấm **Next** và chọn **Create**. 
-   - Khi hoàn tất, một thông báo sẽ hiện ở góc dưới bên phải màn hình. Bấm chữ **locate** trên thông báo đó để mở thư mục, ở đó sẽ có file `.apk` cài đặt để bạn sao chép thẳng vào điện thoại.
+   - Chọn **APK** rồi bấm **Next**.
+   - Bấm **Choose existing...** tại ô *Key store path* và chọn tệp `debug.keystore` vừa giải mã ở trên.
+   - Nhập các thông tin xác thực sau:
+     - **Key store password:** `android`
+     - **Key alias:** Chọn `androiddebugkey` (hoặc nhập thủ công)
+     - **Key password:** `android`
+   - Bấm **Next**, tích chọn bản build mong muốn (Debug hoặc Release) và bấm **Create** (hoặc **Finish**).
+   - Khi hoàn tất, bấm vào chữ **locate** trên thông báo ở góc màn hình để lấy file cài đặt `.apk`.
 
 ---
 
