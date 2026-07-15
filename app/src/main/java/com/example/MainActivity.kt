@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +49,7 @@ object Routes {
     const val BANK_NOTIFICATION_HISTORY = "bank_notification_history"
     const val TIMELINE = "timeline"
     const val EVENTS = "events"
+    const val DEBT_BOOK = "debt_book"
 }
 
 class MainActivity : ComponentActivity() {
@@ -712,7 +714,8 @@ fun NavHostContainer(
                 onNavigateToStats = { navController.navigate(Routes.STATS) },
                 onNavigateToBudget = { navController.navigate(Routes.BUDGET_GOAL) },
                 onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
-                onNavigateToBankNotifications = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) }
+                onNavigateToBankNotifications = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
+                onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) }
             )
         }
 
@@ -753,7 +756,15 @@ fun NavHostContainer(
                 onNavigateToBankNotificationHistory = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
                 onNavigateToEvents = { navController.navigate(Routes.EVENTS) },
                 onNavigateToStats = { navController.navigate(Routes.STATS) },
-                onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) }
+                onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
+                onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) }
+            )
+        }
+
+        composable(Routes.DEBT_BOOK) {
+            com.example.ui.screens.DebtBookScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

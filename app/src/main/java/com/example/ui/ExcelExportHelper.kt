@@ -50,7 +50,7 @@ object ExcelExportHelper {
             )
             fileWriter.write((headers.joinToString(",") { escapeCsv(it) } + "\n").toByteArray(Charsets.UTF_8))
 
-            val sdfDate = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("vi", "VN"))
+            val sdfDate = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
             
             for (tx in transactions) {
                 val dateStr = sdfDate.format(Date(tx.timestamp))

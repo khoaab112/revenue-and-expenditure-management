@@ -70,3 +70,20 @@ data class AppSetting(
     @PrimaryKey val key: String,
     val value: String
 )
+
+@Entity(tableName = "debts")
+data class Debt(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val personName: String, // Tên người vay hoặc người cho vay
+    val type: String, // "DEBT" (Mình đi vay), "LOAN" (Mình cho vay)
+    val totalAmount: Double,
+    val remainingAmount: Double,
+    val walletId: Int, // Ví liên quan (nhận tiền vay hoặc chi tiền cho vay)
+    val creationDate: Long,
+    val dueDate: Long? = null,
+    val note: String = "",
+    val status: String = "ACTIVE", // ACTIVE, COMPLETED
+    val repaymentType: String = "FLEXIBLE", // ONE_TIME, INSTALLMENT, FLEXIBLE, PERIODIC_FLEXIBLE, ACCUMULATING
+    val periodicAmount: Double? = null,
+    val periodType: String? = null // MONTHLY, WEEKLY, YEARLY
+)

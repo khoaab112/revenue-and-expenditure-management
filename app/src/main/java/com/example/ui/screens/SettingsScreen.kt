@@ -23,6 +23,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,6 +74,7 @@ fun SettingsScreen(
     onNavigateToEvents: () -> Unit = {},
     onNavigateToStats: () -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
+    onNavigateToDebtBook: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -192,7 +194,21 @@ fun SettingsScreen(
                         .testTag("manage_savings_item")
                 )
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Debt Book Management
+                ListItem(
+                    headlineContent = { Text("Quản lý sổ nợ", fontWeight = FontWeight.Bold) },
+                    supportingContent = { Text("Theo dõi các khoản cho vay và đi vay") },
+                    leadingContent = {
+                        Icon(imageVector = Icons.Default.AccountBalanceWallet, contentDescription = "Debt Book", tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier
+                        .clickable { onNavigateToDebtBook() }
+                        .testTag("manage_debt_book_item")
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Statistics & Analytical Reports
                 ListItem(
@@ -261,7 +277,7 @@ fun SettingsScreen(
                     )
                 }
 
-                Divider(
+                HorizontalDivider(
                     color = MaterialTheme.colorScheme.outlineVariant,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
@@ -307,7 +323,7 @@ fun SettingsScreen(
                     )
                 }
 
-                Divider(
+                HorizontalDivider(
                     color = MaterialTheme.colorScheme.outlineVariant,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
@@ -326,7 +342,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Launch,
+                                imageVector = Icons.AutoMirrored.Filled.Launch,
                                 contentDescription = "Ưu tiên hiển thị",
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -631,7 +647,7 @@ fun SettingsScreen(
                     }
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // The buttons requested by USER: "Mở thư mục", "Sao lưu" and "Khôi phục"
                 Row(
@@ -750,7 +766,7 @@ fun SettingsScreen(
                     }
                 )
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 ListItem(
                     headlineContent = { Text("Xóa toàn bộ dữ liệu", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) },
@@ -837,7 +853,7 @@ fun SettingsScreen(
                     }
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                 // Feature 2: Mô phỏng biến động số dư ngân hàng
                 Column(
@@ -988,7 +1004,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                         )
                         
-                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 4.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 4.dp))
                         
                         Text(
                             text = "Chi tiết tiến trình:",
@@ -1284,7 +1300,7 @@ fun WalletManagementDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         IconButton(onClick = { showAddForm = false }) {
-                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Trở lại")
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở lại")
                         }
                         Text("THÊM VÍ MỚI", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
@@ -1986,7 +2002,7 @@ fun CategoryManagementDialog(
                                 showAddForm = false 
                                 categoryToEdit = null
                             }) {
-                                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Trở lại")
+                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở lại")
                             }
                             Text(if(categoryToEdit == null) "THÊM DANH MỤC MỚI" else "SỬA DANH MỤC", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
@@ -2059,7 +2075,7 @@ fun CategoryManagementDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(Icons.Default.TrendingDown, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.AutoMirrored.Filled.TrendingDown, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
                                     Text("KHOẢN CHI", fontWeight = FontWeight.Black, fontSize = 12.sp) 
                                 }
                             }
@@ -2072,7 +2088,7 @@ fun CategoryManagementDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(Icons.Default.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                                     Text("KHOẢN THU", fontWeight = FontWeight.Black, fontSize = 12.sp) 
                                 }
                             }
@@ -2958,7 +2974,7 @@ fun SortableCategoryList(
                     }
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // --- SAVINGS TRANSACTION ACTION FORM ---
                 if (savingsWallets.isNotEmpty()) {
@@ -3146,7 +3162,7 @@ fun SortableCategoryList(
                     }
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // --- SAVINGS TRANSACTION TIMELINE HISTORY ---
                 Text("LỊCH SỬ GIAO DỊCH TIẾT KIỆM", fontSize = 12.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
@@ -3200,7 +3216,7 @@ fun SortableCategoryList(
                                 },
                                 supportingContent = {
                                     Text(
-                                        text = "${tx.walletName} • ${SimpleDateFormat("HH:mm", Locale("vi", "VN")).format(tx.timestamp)}",
+                                        text = "${tx.walletName} • ${SimpleDateFormat("HH:mm", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(tx.timestamp)}",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                     )

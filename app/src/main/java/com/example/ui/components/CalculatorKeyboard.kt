@@ -11,7 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Backspace
+import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -279,7 +279,7 @@ fun CalculatorKeyboardDialog(
                                     .clip(RoundedCornerShape(50.dp))
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Backspace,
+                                    imageVector = Icons.AutoMirrored.Filled.Backspace,
                                     contentDescription = "Backspace",
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(24.dp)
@@ -355,7 +355,7 @@ fun CalculatorKeyboardDialog(
                                     ) {
                                         if (key == "⌫") {
                                             Icon(
-                                                imageVector = Icons.Default.Backspace,
+                                                imageVector = Icons.AutoMirrored.Filled.Backspace,
                                                 contentDescription = "Backspace",
                                                 tint = textColor,
                                                 modifier = Modifier.size(20.dp)

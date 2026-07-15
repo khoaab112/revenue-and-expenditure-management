@@ -259,6 +259,12 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun updateEvent(event: Event) = dao.updateEvent(event)
     suspend fun deleteEvent(event: Event) = dao.deleteEvent(event)
 
+    // --- Debts ---
+    val allDebts: Flow<List<Debt>> = dao.getAllDebts()
+    suspend fun insertDebt(debt: Debt): Long = dao.insertDebt(debt)
+    suspend fun updateDebt(debt: Debt) = dao.updateDebt(debt)
+    suspend fun deleteDebt(debt: Debt) = dao.deleteDebt(debt)
+
     // --- Seeding helper ---
     suspend fun checkAndSeedDatabase() {
         val wallets = dao.getAllWallets().firstOrNull()

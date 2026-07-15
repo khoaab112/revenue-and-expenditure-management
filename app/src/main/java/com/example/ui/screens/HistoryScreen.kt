@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -438,7 +439,7 @@ fun HistoryScreen(
                         ) {
                             Text(
                                 text = selectedRangeStart?.let {
-                                    SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(it.time)
+                                    SimpleDateFormat("dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(it.time)
                                 } ?: "Từ ngày...",
                                 fontSize = 13.sp
                             )
@@ -469,7 +470,7 @@ fun HistoryScreen(
                         ) {
                             Text(
                                 text = selectedRangeEnd?.let {
-                                    SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(it.time)
+                                    SimpleDateFormat("dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(it.time)
                                 } ?: "Đến ngày...",
                                 fontSize = 13.sp
                             )
@@ -559,12 +560,12 @@ fun HistoryScreen(
         val timeStr = when (activeTimeFilterMode) {
             "ALL" -> "Mọi lúc"
             "DAY" -> selectedCustomDate?.let { 
-                SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(it.time) 
+                SimpleDateFormat("dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(it.time) 
             } ?: "Một ngày"
             "WEEK" -> "1 Tuần qua"
             "RANGE" -> if (selectedRangeStart != null && selectedRangeEnd != null) {
-                val s = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeStart!!.time)
-                val e = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeEnd!!.time)
+                val s = SimpleDateFormat("dd/MM", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(selectedRangeStart!!.time)
+                val e = SimpleDateFormat("dd/MM", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(selectedRangeEnd!!.time)
                 "$s - $e"
             } else "Khoảng ngày"
             "MONTH" -> "Thg ${selectedCustomMonth + 1}/$selectedCustomMonthYear"
@@ -650,7 +651,7 @@ fun HistoryScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (mode == "LIST") Icons.Default.List else Icons.Default.CalendarToday,
+                        imageVector = if (mode == "LIST") Icons.AutoMirrored.Filled.List else Icons.Default.CalendarToday,
                         contentDescription = label,
                         tint = textColors,
                         modifier = Modifier.size(16.dp)
@@ -744,7 +745,7 @@ fun HistoryScreen(
                             .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         
                         // 1. Search Bar
                         OutlinedTextField(
@@ -918,7 +919,7 @@ fun HistoryScreen(
                             // Day
                             val isDay = activeTimeFilterMode == "DAY"
                             val dayLabel = if (selectedCustomDate != null) {
-                                SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(selectedCustomDate!!.time)
+                                SimpleDateFormat("dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(selectedCustomDate!!.time)
                             } else {
                                 "Theo ngày"
                             }
@@ -957,8 +958,8 @@ fun HistoryScreen(
                             // Range
                             val isRange = activeTimeFilterMode == "RANGE"
                             val rangeLabel = if (selectedRangeStart != null && selectedRangeEnd != null) {
-                                val startStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeStart!!.time)
-                                val endStr = SimpleDateFormat("dd/MM", Locale("vi", "VN")).format(selectedRangeEnd!!.time)
+                                val startStr = SimpleDateFormat("dd/MM", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(selectedRangeStart!!.time)
+                                val endStr = SimpleDateFormat("dd/MM", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(selectedRangeEnd!!.time)
                                 "$startStr - $endStr"
                             } else {
                                 "Khoảng ngày"
@@ -1038,7 +1039,7 @@ fun HistoryScreen(
         }
         
         if (displayMode == "LIST") {
-            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Transaction Timeline List with daily summaries
             if (groupedTransactions.isEmpty()) {
@@ -1141,7 +1142,7 @@ fun HistoryScreen(
                                     }
                                 }
                             }
-                            Divider(
+                            HorizontalDivider(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                                 modifier = Modifier.padding(bottom = 2.dp)
                             )
@@ -1167,7 +1168,7 @@ fun HistoryScreen(
                 onYearChange = { selectedCustomMonthYear = it }
             )
 
-            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // 2. 7-Column Grid View and Day Transactions Scrollable
             Column(
@@ -1424,7 +1425,7 @@ fun EditTransactionDialog(
         }
     }
 
-    val dateTimeFormatter = remember { SimpleDateFormat("HH:mm dd/MM/yyyy", Locale("vi", "VN")) }
+    val dateTimeFormatter = remember { SimpleDateFormat("HH:mm dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()) }
     var dateLabel by remember(selectedTimestamp) {
         mutableStateOf(dateTimeFormatter.format(selectedTimestamp))
     }
@@ -2110,7 +2111,7 @@ fun CalendarGrid(
             }
         }
 
-        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), modifier = Modifier.padding(bottom = 4.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), modifier = Modifier.padding(bottom = 4.dp))
 
         // Grid Cells
         val gridDays = remember(selectedMonth, selectedYear) {
@@ -2348,7 +2349,7 @@ fun DayTransactionsInline(
             }
         }
 
-        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
         if (transactions.isEmpty()) {
             Box(
@@ -2407,7 +2408,7 @@ fun DayQuickActionsDialog(
                     color = MaterialTheme.colorScheme.primary
                 )
                 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                 // Action: Quick Add
                 Row(
@@ -2437,7 +2438,7 @@ fun DayQuickActionsDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.List, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Column {
                             Text("Xem chi tiết các giao dịch", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Text("Xóa, sửa giao dịch của ngày $dateLabel", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2489,7 +2490,7 @@ fun QuickAddTransactionDialog(
         }
     }
 
-    val dateTimeFormatter = remember { SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")) }
+    val dateTimeFormatter = remember { SimpleDateFormat("dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()) }
     val dateLabel = dateTimeFormatter.format(initialTimestamp)
 
     Dialog(onDismissRequest = onDismiss) {

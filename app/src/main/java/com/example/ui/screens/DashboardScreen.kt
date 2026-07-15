@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,6 +41,7 @@ fun DashboardScreen(
     onNavigateToBudget: () -> Unit,
     onNavigateToSavings: () -> Unit = {},
     onNavigateToBankNotifications: () -> Unit = {},
+    onNavigateToDebtBook: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val wallets by viewModel.dailyWallets.collectAsState()
@@ -127,7 +129,7 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Icon(
-                        imageVector = Icons.Default.TrendingUp,
+                        imageVector = Icons.AutoMirrored.Filled.TrendingUp,
                         contentDescription = "Trending Up",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(36.dp)
@@ -135,7 +137,7 @@ fun DashboardScreen(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f))
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
@@ -246,6 +248,60 @@ fun DashboardScreen(
                         modifier = Modifier.height(34.dp)
                     ) {
                         Text("Duyệt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // --- Active Debts Alert Banner ---
+        val allDebts by viewModel.allDebts.collectAsState()
+        val activeDebts = remember(allDebts) { allDebts.filter { it.status == "ACTIVE" && it.remainingAmount > 0 } }
+        if (activeDebts.isNotEmpty()) {
+            val totalDebt = activeDebts.filter { it.type == "DEBT" }.sumOf { it.remainingAmount }
+            val totalLoan = activeDebts.filter { it.type == "LOAN" }.sumOf { it.remainingAmount }
+            
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToDebtBook() }
+                    .testTag("dashboard_active_debts_banner"),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFBE9E7)),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0xFFD84315).copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFFFFCCBC), shape = CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalanceWallet,
+                            contentDescription = "Active Debts",
+                            tint = Color(0xFFD84315),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Bạn có khoản nợ chưa hoàn thành!",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFD84315)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Đi vay: ${FormatHelper.formatVND(totalDebt)} - Cho vay: ${FormatHelper.formatVND(totalLoan)}",
+                            fontSize = 12.sp,
+                            color = Color(0xFF5D4037)
+                        )
                     }
                 }
             }
@@ -833,7 +889,7 @@ fun DashboardScreen(
                                 SmartSpendingInsight(
                                     title = "Dòng tiền tháng này đang âm!",
                                     description = "Tốc độ chi tiêu đang vượt xa thu nhập. Hãy rà soát lại các khoản chi không cần thiết nhé.",
-                                    icon = Icons.Default.TrendingDown,
+                                    icon = Icons.AutoMirrored.Filled.TrendingDown,
                                     tint = Color(0xFFF44336),
                                     score = 100
                                 )
@@ -854,7 +910,7 @@ fun DashboardScreen(
                             SmartSpendingInsight(
                                 title = "Chưa có nguồn thu trong tháng",
                                 description = "Bạn đã chi ${FormatHelper.formatVND(totalExpense)} ra nhưng chưa có khoản tiền vào.",
-                                icon = Icons.Default.TrendingDown,
+                                icon = Icons.AutoMirrored.Filled.TrendingDown,
                                 tint = Color(0xFFFF9800),
                                 score = 75
                             )
@@ -908,7 +964,7 @@ fun DashboardScreen(
                                     SmartSpendingInsight(
                                         title = "Tiết chế chi tiêu tốt",
                                         description = "Tuần này bạn tiêu ít hơn tuần trước ${-diffPercent}%. Rất đáng khen ngợi!",
-                                        icon = Icons.Default.TrendingDown,
+                                        icon = Icons.AutoMirrored.Filled.TrendingDown,
                                         tint = Color(0xFF4CAF50),
                                         score = 90
                                     )
@@ -1016,7 +1072,7 @@ fun DashboardScreen(
 
                 computedInsights.forEachIndexed { idx, ins ->
                     if (idx > 0) {
-                        Divider(
+                        HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                             thickness = 0.5.dp
                         )

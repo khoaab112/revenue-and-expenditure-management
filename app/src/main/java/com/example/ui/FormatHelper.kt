@@ -7,10 +7,10 @@ import java.util.Calendar
 import java.util.Locale
 
 object FormatHelper {
-    private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN"))
-    private val timeFormatter = SimpleDateFormat("HH:mm", Locale("vi", "VN"))
+    private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
+    private val timeFormatter = SimpleDateFormat("HH:mm", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
 
-    private val vndSymbols = DecimalFormatSymbols(Locale("vi", "VN")).apply {
+    private val vndSymbols = DecimalFormatSymbols(java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).apply {
         groupingSeparator = '.'
         decimalSeparator = ','
     }

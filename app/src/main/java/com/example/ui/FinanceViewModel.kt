@@ -110,6 +110,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     val allBudgets: StateFlow<List<Budget>>
     val allSavingsGoals: StateFlow<List<SavingsGoal>>
     val allEvents: StateFlow<List<Event>>
+    val allDebts: StateFlow<List<Debt>>
 
     val dailyWallets: StateFlow<List<Wallet>>
     val savingsWallets: StateFlow<List<Wallet>>
@@ -228,6 +229,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         allEvents = repository.allEvents
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        allDebts = repository.allDebts
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         // Setup filter flow
@@ -1299,6 +1303,132 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             repository.deleteTransaction(tx)
         }
     }
+
+    // --- DEBT SERVICES ---
+    fun addDebt(
+        personName: String,
+        amount: Double,
+        type: String, // DEBT or LOAN
+        note: String,
+        dueDate: Long?,
+        walletId: Int,
+        repaymentType: String = "FLEXIBLE",
+        periodicAmount: Double? = null,
+        periodType: String? = null
+    ) {
+        viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId) ?: return@launch
+            
+            val debtId = repository.insertDebt(
+                Debt(
+                    personName = personName,
+                    type = type,
+                    totalAmount = amount,
+                    remainingAmount = amount,
+                    walletId = walletId,
+                    creationDate = System.currentTimeMillis(),
+                    dueDate = dueDate,
+                    note = note,
+                    status = "ACTIVE",
+                    repaymentType = repaymentType,
+                    periodicAmount = periodicAmount,
+                    periodType = periodType
+                )
+            )
+            
+            // Generate a corresponding Transaction to reflect the balance change
+            val cat = getCategoryByName(if (type == "DEBT") "Đi vay" else "Cho vay")
+            val txType = if (type == "DEBT") "INCOME" else "EXPENSE"
+            
+            val tx = Transaction(
+                walletId = walletId,
+                walletName = wallet.name,
+                type = txType,
+                amount = amount,
+                categoryName = cat.name,
+                categoryIcon = cat.iconName,
+                categoryColor = cat.colorHex,
+                note = if (note.isNotBlank()) note else (if (type == "DEBT") "Vay tiền từ $personName" else "Cho $personName vay tiền"),
+                timestamp = System.currentTimeMillis(),
+                isRecurring = false,
+                recurrencePeriod = "NONE",
+                eventId = null,
+                destinationWalletId = null
+            )
+            repository.insertTransaction(tx)
+            
+            showSuccessNotification(if (type == "DEBT") "Đã ghi nhận khoản vay thành công!" else "Đã ghi nhận khoản cho vay thành công!")
+        }
+    }
+
+    fun increaseDebt(debt: Debt, amount: Double, walletId: Int, note: String) {
+        viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId) ?: return@launch
+            val newTotal = debt.totalAmount + amount
+            val newRemaining = debt.remainingAmount + amount
+            
+            repository.updateDebt(debt.copy(
+                totalAmount = newTotal, 
+                remainingAmount = newRemaining, 
+                status = "ACTIVE"
+            ))
+            
+            // Create transaction for new debt
+            val cat = getCategoryByName(if (debt.type == "DEBT") "Đi vay" else "Cho vay")
+            val txType = if (debt.type == "DEBT") "INCOME" else "EXPENSE"
+            
+            val tx = Transaction(
+                walletId = walletId,
+                walletName = wallet.name,
+                type = txType,
+                amount = amount,
+                categoryName = cat.name,
+                categoryIcon = cat.iconName,
+                categoryColor = cat.colorHex,
+                note = if (note.isNotBlank()) note else (if (debt.type == "DEBT") "Vay thêm từ ${debt.personName}" else "Cho ${debt.personName} vay thêm"),
+                timestamp = System.currentTimeMillis(),
+                isRecurring = false,
+                recurrencePeriod = "NONE",
+                eventId = null,
+                destinationWalletId = null
+            )
+            repository.insertTransaction(tx)
+            showSuccessNotification("Đã ghi nhận phát sinh nợ thành công!")
+        }
+    }
+
+    fun payDebt(debt: Debt, amount: Double, walletId: Int, note: String) {
+        viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId) ?: return@launch
+            val newRemaining = Math.max(0.0, debt.remainingAmount - amount)
+            val newStatus = if (newRemaining == 0.0) "COMPLETED" else "ACTIVE"
+            
+            repository.updateDebt(debt.copy(remainingAmount = newRemaining, status = newStatus))
+            
+            // Create transaction for repayment
+            val cat = getCategoryByName(if (debt.type == "DEBT") "Trả nợ" else "Thu nợ")
+            val txType = if (debt.type == "DEBT") "EXPENSE" else "INCOME"
+            
+            val tx = Transaction(
+                walletId = walletId,
+                walletName = wallet.name,
+                type = txType,
+                amount = amount,
+                categoryName = cat.name,
+                categoryIcon = cat.iconName,
+                categoryColor = cat.colorHex,
+                note = if (note.isNotBlank()) note else (if (debt.type == "DEBT") "Trả nợ cho ${debt.personName}" else "Thu nợ từ ${debt.personName}"),
+                timestamp = System.currentTimeMillis(),
+                isRecurring = false,
+                recurrencePeriod = "NONE",
+                eventId = null,
+                destinationWalletId = null
+            )
+            repository.insertTransaction(tx)
+            showSuccessNotification("Ghi nhận trả nợ thành công!")
+        }
+    }
+
 
     // --- BUDGETS SERVICES ---
     fun toggleBudgetRecurring(budget: Budget) {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -130,7 +131,7 @@ fun AddTransactionScreen(
                             scannedTaxAmount = result.taxAmount
                             scannedDiscountAmount = result.discountAmount
 
-                            val sdf = java.text.SimpleDateFormat("HH:mm dd/MM/yyyy", java.util.Locale("vi", "VN"))
+                            val sdf = java.text.SimpleDateFormat("HH:mm dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
                             scannedDateTimeStr = if (!result.dateTimeStr.isNullOrBlank()) {
                                 result.dateTimeStr
                             } else {
@@ -188,7 +189,7 @@ fun AddTransactionScreen(
                         scannedTaxAmount = result.taxAmount
                         scannedDiscountAmount = result.discountAmount
 
-                        val sdf = java.text.SimpleDateFormat("HH:mm dd/MM/yyyy", java.util.Locale("vi", "VN"))
+                        val sdf = java.text.SimpleDateFormat("HH:mm dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
                         scannedDateTimeStr = if (!result.dateTimeStr.isNullOrBlank()) {
                             result.dateTimeStr
                         } else {
@@ -465,7 +466,7 @@ fun AddTransactionScreen(
         }
     }
 
-    val dateTimeFormatter = remember { SimpleDateFormat("HH:mm dd/MM/yyyy", Locale("vi", "VN")) }
+    val dateTimeFormatter = remember { SimpleDateFormat("HH:mm dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()) }
 
     val showDateTimePicker = {
         val currentCal = Calendar.getInstance().apply { timeInMillis = selectedTimestamp }
@@ -715,7 +716,7 @@ fun AddTransactionScreen(
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(imageVector = Icons.Default.ArrowUpward, contentDescription = "Chi")
+                Icon(imageVector = Icons.Default.ArrowUpward, contentDescription = "Chi", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Khoản Chi")
             }
@@ -731,7 +732,7 @@ fun AddTransactionScreen(
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(imageVector = Icons.Default.ArrowDownward, contentDescription = "Thu")
+                Icon(imageVector = Icons.Default.ArrowDownward, contentDescription = "Thu", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Khoản Thu")
             }
@@ -1839,7 +1840,7 @@ fun AiScannerScreen(
                 modifier = Modifier.testTag("ai_scanner_back_btn")
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Quay lại"
                 )
             }
@@ -1966,7 +1967,7 @@ fun AiScannerScreen(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                             shape = RoundedCornerShape(6.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.TrendingDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Icon(imageVector = Icons.AutoMirrored.Filled.TrendingDown, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Khoản chi", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
@@ -1981,7 +1982,7 @@ fun AiScannerScreen(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                             shape = RoundedCornerShape(6.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.TrendingUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Icon(imageVector = Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Khoản thu", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
@@ -2162,7 +2163,7 @@ fun AiScannerScreen(
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable {
                                         val cal = Calendar.getInstance()
-                                        val parser = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale("vi", "VN"))
+                                        val parser = SimpleDateFormat("HH:mm dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
                                         try {
                                             val parsedDate = parser.parse(selectedDateTimeStrState)
                                             if (parsedDate != null) {
@@ -2489,7 +2490,7 @@ fun AiScannerScreen(
                         // Trigger Save Button
                         Button(
                             onClick = {
-                                val parser = SimpleDateFormat("HH:mm dd/MM/yyyy", Locale("vi", "VN"))
+                                val parser = SimpleDateFormat("HH:mm dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
                                 val finalTimestamp = try {
                                     parser.parse(selectedDateTimeStrState)?.time ?: System.currentTimeMillis()
                                 } catch (e: Exception) {

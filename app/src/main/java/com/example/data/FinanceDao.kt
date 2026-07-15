@@ -92,6 +92,22 @@ interface FinanceDao {
     @Query("DELETE FROM events")
     suspend fun deleteAllEvents()
 
+    // ---- Debts ----
+    @Query("SELECT * FROM debts ORDER BY creationDate DESC")
+    fun getAllDebts(): Flow<List<Debt>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDebt(debt: Debt): Long
+
+    @Update
+    suspend fun updateDebt(debt: Debt)
+
+    @Delete
+    suspend fun deleteDebt(debt: Debt)
+
+    @Query("DELETE FROM debts")
+    suspend fun deleteAllDebts()
+
     // ---- App Settings ----
     @Query("SELECT * FROM settings")
     suspend fun getAllSettings(): List<AppSetting>
