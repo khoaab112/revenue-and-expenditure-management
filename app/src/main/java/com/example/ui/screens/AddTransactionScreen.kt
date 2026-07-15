@@ -786,7 +786,7 @@ fun AddTransactionScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Chuyển tiền qua ví",
+                                text = "Nội bộ",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -1645,51 +1645,20 @@ fun AddTransactionScreen(
                             val sourceName = sourceWallet?.name ?: "Ví nguồn"
                             val targetName = targetWallet?.name ?: "Ví đích"
                             
-                            if (selectedType == "EXPENSE") {
-                                // Transfer flow: spend from main wallet, income into target wallet
-                                viewModel.addTransaction(
-                                    walletId = walletId,
-                                    type = "EXPENSE",
-                                    amount = amount,
-                                    categoryName = "Khác",
-                                    note = "Chuyển tiền sang $targetName" + (if (note.isNotBlank()) " - $note" else ""),
-                                    timestamp = selectedTimestamp,
-                                    isRecurring = false,
-                                    recurrencePeriod = "NONE"
-                                )
-                                viewModel.addTransaction(
-                                    walletId = targetId,
-                                    type = "INCOME",
-                                    amount = amount,
-                                    categoryName = "Khác",
-                                    note = "Nhận tiền từ $sourceName" + (if (note.isNotBlank()) " - $note" else ""),
-                                    timestamp = selectedTimestamp,
-                                    isRecurring = false,
-                                    recurrencePeriod = "NONE"
-                                )
-                            } else {
-                                // Withdraw flow: income in main wallet, expense from source wallet
-                                viewModel.addTransaction(
-                                    walletId = walletId,
-                                    type = "INCOME",
-                                    amount = amount,
-                                    categoryName = "Khác",
-                                    note = "Nhận tiền từ $targetName" + (if (note.isNotBlank()) " - $note" else ""),
-                                    timestamp = selectedTimestamp,
-                                    isRecurring = false,
-                                    recurrencePeriod = "NONE"
-                                )
-                                viewModel.addTransaction(
-                                    walletId = targetId,
-                                    type = "EXPENSE",
-                                    amount = amount,
-                                    categoryName = "Khác",
-                                    note = "Chuyển tiền sang $sourceName" + (if (note.isNotBlank()) " - $note" else ""),
-                                    timestamp = selectedTimestamp,
-                                    isRecurring = false,
-                                    recurrencePeriod = "NONE"
-                                )
-                            }
+                            val finalSourceId = if (selectedType == "EXPENSE") walletId else targetId
+                            val finalDestId = if (selectedType == "EXPENSE") targetId else walletId
+                            
+                            viewModel.addTransaction(
+                                walletId = finalSourceId,
+                                type = "TRANSFER",
+                                amount = amount,
+                                categoryName = "Chuyển khoản",
+                                note = note.ifBlank { "Chuyển khoản nội bộ" },
+                                timestamp = selectedTimestamp,
+                                isRecurring = false,
+                                recurrencePeriod = "NONE",
+                                destinationWalletId = finalDestId
+                            )
                             viewModel.showSuccessNotification("Thực hiện chuyển khoản liên ví thành công!")
                             
                             // Reset state fields & stay on screen

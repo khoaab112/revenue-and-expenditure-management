@@ -19,7 +19,7 @@ data class Transaction(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val walletId: Int,
     val walletName: String,
-    val type: String, // INCOME, EXPENSE
+    val type: String, // INCOME, EXPENSE, TRANSFER
     val amount: Double,
     val categoryName: String,
     val categoryIcon: String,
@@ -28,7 +28,8 @@ data class Transaction(
     val timestamp: Long,
     val isRecurring: Boolean = false,
     val recurrencePeriod: String = "NONE", // NONE, DAILY, WEEKLY, MONTHLY
-    val eventId: Int? = null
+    val eventId: Int? = null,
+    val destinationWalletId: Int? = null
 )
 
 @Entity(tableName = "events")

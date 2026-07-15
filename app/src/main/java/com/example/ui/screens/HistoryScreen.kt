@@ -1343,10 +1343,11 @@ fun RemovableTransactionItem(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = if (tx.type == "EXPENSE") "-${FormatHelper.formatVND(tx.amount)}"
+                           else if (tx.type == "TRANSFER") "±${FormatHelper.formatVND(tx.amount)}"
                            else "+${FormatHelper.formatVND(tx.amount)}",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (tx.type == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
+                    color = if (tx.type == "EXPENSE") Color(0xFFF44336) else if (tx.type == "TRANSFER") Color(0xFF2196F3) else Color(0xFF4CAF50),
                     textAlign = TextAlign.End
                 )
                 Spacer(modifier = Modifier.height(2.dp))

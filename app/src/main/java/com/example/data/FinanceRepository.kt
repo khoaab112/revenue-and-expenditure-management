@@ -35,12 +35,21 @@ class FinanceRepository(private val dao: FinanceDao) {
         // 2. Adjust Wallet Balance
         val wallet = dao.getWalletById(transaction.walletId)
         if (wallet != null) {
-            val newBalance = if (transaction.type == "EXPENSE") {
-                wallet.balance - transaction.amount
-            } else {
-                wallet.balance + transaction.amount
+            val newBalance = when (transaction.type) {
+                "EXPENSE" -> wallet.balance - transaction.amount
+                "INCOME" -> wallet.balance + transaction.amount
+                "TRANSFER" -> wallet.balance - transaction.amount
+                else -> wallet.balance
             }
             dao.updateWallet(wallet.copy(balance = newBalance))
+        }
+
+        // Handle TRANSFER destination wallet
+        if (transaction.type == "TRANSFER" && transaction.destinationWalletId != null) {
+            val destWallet = dao.getWalletById(transaction.destinationWalletId)
+            if (destWallet != null) {
+                dao.updateWallet(destWallet.copy(balance = destWallet.balance + transaction.amount))
+            }
         }
 
         // 3. Update Budget if it's an Expense
@@ -55,12 +64,21 @@ class FinanceRepository(private val dao: FinanceDao) {
         // 1. Revert Wallet Balance
         val wallet = dao.getWalletById(transaction.walletId)
         if (wallet != null) {
-            val newBalance = if (transaction.type == "EXPENSE") {
-                wallet.balance + transaction.amount
-            } else {
-                wallet.balance - transaction.amount
+            val newBalance = when (transaction.type) {
+                "EXPENSE" -> wallet.balance + transaction.amount
+                "INCOME" -> wallet.balance - transaction.amount
+                "TRANSFER" -> wallet.balance + transaction.amount
+                else -> wallet.balance
             }
             dao.updateWallet(wallet.copy(balance = newBalance))
+        }
+
+        // Handle TRANSFER destination wallet revert
+        if (transaction.type == "TRANSFER" && transaction.destinationWalletId != null) {
+            val destWallet = dao.getWalletById(transaction.destinationWalletId)
+            if (destWallet != null) {
+                dao.updateWallet(destWallet.copy(balance = destWallet.balance - transaction.amount))
+            }
         }
 
         // 2. Revert Budget if Expense
@@ -78,12 +96,21 @@ class FinanceRepository(private val dao: FinanceDao) {
         // 1. Revert old transaction wallet balance
         val oldWallet = dao.getWalletById(oldTransaction.walletId)
         if (oldWallet != null) {
-            val revertedBalance = if (oldTransaction.type == "EXPENSE") {
-                oldWallet.balance + oldTransaction.amount
-            } else {
-                oldWallet.balance - oldTransaction.amount
+            val revertedBalance = when (oldTransaction.type) {
+                "EXPENSE" -> oldWallet.balance + oldTransaction.amount
+                "INCOME" -> oldWallet.balance - oldTransaction.amount
+                "TRANSFER" -> oldWallet.balance + oldTransaction.amount
+                else -> oldWallet.balance
             }
             dao.updateWallet(oldWallet.copy(balance = revertedBalance))
+        }
+
+        // Revert old transaction destination wallet balance
+        if (oldTransaction.type == "TRANSFER" && oldTransaction.destinationWalletId != null) {
+            val oldDestWallet = dao.getWalletById(oldTransaction.destinationWalletId)
+            if (oldDestWallet != null) {
+                dao.updateWallet(oldDestWallet.copy(balance = oldDestWallet.balance - oldTransaction.amount))
+            }
         }
 
         // Revert old transaction budget spending
@@ -96,12 +123,22 @@ class FinanceRepository(private val dao: FinanceDao) {
         if (newWallet != null) {
             // Need to fetch fresh wallet state since it might be the same wallet as oldWallet, which has changed balance!
             val freshWallet = dao.getWalletById(newTransaction.walletId) ?: newWallet
-            val appliedBalance = if (newTransaction.type == "EXPENSE") {
-                freshWallet.balance - newTransaction.amount
-            } else {
-                appliedBalance(freshWallet.balance, newTransaction.amount)
+            val appliedBalance = when (newTransaction.type) {
+                "EXPENSE" -> freshWallet.balance - newTransaction.amount
+                "INCOME" -> freshWallet.balance + newTransaction.amount
+                "TRANSFER" -> freshWallet.balance - newTransaction.amount
+                else -> freshWallet.balance
             }
             dao.updateWallet(freshWallet.copy(balance = appliedBalance))
+        }
+
+        // Apply new transaction destination wallet balance
+        if (newTransaction.type == "TRANSFER" && newTransaction.destinationWalletId != null) {
+            // Fetch fresh destination wallet because it might be the same as the source wallet or old destination wallet
+            val freshDestWallet = dao.getWalletById(newTransaction.destinationWalletId)
+            if (freshDestWallet != null) {
+                dao.updateWallet(freshDestWallet.copy(balance = freshDestWallet.balance + newTransaction.amount))
+            }
         }
 
         // Apply new transaction budget spending
@@ -113,17 +150,13 @@ class FinanceRepository(private val dao: FinanceDao) {
         dao.insertTransaction(newTransaction)
     }
 
-    private fun appliedBalance(current: Double, amount: Double): Double {
-        return current + amount
-    }
-
     // Helper to automatically find budgets for the transaction's month and adjust spentAmount
     private suspend fun updateBudgetSpending(category: String, amount: Double, timestamp: Long, isAddition: Boolean) {
         val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
         val monthStr = String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
         
         // Find existing budgets for this month
-        val allBudgetsForMonth = dao.getAllBudgets().firstOrNull()?.filter { it.month == monthStr }
+        val allBudgetsForMonth = dao.getBudgetsByMonth(monthStr).firstOrNull()
         if (allBudgetsForMonth.isNullOrEmpty()) return
 
         // To support parent-child categories, we need to know the hierarchy

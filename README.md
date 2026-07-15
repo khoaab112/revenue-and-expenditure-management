@@ -81,3 +81,27 @@ Nếu bạn muốn dọn dẹp các file cache của lần build cũ trước kh
 ```bash
 ./gradlew clean assembleDebug
 ```
+
+---
+
+## Hướng dẫn kết nối Google Drive API (Dành cho Developer)
+
+Để tính năng sao lưu/phục hồi (Backup/Restore) trên Google Drive hoạt động khi bạn build từ mã nguồn này, bạn cần thiết lập Google API Console và cấu hình thông tin xác thực của riêng bạn. 
+
+### Các bước thực hiện:
+1. Truy cập [Google Cloud Console](https://console.cloud.google.com/).
+2. Tạo một dự án mới (New Project).
+3. Bật (Enable) **Google Drive API** trong mục "APIs & Services" > "Library".
+4. Chuyển sang mục "Credentials" (Thông tin xác thực):
+   - Nhấp vào **Create Credentials** -> **OAuth client ID**.
+   - Cấu hình màn hình đồng ý (OAuth consent screen) nếu hệ thống yêu cầu.
+   - Application type: Chọn **Android**.
+   - Package name: Điền package name của ứng dụng (Thường là `com.example` hoặc xem trong thẻ `applicationId` của file `app/build.gradle.kts`).
+   - SHA-1 certificate fingerprint: Lấy mã SHA-1 của file `debug.keystore` bạn đã giải mã ở bước trên bằng lệnh:
+     `keytool -list -v -keystore debug.keystore -alias androiddebugkey` (Mật khẩu mặc định thường là `android`).
+5. Sau khi tạo xong, Google sẽ cung cấp cho bạn thông tin **Client ID**. 
+6. Cập nhật vào mã nguồn:
+   - Cập nhật giá trị Client ID này vào file `strings.xml` hoặc tại nơi khai báo Web Client ID / Android Client ID trong mã nguồn của bạn để Google Sign-in hoạt động trơn tru.
+   - Hoặc tải file cấu hình `google-services.json` (nếu dùng Firebase kết hợp) và đặt vào thư mục `app/` của dự án.
+   
+Sau khi hoàn tất các bước trên, bạn có thể build lại ứng dụng và tính năng kết nối Google Drive sẽ hoạt động bằng chính API của bạn.

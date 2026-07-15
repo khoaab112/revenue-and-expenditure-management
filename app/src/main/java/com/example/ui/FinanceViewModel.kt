@@ -1263,7 +1263,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         timestamp: Long,
         isRecurring: Boolean = false,
         recurrencePeriod: String = "NONE",
-        eventId: Int? = null
+        eventId: Int? = null,
+        destinationWalletId: Int? = null
     ) {
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
@@ -1280,7 +1281,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 timestamp = timestamp,
                 isRecurring = isRecurring,
                 recurrencePeriod = recurrencePeriod,
-                eventId = eventId
+                eventId = eventId,
+                destinationWalletId = destinationWalletId
             )
             repository.insertTransaction(tx)
         }
