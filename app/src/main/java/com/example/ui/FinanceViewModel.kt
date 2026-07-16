@@ -127,8 +127,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isCloudSyncEnabled = MutableStateFlow(false)
     val isCloudSyncEnabled: StateFlow<Boolean> = _isCloudSyncEnabled.asStateFlow()
 
-    private val _isAiScannerEnabled = MutableStateFlow(false)
-    val isAiScannerEnabled: StateFlow<Boolean> = _isAiScannerEnabled.asStateFlow()
 
     private val _geminiApiKey = MutableStateFlow("")
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
@@ -288,14 +286,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val pinHashSetting = repository.getSetting("pin_hash")
         val widgetsSetting = repository.getSetting("widgets_enabled")
         val startScreenSetting = repository.getSetting("start_screen")
-        val aiScannerSetting = repository.getSetting("ai_scanner_enabled")
         val cloudSyncSetting = repository.getSetting("cloud_sync_enabled")
         val geminiApiKeySetting = repository.getSetting("gemini_api_key")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
         _isCloudSyncEnabled.value = cloudSyncSetting?.value == "true"
-        _isAiScannerEnabled.value = aiScannerSetting?.value == "true"
+
         _geminiApiKey.value = geminiApiKeySetting?.value ?: ""
         _savedPinHash.value = pinHashSetting?.value ?: ""
         _widgetsEnabled.value = widgetsSetting?.value == "true"
@@ -731,6 +728,36 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun confirmPendingInternalTransfer(
+        logExpense: NotificationLog,
+        logIncome: NotificationLog,
+        sourceWalletId: Int,
+        destWalletId: Int,
+        amount: Double,
+        note: String
+    ) {
+        viewModelScope.launch {
+            val sourceWallet = repository.getWalletById(sourceWalletId) ?: return@launch
+            val destWallet = repository.getWalletById(destWalletId) ?: return@launch
+            
+            val tx = Transaction(
+                walletId = sourceWalletId,
+                walletName = sourceWallet.name,
+                type = "TRANSFER",
+                amount = amount,
+                categoryName = "Chuyển khoản",
+                categoryIcon = "swap_horiz",
+                categoryColor = "#2196F3",
+                note = note.takeIf { it.isNotBlank() } ?: "Chuyển tiền nội bộ",
+                timestamp = logExpense.timestamp,
+                destinationWalletId = destWalletId
+            )
+            repository.insertTransaction(tx)
+            updateLogStatus(logExpense, "AUTO_ADDED", sourceWallet.name)
+            updateLogStatus(logIncome, "AUTO_ADDED", destWallet.name)
+        }
+    }
+
     fun confirmPendingNotificationLogsBulk(logs: List<NotificationLog>, walletId: Int) {
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
@@ -1110,7 +1137,26 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
                 val totalIncome = txs.filter { it.type == "INCOME" }.sumOf { it.amount }
                 val totalExpense = txs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-                val monthlySummary = "Tháng: $currentMonthStr\n- Tổng Thu nhập: ${FormatHelper.formatVND(totalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(totalExpense)}"
+
+                // Calculate previous month values
+                val cal = Calendar.getInstance()
+                val year = currentMonthStr.substring(0, 4).toInt()
+                val month = currentMonthStr.substring(5, 7).toInt()
+                cal.set(Calendar.YEAR, year)
+                cal.set(Calendar.MONTH, month - 2)
+                val prevMonthStr = SimpleDateFormat("yyyy-MM", Locale.US).format(cal.time)
+                val prevMonthTxs = allTransactions.value.filter { 
+                    try {
+                        val date = Date(it.timestamp)
+                        sdf.format(date) == prevMonthStr
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                val prevTotalIncome = prevMonthTxs.filter { it.type == "INCOME" }.sumOf { it.amount }
+                val prevTotalExpense = prevMonthTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+
+                val monthlySummary = "Tháng hiện tại: $currentMonthStr\n- Tổng Thu nhập: ${FormatHelper.formatVND(totalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(totalExpense)}\nTháng trước ($prevMonthStr):\n- Tổng Thu nhập: ${FormatHelper.formatVND(prevTotalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(prevTotalExpense)}"
 
                 // 3. Top Expenses
                 val topExpensesList = txs.filter { it.type == "EXPENSE" }
@@ -1165,12 +1211,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun setAiScannerEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            repository.saveSetting("ai_scanner_enabled", if (enabled) "true" else "false")
-            _isAiScannerEnabled.value = enabled
-        }
-    }
 
     fun setStartScreen(route: String) {
         viewModelScope.launch {
@@ -1703,8 +1743,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 val budgetsList = repository.getAllBudgets().first()
                 val savingsGoalsList = repository.allSavingsGoals.first()
                 val eventsList = repository.allEvents.first()
+                val debtsList = repository.allDebts.first()
 
-                addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy, ${eventsList.size} sự kiện.")
+                addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy, ${eventsList.size} sự kiện, ${debtsList.size} khoản nợ.")
 
                 val root = org.json.JSONObject()
                 root.put("version", 2)
@@ -1742,6 +1783,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     obj.put("isRecurring", t.isRecurring)
                     obj.put("recurrencePeriod", t.recurrencePeriod)
                     obj.put("eventId", t.eventId)
+                    t.destinationWalletId?.let { obj.put("destinationWalletId", it) }
                     transactionsArray.put(obj)
                 }
                 root.put("transactions", transactionsArray)
@@ -1790,6 +1832,27 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     eventsArray.put(obj)
                 }
                 root.put("events", eventsArray)
+
+                // Debts
+                val debtsArray = org.json.JSONArray()
+                debtsList.forEach { d ->
+                    val obj = org.json.JSONObject()
+                    obj.put("id", d.id)
+                    obj.put("personName", d.personName)
+                    obj.put("type", d.type)
+                    obj.put("totalAmount", d.totalAmount)
+                    obj.put("remainingAmount", d.remainingAmount)
+                    obj.put("walletId", d.walletId)
+                    obj.put("creationDate", d.creationDate)
+                    d.dueDate?.let { obj.put("dueDate", it) }
+                    obj.put("note", d.note)
+                    obj.put("status", d.status)
+                    obj.put("repaymentType", d.repaymentType)
+                    d.periodicAmount?.let { obj.put("periodicAmount", it) }
+                    d.periodType?.let { obj.put("periodType", it) }
+                    debtsArray.put(obj)
+                }
+                root.put("debts", debtsArray)
 
                 // Application & Protection Settings
                 val settingsObj = org.json.JSONObject()
@@ -2174,7 +2237,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                             isRecurring = obj.optBoolean("isRecurring", false),
                             recurrencePeriod = obj.optString("recurrencePeriod", "NONE"),
-                            eventId = if (obj.has("eventId") && !obj.isNull("eventId")) obj.optInt("eventId") else null
+                            eventId = if (obj.has("eventId") && !obj.isNull("eventId")) obj.optInt("eventId") else null,
+                            destinationWalletId = if (obj.has("destinationWalletId") && !obj.isNull("destinationWalletId")) obj.optInt("destinationWalletId") else null
                         )
                         repository.insertTransactionDirect(t)
                     }
@@ -2234,6 +2298,31 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             colorHex = obj.optString("colorHex", "#2196F3")
                         )
                         repository.insertEventDirect(e)
+                    }
+                }
+
+                // 4.6 Debts
+                val debtsArray = root.optJSONArray("debts")
+                if (debtsArray != null) {
+                    addLog("Đang nhập lại ${debtsArray.length()} khoản nợ...")
+                    for (i in 0 until debtsArray.length()) {
+                        val obj = debtsArray.getJSONObject(i)
+                        val d = com.example.data.Debt(
+                            id = obj.optInt("id", 0),
+                            personName = obj.optString("personName", ""),
+                            type = obj.optString("type", "DEBT"),
+                            totalAmount = obj.optDouble("totalAmount", 0.0),
+                            remainingAmount = obj.optDouble("remainingAmount", 0.0),
+                            walletId = obj.optInt("walletId", 0),
+                            creationDate = obj.optLong("creationDate", System.currentTimeMillis()),
+                            dueDate = if (obj.has("dueDate") && !obj.isNull("dueDate")) obj.optLong("dueDate") else null,
+                            note = obj.optString("note", ""),
+                            status = obj.optString("status", "ACTIVE"),
+                            repaymentType = obj.optString("repaymentType", "FLEXIBLE"),
+                            periodicAmount = if (obj.has("periodicAmount") && !obj.isNull("periodicAmount")) obj.optDouble("periodicAmount") else null,
+                            periodType = if (obj.has("periodType") && !obj.isNull("periodType")) obj.optString("periodType") else null
+                        )
+                        repository.insertDebtDirect(d)
                     }
                 }
 

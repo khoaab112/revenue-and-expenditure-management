@@ -469,8 +469,50 @@ fun DashboardScreen(
             val screenWidth = LocalConfiguration.current.screenWidthDp.dp
             val chunkWidth = if (wallets.size > 4) (screenWidth - 48.dp) / 2 else (screenWidth - 32.dp) / 2
 
+            val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+            
+            val pagesCount = remember(wallets) {
+                if (wallets.size <= 4) 1
+                else {
+                    val totalCols = (wallets.size + 1) / 2
+                    totalCols - 1
+                }
+            }
+
+            val currentColumn by remember {
+                derivedStateOf {
+                    val layoutInfo = gridState.layoutInfo
+                    val visibleItemsInfo = layoutInfo.visibleItemsInfo
+                    if (visibleItemsInfo.isEmpty()) 0
+                    else {
+                        val firstItem = visibleItemsInfo.first()
+                        val lastItem = visibleItemsInfo.last()
+                        val totalItems = layoutInfo.totalItemsCount
+                        val totalCols = (totalItems + 1) / 2
+                        
+                        val isAtStart = gridState.firstVisibleItemIndex == 0
+                        val isAtEnd = lastItem.index >= totalItems - 1
+                        
+                        if (isAtStart) 0
+                        else if (isAtEnd) {
+                            if (totalCols - 2 >= 0) totalCols - 2 else 0
+                        } else {
+                            val firstVisibleCol = gridState.firstVisibleItemIndex / 2
+                            val firstItemOffset = firstItem.offset.x
+                            if (Math.abs(firstItemOffset) > firstItem.size.width / 2) {
+                                val target = firstVisibleCol + 1
+                                if (target <= totalCols - 2) target else firstVisibleCol
+                            } else {
+                                firstVisibleCol
+                            }
+                        }
+                    }
+                }
+            }
+
             androidx.compose.foundation.lazy.grid.LazyHorizontalGrid(
                 rows = androidx.compose.foundation.lazy.grid.GridCells.Fixed(if (wallets.size > 2) 2 else 1),
+                state = gridState,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 0.dp),
@@ -485,6 +527,31 @@ fun DashboardScreen(
                         onClick = onNavigateToWallets,
                         modifier = Modifier.width(chunkWidth)
                     )
+                }
+            }
+
+            if (pagesCount > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(pagesCount) { index ->
+                        val isSelected = currentColumn == index
+                        val size = if (isSelected) 8.dp else 5.dp
+                        val color = if (isSelected) MaterialTheme.colorScheme.primary 
+                                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 3.dp)
+                                .size(size)
+                                .clip(CircleShape)
+                                .background(color)
+                                .animateContentSize()
+                        )
+                    }
                 }
             }
         }

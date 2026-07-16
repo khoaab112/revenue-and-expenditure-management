@@ -17,6 +17,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.FinanceViewModel
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -226,7 +229,7 @@ fun AIAdvisorScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = result.assessment,
+                                    text = parseMarkdownToAnnotatedString(result.assessment, MaterialTheme.colorScheme.primary),
                                     fontSize = 14.sp,
                                     lineHeight = 20.sp,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -272,7 +275,7 @@ fun AIAdvisorScreen(
                                                 color = MaterialTheme.colorScheme.error
                                             )
                                             Text(
-                                                text = warning,
+                                                text = parseMarkdownToAnnotatedString(warning, MaterialTheme.colorScheme.error),
                                                 fontSize = 13.sp,
                                                 lineHeight = 18.sp,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -321,7 +324,7 @@ fun AIAdvisorScreen(
                                                 color = Color(0xFF2E7D32)
                                             )
                                             Text(
-                                                text = rec,
+                                                text = parseMarkdownToAnnotatedString(rec, Color(0xFF2E7D32)),
                                                 fontSize = 13.sp,
                                                 lineHeight = 18.sp,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -345,6 +348,22 @@ fun AIAdvisorScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private fun parseMarkdownToAnnotatedString(text: String, primaryColor: Color): androidx.compose.ui.text.AnnotatedString {
+    return buildAnnotatedString {
+        val parts = text.split("**")
+        for (i in parts.indices) {
+            val part = parts[i]
+            if (i % 2 == 1) {
+                withStyle(style = SpanStyle(fontWeight = FontWeight.Black, color = primaryColor)) {
+                    append(part)
+                }
+            } else {
+                append(part)
             }
         }
     }
