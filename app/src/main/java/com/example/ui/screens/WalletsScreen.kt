@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.with
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -45,6 +48,8 @@ fun WalletsScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedWalletForTransactions by remember { mutableStateOf<Wallet?>(null) }
     var walletToDelete by remember { mutableStateOf<Wallet?>(null) }
+    var walletToEdit by remember { mutableStateOf<Wallet?>(null) }
+    var showSelectWalletDialog by remember { mutableStateOf(false) }
     var pinnedWalletId by remember { mutableStateOf<Int?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -114,14 +119,23 @@ fun WalletsScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                Button(
-                    onClick = { showAddDialog = true },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.testTag("add_wallet_fab")
-                ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Thêm ví")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Thêm ví", fontSize = 14.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { showSelectWalletDialog = true },
+                        modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp)).size(40.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Chỉnh số dư", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    }
+
+                    IconButton(
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                            .size(40.dp)
+                            .testTag("add_wallet_fab")
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Thêm ví", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    }
                 }
             }
 
@@ -175,7 +189,9 @@ fun WalletsScreen(
                             wallet = wallet,
                             isSelected = isSelected,
                             onSelect = { selectedWalletForTransactions = wallet },
-                            onDelete = { walletToDelete = wallet }
+                            onDelete = { walletToDelete = wallet },
+                            showDeleteButton = true,
+                            modifier = Modifier.width(170.dp)
                         )
                     }
                 }
@@ -265,6 +281,17 @@ fun WalletsScreen(
                 }
             )
         }
+
+        if (showSelectWalletDialog) {
+            AdjustWalletFlowDialog(
+                wallets = wallets,
+                onDismiss = { showSelectWalletDialog = false },
+                onSave = { walletId, actualBalance ->
+                    viewModel.reconcileWallet(walletId, actualBalance)
+                    showSelectWalletDialog = false
+                }
+            )
+        }
     }
 }
 
@@ -350,6 +377,7 @@ fun WalletBigCard(
     isSelected: Boolean,
     onSelect: () -> Unit,
     onDelete: () -> Unit,
+    showDeleteButton: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val cardColor = FormatHelper.parseColor(wallet.colorHex)
@@ -358,7 +386,6 @@ fun WalletBigCard(
 
     Card(
         modifier = modifier
-            .width(170.dp)
             .height(115.dp)
             .clickable { onSelect() }
             .testTag("wallet_big_${wallet.id}"),
@@ -424,16 +451,18 @@ fun WalletBigCard(
                     }
                 }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(20.dp).testTag("delete_wallet_${wallet.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Xóa ví",
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
-                        modifier = Modifier.size(14.dp)
-                    )
+                if (showDeleteButton) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(20.dp).testTag("delete_wallet_${wallet.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Xóa ví",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
 
@@ -719,4 +748,192 @@ fun AddWalletDialog(
             }
         }
     )
+}
+
+enum class AdjustWalletStep { SELECT_WALLET, EDIT_WALLET }
+
+@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
+@Composable
+fun AdjustWalletFlowDialog(
+    wallets: List<Wallet>,
+    onDismiss: () -> Unit,
+    onSave: (Int, Double) -> Unit
+) {
+    var currentStep by remember { mutableStateOf(AdjustWalletStep.SELECT_WALLET) }
+    var selectedWallet by remember { mutableStateOf<Wallet?>(null) }
+    
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.material3.Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth().animateContentSize()
+        ) {
+            androidx.compose.animation.AnimatedContent(
+                targetState = currentStep,
+                transitionSpec = {
+                    if (targetState == AdjustWalletStep.EDIT_WALLET) {
+                        (androidx.compose.animation.slideInHorizontally { width -> width } + androidx.compose.animation.fadeIn()).with(androidx.compose.animation.slideOutHorizontally { width -> -width } + androidx.compose.animation.fadeOut())
+                    } else {
+                        (androidx.compose.animation.slideInHorizontally { width -> -width } + androidx.compose.animation.fadeIn()).with(androidx.compose.animation.slideOutHorizontally { width -> width } + androidx.compose.animation.fadeOut())
+                    }
+                },
+                label = "AdjustWalletTransition"
+            ) { step ->
+                when (step) {
+                    AdjustWalletStep.SELECT_WALLET -> {
+                        Column(modifier = Modifier.padding(24.dp)) {
+                            Text("Chọn ví cần điều chỉnh", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            if (wallets.isEmpty()) {
+                                Text("Bạn chưa có ví nào. Vui lòng thêm ví trước.")
+                            } else {
+                                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(wallets.size) { index ->
+                                        val wallet = wallets[index]
+                                        WalletBigCard(
+                                            wallet = wallet,
+                                            isSelected = false,
+                                            onSelect = { 
+                                                selectedWallet = wallet
+                                                currentStep = AdjustWalletStep.EDIT_WALLET 
+                                            },
+                                            onDelete = { },
+                                            showDeleteButton = false,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = onDismiss) { Text("Đóng") }
+                            }
+                        }
+                    }
+                    AdjustWalletStep.EDIT_WALLET -> {
+                        val wallet = selectedWallet!!
+                        val focusManager = LocalFocusManager.current
+                        var actualBalanceStr by remember { mutableStateOf("") }
+                        var showEmptyConfirmDialog by remember { mutableStateOf(false) }
+
+                        if (showEmptyConfirmDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showEmptyConfirmDialog = false },
+                                title = { Text("Xác nhận số dư 0đ") },
+                                text = { Text("Bạn để trống số dư thực tế. Điều này đồng nghĩa số dư của ví sẽ được điều chỉnh về 0đ. Bạn có chắc chắn không?") },
+                                confirmButton = {
+                                    Button(onClick = {
+                                        showEmptyConfirmDialog = false
+                                        onSave(wallet.id, 0.0)
+                                    }) {
+                                        Text("Chắc chắn (0đ)")
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showEmptyConfirmDialog = false }) {
+                                        Text("Hủy, tôi nhập lại")
+                                    }
+                                }
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp)
+                                .pointerInput(Unit) {
+                                    detectTapGestures(onTap = {
+                                        focusManager.clearFocus()
+                                    })
+                                },
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { currentStep = AdjustWalletStep.SELECT_WALLET }) {
+                                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở lại")
+                                    }
+                                    Text("ĐIỀU CHỈNH SỐ DƯ", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                }
+                            }
+
+                            Text(
+                                text = "Ví: ${wallet.name}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            )
+                            
+                            Text(
+                                text = "Số dư hiện tại: ${FormatHelper.formatVND(wallet.balance)}",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            )
+
+                            com.example.ui.components.CustomMoneyInputField(
+                                value = actualBalanceStr,
+                                onValueChange = { actualBalanceStr = it },
+                                label = "Số dư thực tế",
+                                testTag = "edit_wallet_balance_input"
+                            )
+
+                            val actualBalance = try {
+                                FormatHelper.evaluateExpression(actualBalanceStr)
+                            } catch (e: Exception) {
+                                0.0
+                            }
+
+                            val diff = actualBalance - wallet.balance
+                            if (diff != 0.0) {
+                                val diffText = if (diff > 0) "+${FormatHelper.formatVND(diff)}" else "-${FormatHelper.formatVND(Math.abs(diff))}"
+                                val diffColor = if (diff > 0) Color(0xFF4CAF50) else Color(0xFFF44336)
+                                val actionText = if (diff > 0) "Sẽ tạo giao dịch 'Điều chỉnh tăng số dư ví'" else "Sẽ tạo giao dịch 'Điều chỉnh giảm số dư ví'"
+
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 12.dp)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Chênh lệch:", fontSize = 14.sp)
+                                        Text(diffText, color = diffColor, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(actionText, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = onDismiss) { Text("Hủy") }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        if (actualBalanceStr.isBlank()) {
+                                            showEmptyConfirmDialog = true
+                                        } else {
+                                            val finalBalance = try {
+                                                FormatHelper.evaluateExpression(actualBalanceStr)
+                                            } catch (e: Exception) {
+                                                0.0
+                                            }
+                                            onSave(wallet.id, finalBalance)
+                                        }
+                                    },
+                                    modifier = Modifier.testTag("dialog_confirm_edit_wallet")
+                                ) {
+                                    Text("Lưu")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

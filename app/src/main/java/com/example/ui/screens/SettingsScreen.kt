@@ -170,7 +170,14 @@ fun SettingsScreen(
                             headlineContent = { Text("Quản lý ví", fontWeight = FontWeight.Bold) },
                             supportingContent = { Text("Thêm, sửa đổi hoặc xóa tài khoản & ví giao dịch") },
                             leadingContent = {
-                                Icon(imageVector = Icons.Default.AccountBalanceWallet, contentDescription = "Wallets", tint = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFF2196F3), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(imageVector = Icons.Default.AccountBalanceWallet, contentDescription = "Wallets", tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
                             },
                             modifier = Modifier
                                 .clickable { showWalletManagement = true }
@@ -184,7 +191,14 @@ fun SettingsScreen(
                             headlineContent = { Text("Quản lý hạng mục chi tiêu", fontWeight = FontWeight.Bold) },
                             supportingContent = { Text("Quản lý dải danh mục thu chi của bạn") },
                             leadingContent = {
-                                Icon(imageVector = Icons.Default.Category, contentDescription = "Categories", tint = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFFFF9800), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(imageVector = Icons.Default.Category, contentDescription = "Categories", tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
                             },
                             modifier = Modifier
                                 .clickable { showCategoryManagement = true }
@@ -198,7 +212,14 @@ fun SettingsScreen(
                             headlineContent = { Text("Sự kiện", fontWeight = FontWeight.Bold) },
                             supportingContent = { Text("Quản lý các sự kiện, dịp đặc biệt để gom nhóm chi tiêu") },
                             leadingContent = {
-                                Icon(imageVector = Icons.Default.Event, contentDescription = "Events", tint = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFF4CAF50), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(imageVector = Icons.Default.Event, contentDescription = "Events", tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
                             },
                             modifier = Modifier
                                 .clickable { onNavigateToEvents() }
@@ -212,7 +233,14 @@ fun SettingsScreen(
                             headlineContent = { Text("Quản lý bộ tiết kiệm", fontWeight = FontWeight.Bold) },
                             supportingContent = { Text("Tách riêng các giao dịch và ví tích lũy của hũ độc lập") },
                             leadingContent = {
-                                Icon(imageVector = Icons.Default.Savings, contentDescription = "Savings", tint = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFFE91E63), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(imageVector = Icons.Default.Savings, contentDescription = "Savings", tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
                             },
                             modifier = Modifier
                                 .clickable { onNavigateToSavings() }
@@ -226,7 +254,14 @@ fun SettingsScreen(
                             headlineContent = { Text("Quản lý sổ nợ", fontWeight = FontWeight.Bold) },
                             supportingContent = { Text("Theo dõi các khoản cho vay và đi vay") },
                             leadingContent = {
-                                Icon(imageVector = Icons.Default.AccountBalanceWallet, contentDescription = "Debt Book", tint = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFFF44336), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(imageVector = Icons.AutoMirrored.Filled.Assignment, contentDescription = "Debt Book", tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
                             },
                             modifier = Modifier
                                 .clickable { onNavigateToDebtBook() }
@@ -240,7 +275,14 @@ fun SettingsScreen(
                             headlineContent = { Text("Thống kê & Báo cáo", fontWeight = FontWeight.Bold) },
                             supportingContent = { Text("Xem biểu đồ phân tích thu chi và báo cáo tài chính trực quan") },
                             leadingContent = {
-                                Icon(imageVector = Icons.Default.PieChart, contentDescription = "Statistics", tint = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFF9C27B0), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(imageVector = Icons.Default.PieChart, contentDescription = "Statistics", tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
                             },
                             modifier = Modifier
                                 .clickable { onNavigateToStats() }

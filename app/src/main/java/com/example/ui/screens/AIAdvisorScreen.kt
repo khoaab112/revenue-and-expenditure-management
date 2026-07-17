@@ -20,6 +20,10 @@ import com.example.ui.FinanceViewModel
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.platform.LocalContext
+import java.util.Locale
+import android.speech.tts.TextToSpeech
+import android.os.Bundle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +44,69 @@ fun AIAdvisorScreen(
         }
     }
 
+    val context = LocalContext.current
+    var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
+    var isSpeaking by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        val tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                // Init success
+            }
+        }
+        textToSpeech = tts
+        onDispose {
+            tts.stop()
+            tts.shutdown()
+        }
+    }
+
+    val fullTextToRead = remember(advisorResult) {
+        val result = advisorResult
+        if (result == null || !result.success) ""
+        else {
+            val assessmentText = result.assessment
+            val warningsText = if (result.warnings.isNotEmpty()) {
+                "Cảnh báo rủi ro: " + result.warnings.joinToString(". ")
+            } else ""
+            val recsText = if (result.recommendations.isNotEmpty()) {
+                "Khuyến nghị từ AI: " + result.recommendations.joinToString(". ")
+            } else ""
+            val rawText = listOf(assessmentText, warningsText, recsText).filter { it.isNotBlank() }.joinToString(". ")
+            cleanTextForTTS(rawText)
+        }
+    }
+
+    val speakText = {
+        textToSpeech?.let { tts ->
+            if (isSpeaking) {
+                tts.stop()
+                isSpeaking = false
+            } else {
+                val localeVN = Locale.forLanguageTag("vi-VN")
+                if (tts.isLanguageAvailable(localeVN) >= TextToSpeech.LANG_AVAILABLE) {
+                    tts.language = localeVN
+                }
+                tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        isSpeaking = true
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        isSpeaking = false
+                    }
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        isSpeaking = false
+                    }
+                })
+                val params = Bundle()
+                params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "AI_ADVICE_SPEECH")
+                tts.speak(fullTextToRead, TextToSpeech.QUEUE_FLUSH, params, "AI_ADVICE_SPEECH")
+                isSpeaking = true
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -49,10 +116,22 @@ fun AIAdvisorScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại")
                     }
                 },
+                actions = {
+                    val result = advisorResult
+                    if (result != null && result.success) {
+                        IconButton(onClick = { speakText() }) {
+                            Icon(
+                                imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                contentDescription = if (isSpeaking) "Dừng đọc" else "Đọc kết quả"
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
                 )
             )
         }
@@ -212,20 +291,37 @@ fun AIAdvisorScreen(
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(
+                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Insights,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = "Nhận định tổng quan",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Insights,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Nhận định tổng quan",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { speakText() },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                            contentDescription = if (isSpeaking) "Dừng đọc" else "Đọc kết quả",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
@@ -367,4 +463,14 @@ private fun parseMarkdownToAnnotatedString(text: String, primaryColor: Color): a
             }
         }
     }
+}
+
+private fun cleanTextForTTS(text: String): String {
+    return text
+        .replace("*", "")
+        .replace("_", "")
+        .replace("#", "")
+        .replace("`", "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }

@@ -2,6 +2,11 @@ package com.example.ui.screens
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import java.text.SimpleDateFormat
 import java.util.Locale
 import androidx.compose.animation.*
@@ -103,6 +108,20 @@ fun AddTransactionScreen(
     // Smart Select State Management
     var hasManuallySelected by remember { mutableStateOf(false) }
 
+    var showAIDialog by remember { mutableStateOf(false) }
+    var showAIConfirmDialog by remember { mutableStateOf(false) }
+    val geminiApiKey by viewModel.geminiApiKey.collectAsState()
+    val aiResult by viewModel.aiTransactionResult.collectAsState()
+    val isAILoading by viewModel.aiTransactionLoading.collectAsState()
+
+    LaunchedEffect(aiResult) {
+        if (aiResult?.success == true && !aiResult!!.transactions.isNullOrEmpty()) {
+            showAIConfirmDialog = true
+            showAIDialog = false
+        } else if (aiResult?.success == false) {
+            // Lỗi xử lý AI, người dùng xem trực tiếp trên dialog
+        }
+    }
     LaunchedEffect(Unit) {
         scrollState.scrollTo(0)
     }
@@ -373,12 +392,39 @@ fun AddTransactionScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
         // Form Title
-        Text(
-            text = "Thêm Giao Dịch Mới",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Thêm Giao Dịch Mới",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            IconButton(
+                onClick = { 
+                    if (geminiApiKey.isBlank()) {
+                        viewModel.showWarningNotification("Vui lòng cài đặt Gemini API Key trong Cài đặt trước.")
+                    } else {
+                        showAIDialog = true 
+                        viewModel.resetAITransactionResult()
+                    }
+                },
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = "Nhập bằng AI",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
 
 
 
@@ -1407,4 +1453,196 @@ fun AddTransactionScreen(
         Spacer(modifier = Modifier.height(100.dp))
         Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.ime))
     }
+
+    if (showAIDialog) {
+        AITransactionInputDialog(
+            onDismiss = { showAIDialog = false },
+            onSubmit = { text ->
+                viewModel.parseTransactionsWithAI(text)
+            },
+            isLoading = isAILoading,
+            errorMessage = if (aiResult?.success == false) aiResult?.errorMessage else null
+        )
+    }
+
+    if (showAIConfirmDialog && aiResult != null && aiResult?.transactions != null) {
+        AITransactionConfirmDialog(
+            transactions = aiResult!!.transactions,
+            categoriesList = categoriesList,
+            walletsList = wallets,
+            onDismiss = { 
+                showAIConfirmDialog = false 
+                viewModel.resetAITransactionResult()
+            },
+            onConfirm = { txList ->
+                // txList is a list of AITransactionResult.AIParsedTransaction
+                for (tx in txList) {
+                    val cat = categoriesList.firstOrNull { it.name.equals(tx.categoryName, ignoreCase = true) }
+                        ?: categoriesList.firstOrNull { it.name.lowercase() == "khác" }
+                        ?: categoriesList.firstOrNull()
+                        
+                    val wallet = wallets.firstOrNull { it.name.equals(tx.walletName, ignoreCase = true) }
+                        ?: wallets.firstOrNull()
+                        
+                    if (cat != null && wallet != null) {
+                        viewModel.addTransaction(
+                            walletId = wallet.id,
+                            type = tx.type,
+                            amount = tx.amount,
+                            categoryName = cat.name,
+                            note = tx.note.ifBlank { "Nhập liệu AI" },
+                            timestamp = System.currentTimeMillis()
+                        )
+                    }
+                }
+                viewModel.showSuccessNotification("Đã thêm ${txList.size} giao dịch từ AI!")
+                showAIConfirmDialog = false
+                viewModel.resetAITransactionResult()
+                onSuccess()
+            }
+        )
+    }
+}
+
+@Composable
+fun AITransactionInputDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+    isLoading: Boolean,
+    errorMessage: String?
+) {
+    var text by remember { mutableStateOf("") }
+    
+    val speechRecognizerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val results = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val spokenText = results?.get(0) ?: ""
+            if (spokenText.isNotBlank()) {
+                text += if (text.isBlank()) spokenText else " $spokenText"
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nhập liệu AI", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Nhập hoặc nói câu chứa các giao dịch của bạn. Ví dụ: 'Sáng nay uống cà phê 50k ví Momo, rồi đi siêu thị hết 500k ví Tiền mặt'.",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Văn bản giao dịch") },
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    maxLines = 4,
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "vi-VN")
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Đọc các giao dịch của bạn...")
+                            }
+                            speechRecognizerLauncher.launch(intent)
+                        }) {
+                            Icon(Icons.Default.Mic, contentDescription = "Thu âm", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                )
+                
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                if (isLoading) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("AI đang phân tích...", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (text.isNotBlank()) onSubmit(text) },
+                enabled = !isLoading && text.isNotBlank()
+            ) {
+                Text("Gửi AI")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isLoading) {
+                Text("Đóng")
+            }
+        }
+    )
+}
+
+@Composable
+fun AITransactionConfirmDialog(
+    transactions: List<com.example.service.GeminiAdvisorService.AIParsedTransaction>,
+    categoriesList: List<FinanceCategory>,
+    walletsList: List<com.example.data.Wallet>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<com.example.service.GeminiAdvisorService.AIParsedTransaction>) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("AI Đã Nhận Diện ${transactions.size} Giao Dịch", fontWeight = FontWeight.Bold) },
+        text = {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(transactions) { tx ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(tx.note, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text(
+                                    text = FormatHelper.formatVND(tx.amount), 
+                                    color = if (tx.type == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Text("Ví: ${tx.walletName}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                Text("Hạng mục: ${tx.categoryName}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(transactions) }) {
+                Text("Lưu tất cả")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Hủy bỏ")
+            }
+        }
+    )
 }

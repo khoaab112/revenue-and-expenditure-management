@@ -137,6 +137,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _advisorLoading = MutableStateFlow(false)
     val advisorLoading: StateFlow<Boolean> = _advisorLoading.asStateFlow()
 
+    private val _aiTransactionResult = MutableStateFlow<com.example.service.GeminiAdvisorService.AITransactionResult?>(null)
+    val aiTransactionResult: StateFlow<com.example.service.GeminiAdvisorService.AITransactionResult?> = _aiTransactionResult.asStateFlow()
+
+    private val _aiTransactionLoading = MutableStateFlow(false)
+    val aiTransactionLoading: StateFlow<Boolean> = _aiTransactionLoading.asStateFlow()
+
     private val _focusedWalletId = MutableStateFlow<Int?>(null)
     val focusedWalletId: StateFlow<Int?> = _focusedWalletId.asStateFlow()
 
@@ -1119,6 +1125,47 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun resetAITransactionResult() {
+        _aiTransactionResult.value = null
+    }
+
+    fun parseTransactionsWithAI(text: String) {
+        if (_geminiApiKey.value.isBlank()) {
+            _aiTransactionResult.value = com.example.service.GeminiAdvisorService.AITransactionResult(
+                success = false,
+                errorMessage = "API Key chưa được cấu hình! Vui lòng cài đặt Gemini API Key trong phần Cài đặt."
+            )
+            return
+        }
+        
+        _aiTransactionLoading.value = true
+        _aiTransactionResult.value = null
+        
+        viewModelScope.launch {
+            try {
+                val wallets = allWallets.value
+                val walletsInfo = wallets.joinToString(", ") { it.name }
+                val categories = _categoriesList.value
+                val categoriesInfo = categories.joinToString(", ") { it.name }
+
+                val result = com.example.service.GeminiAdvisorService.parseTransactionsFromText(
+                    inputText = text,
+                    walletsInfo = walletsInfo,
+                    categoriesInfo = categoriesInfo,
+                    customApiKey = _geminiApiKey.value
+                )
+                _aiTransactionResult.value = result
+            } catch (e: Exception) {
+                _aiTransactionResult.value = com.example.service.GeminiAdvisorService.AITransactionResult(
+                    success = false,
+                    errorMessage = "Lỗi xử lý AI: ${e.message}"
+                )
+            } finally {
+                _aiTransactionLoading.value = false
+            }
+        }
+    }
+
     fun runFinancialAdvisor() {
         if (_geminiApiKey.value.isBlank()) {
             _advisorResult.value = com.example.service.GeminiAdvisorService.AdvisorResult(
@@ -1423,6 +1470,31 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 if (wallet.displayOrder != index) {
                     repository.updateWallet(wallet.copy(displayOrder = index))
                 }
+            }
+        }
+    }
+
+    fun reconcileWallet(walletId: Int, actualBalance: Double) {
+        viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId) ?: return@launch
+            val difference = actualBalance - wallet.balance
+            
+            if (difference != 0.0) {
+                val amount = Math.abs(difference)
+                
+                val tx = Transaction(
+                    walletId = wallet.id,
+                    walletName = wallet.name,
+                    type = "ADJUSTMENT",
+                    amount = amount,
+                    categoryName = "Điều chỉnh số dư",
+                    categoryIcon = "AccountBalance",
+                    categoryColor = "#FF9800",
+                    note = if (difference > 0) "Điều chỉnh tăng số dư ví" else "Điều chỉnh giảm số dư ví",
+                    timestamp = System.currentTimeMillis()
+                )
+                repository.insertTransaction(tx)
+                showSuccessNotification("Đã cân bằng số dư ví thành công!")
             }
         }
     }
