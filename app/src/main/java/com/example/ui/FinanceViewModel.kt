@@ -161,6 +161,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isAppUnlocked = MutableStateFlow(false)
     val isAppUnlocked: StateFlow<Boolean> = _isAppUnlocked.asStateFlow()
 
+    private val _hasSeenOnboarding = MutableStateFlow(false)
+    val hasSeenOnboarding: StateFlow<Boolean> = _hasSeenOnboarding.asStateFlow()
+
+    private val _isDatabaseEmpty = MutableStateFlow(true)
+    val isDatabaseEmpty: StateFlow<Boolean> = _isDatabaseEmpty.asStateFlow()
+
     private val _openBankNotificationsEvent = MutableStateFlow(false)
     val openBankNotificationsEvent: StateFlow<Boolean> = _openBankNotificationsEvent.asStateFlow()
 
@@ -294,10 +300,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val startScreenSetting = repository.getSetting("start_screen")
         val cloudSyncSetting = repository.getSetting("cloud_sync_enabled")
         val geminiApiKeySetting = repository.getSetting("gemini_api_key")
+        val hasSeenOnboardingSetting = repository.getSetting("has_seen_onboarding")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
         _isCloudSyncEnabled.value = cloudSyncSetting?.value == "true"
+        _hasSeenOnboarding.value = hasSeenOnboardingSetting?.value == "true"
+
+        val initialWallets = repository.allWallets.first()
+        _isDatabaseEmpty.value = initialWallets.isEmpty()
 
         _geminiApiKey.value = geminiApiKeySetting?.value ?: ""
         _savedPinHash.value = pinHashSetting?.value ?: ""
@@ -1097,6 +1108,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             _isPinEnabled.value = true
             _savedPinHash.value = pin
             _isAppUnlocked.value = true
+        }
+    }
+
+    fun setHasSeenOnboarding(hasSeen: Boolean) {
+        viewModelScope.launch {
+            repository.saveSetting("has_seen_onboarding", hasSeen.toString())
+            _hasSeenOnboarding.value = hasSeen
         }
     }
 
@@ -2831,6 +2849,13 @@ val folderName = "[APP_FINANCE]"
                     }
                     addLog("Tải file thành công. Tiến hành khôi phục...")
                     performRestoreFromJsonString(jsonString, ::addLog)
+                    
+                    try {
+                        kotlinx.coroutines.withTimeout(3000) {
+                            allWallets.first { it.isNotEmpty() }
+                        }
+                    } catch (e: Exception) {}
+                    
                     addLog("🎉 KHÔI PHỤC TỪ GOOGLE DRIVE THÀNH CÔNG!")
                     _syncStatus.value = "SUCCESS"
                     showSuccessNotification("Khôi phục dữ liệu đám mây thành công!")
@@ -2901,6 +2926,13 @@ val folderName = "[APP_FINANCE]"
 
                 
                 performRestoreFromJsonString(jsonString, ::addLog)
+                
+                try {
+                    kotlinx.coroutines.withTimeout(3000) {
+                        allWallets.first { it.isNotEmpty() }
+                    }
+                } catch (e: Exception) {}
+                
                 _syncStatus.value = "SUCCESS"
                 showSuccessNotification("Khôi phục dữ liệu từ bản sao lưu thành công!")
             } catch (e: Exception) {
