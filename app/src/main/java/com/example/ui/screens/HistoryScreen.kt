@@ -2367,13 +2367,13 @@ fun DayTransactionsInline(
                         Spacer(modifier = Modifier.width(8.dp))
                         androidx.compose.material3.IconButton(
                             onClick = { onNavigateToTimeline(dateLabel) },
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             androidx.compose.material3.Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.Timeline,
-                                contentDescription = "Timeline",
+                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Xem Dòng thời gian",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }

@@ -4,6 +4,8 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -158,14 +160,16 @@ fun WalletsScreen(
                     }
                 }
 
-                Row(
+                val walletsListState = rememberLazyListState()
+                
+                LazyRow(
+                    state = walletsListState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
                         .padding(bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    sortedWallets.forEach { wallet ->
+                    items(sortedWallets) { wallet ->
                         val isSelected = selectedWalletForTransactions?.id == wallet.id
                         WalletBigCard(
                             wallet = wallet,
@@ -173,6 +177,33 @@ fun WalletsScreen(
                             onSelect = { selectedWalletForTransactions = wallet },
                             onDelete = { walletToDelete = wallet }
                         )
+                    }
+                }
+
+                if (sortedWallets.size > 1) {
+                    val currentIndex by remember {
+                        derivedStateOf { walletsListState.firstVisibleItemIndex }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        repeat(sortedWallets.size) { index ->
+                            val isSelected = currentIndex == index
+                            val size = if (isSelected) 8.dp else 5.dp
+                            val color = if (isSelected) MaterialTheme.colorScheme.primary 
+                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 3.dp)
+                                    .size(size)
+                                    .clip(CircleShape)
+                                    .background(color)
+                            )
+                        }
                     }
                 }
             }
@@ -242,11 +273,15 @@ fun WalletRecentTransactionItem(
     tx: Transaction,
     modifier: Modifier = Modifier
 ) {
+    val isTransfer = tx.type == "TRANSFER"
+    val itemBgColor = if (isTransfer) Color(0xFF2196F3).copy(alpha = 0.08f)
+                      else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .background(itemBgColor)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -255,12 +290,12 @@ fun WalletRecentTransactionItem(
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(FormatHelper.parseColor(tx.categoryColor)),
+                .background(if (isTransfer) Color(0xFF2196F3) else FormatHelper.parseColor(tx.categoryColor)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = IconMapper.getIconByName(tx.categoryIcon),
-                contentDescription = tx.categoryName,
+                imageVector = if (isTransfer) Icons.AutoMirrored.Filled.CompareArrows else IconMapper.getIconByName(tx.categoryIcon),
+                contentDescription = if (isTransfer) "Nội bộ" else tx.categoryName,
                 tint = Color.White,
                 modifier = Modifier.size(20.dp)
             )
@@ -268,10 +303,10 @@ fun WalletRecentTransactionItem(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = tx.categoryName,
+                text = if (isTransfer) "Nội bộ" else tx.categoryName,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (isTransfer) Color(0xFF2196F3) else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

@@ -35,21 +35,16 @@ object GeminiAdvisorService {
 QUY TẮC RÀNG BUỘC PHÂN TÍCH (LƯU Ý NGHIÊM NGẶT):
 1. CHỈ sử dụng thông tin có trong dữ liệu đầu vào. Không được suy diễn hoặc tự tạo thêm các giao dịch, khoản nợ, ví tiền hoặc ngân sách không tồn tại.
 2. Nếu dữ liệu đầu vào không đủ hoặc rỗng để đưa ra kết luận, hãy ghi rõ trong phần "assessment" là "chưa đủ dữ liệu phân tích".
-3. CHỈ tạo nội dung trong mảng "warnings" khi có dấu hiệu rủi ro thực tế sau đây từ dữ liệu đầu vào:
-   - Tổng chi tiêu lớn hơn Tổng thu nhập (Tổng chi > Tổng thu).
-   - Có bất kỳ khoản nợ nào bị quá hạn.
-   - Ngân sách (Hạn mức chi tiêu) của một hạng mục đã sử dụng vượt quá 90%.
-   - Một hạng mục chi tiêu riêng lẻ chiếm trên 40% tổng chi tiêu tháng.
-   - Số dư tiền mặt hoặc số dư ví chi tiêu quá thấp (sắp cạn kiệt).
-4. Mỗi đề xuất trong mảng "recommendations" phải liên quan trực tiếp đến ít nhất một dữ liệu đầu vào thực tế ở trên.
-5. TUYỆT ĐỐI không đưa ra lời khuyên chung chung như "Hãy tiết kiệm hơn", "Cố gắng chi tiêu hợp lý". Hãy đưa ra lời khuyên hành động cụ thể rõ ràng kèm số liệu lấy trực tiếp hoặc ước tính tỷ lệ tương đối từ đầu vào, ví dụ:
-   - "Giảm ngân sách ăn uống khoảng 15%."
-   - "Thu hồi khoản nợ của [Tên người nợ]."
-   - "Bổ sung 2.000.000 ₫ vào quỹ khẩn cấp."
-   - "Chuyển 5% thu nhập sang tài khoản tiết kiệm."
-6. ĐÁNH DẤU TỪ KHÓA BẰNG DẤU SAO ĐƠN HOẶC KÉP: Bạn bắt buộc phải bọc các từ khóa quan trọng trong câu bằng ký tự `**` (ví dụ: "**Ăn uống**", "**Ví Cash**", "**chi tiêu tăng 15%**", "**khoản nợ 5,000,000 ₫**", "**vượt hạn mức 40%**") để hệ thống tự động tô đậm trên giao diện.
-7. SO SÁNH TỶ LỆ VỚI THÁNG TRƯỚC: Luôn tính toán tỷ lệ tăng/giảm chi tiêu/thu nhập cụ thể của tháng hiện tại so với tháng trước và đưa các tỷ lệ và con số so sánh cụ thể này vào đánh giá tổng quan (assessment) hoặc cảnh báo/khuyến nghị.
-8. CHIA Ý NHỎ, NGẮN GỌN, RÀNH MẠCH: Các câu phân tích trong trường "assessment" phải ngắn gọn, súc tích và rành mạch. Phân tách thành 3-4 dòng riêng biệt bằng ký tự xuống dòng `\n` để tạo các gạch đầu dòng ngắn, không viết thành một đoạn văn dài dòng liên tục.
+3. TRONG MẢNG "warnings" (CẢNH BÁO RỦI RO): Cần mang tính tiên đoán/dự báo tương lai nhiều hơn là chỉ thống kê hiện tại:
+   - Dựa vào tốc độ chi tiêu hàng ngày trong tháng, hãy tính toán và dự đoán xem một hạng mục (ví dụ: **Ăn uống**, **Đi lại**) có nguy cơ vượt hạn mức ngân sách trong bao nhiêu ngày tới (ví dụ: *"Với tình hình chi tiêu hiện tại, chi phí **Ăn uống** của bạn sẽ vượt hạn mức trong **3 ngày tới**"*).
+   - Hãy tiên đoán xem tài khoản khả dụng/ví tiền có nguy cơ bị **cháy tài khoản** (hết sạch tiền) trong bao nhiêu ngày tới (ví dụ: *"Tài khoản của bạn có thể bị **cháy** trong **3 ngày tới** nếu với tình hình chi tiêu cho **Ăn uống** như hiện tại"*).
+   - Chỉ ra các rủi ro thực tế khác nếu có (Tổng chi > Tổng thu, Nợ quá hạn, Ví cạn kiệt...).
+4. TRONG MẢNG "recommendations" (KHUYẾN NGHỊ): Hãy đưa ra lời khuyên cụ thể, mang tính hành động kèm con số định mức chi tiêu giới hạn mỗi ngày từ nay đến cuối tháng để người dùng không vượt quá hạn mức:
+   - Ví dụ: *"Chi phí **Ăn uống** của bạn nên ở mức **25.000đ/1 ngày** để không vượt quá hạn mức ngân sách"* hoặc đề xuất mức giảm chi tiêu cụ thể.
+   - TUYỆT ĐỐI không đưa ra lời khuyên chung chung như "Hãy tiết kiệm hơn", "Cố gắng chi tiêu hợp lý".
+5. TRONG MẢNG "assessment" (ĐÁNH GIÁ): Hãy chia nhỏ thành các dòng nhận định ngắn gọn rành mạch. Phải có ít nhất một dòng đánh giá so sánh xu hướng tăng/giảm chi tiết (Ví dụ: *"Bạn đã giảm chi phí **Đi lại** được **50%** so với tuần trước/tháng trước"*).
+6. ĐÁNH DẤU TỪ KHÓA BẰNG DẤU SAO KÉP: Bạn bắt buộc phải bọc các từ khóa quan trọng trong câu bằng ký tự `**` (ví dụ: "**Ăn uống**", "**Ví Cash**", "**cháy trong 3 ngày tới**", "**25.000đ/1 ngày**", "**giảm 50%**", "**vượt hạn mức**") để hệ thống tự động tô đậm trên giao diện.
+7. CHIA Ý NHỎ, NGẮN GỌN, RÀNH MẠCH: Các câu phân tích trong trường "assessment" phải ngắn gọn, súc tích và rành mạch. Phân tách thành 3-4 dòng riêng biệt bằng ký tự xuống dòng `\n` để tạo các gạch đầu dòng ngắn, không viết thành một đoạn văn dài dòng liên tục.
 
 Dựa trên thông tin và các quy tắc ràng buộc trên, hãy phản hồi CHỈ bằng một đối tượng JSON có định dạng chính xác sau (Không kèm markdown codeblock ```json hoặc bất cứ văn bản nào khác ngoài JSON):
 {

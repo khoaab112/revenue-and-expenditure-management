@@ -644,7 +644,22 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         repository.saveSetting("notification_logs", newList.toString())
     }
 
-    fun confirmPendingNotificationLog(log: NotificationLog, walletId: Int, categoryName: String, overrideAmount: Double? = null, overrideNote: String? = null) {
+    private fun getActiveEventIdForTimestamp(timestamp: Long): Int? {
+        val now = timestamp
+        val activeEvents = allEvents.value.filter {
+            now >= it.startDate && (it.endDate == null || now <= it.endDate + 86400000L - 1)
+        }
+        return activeEvents.maxByOrNull { it.startDate }?.id
+    }
+
+    fun confirmPendingNotificationLog(
+        log: NotificationLog,
+        walletId: Int,
+        categoryName: String,
+        overrideAmount: Double? = null,
+        overrideNote: String? = null,
+        overrideEventId: Int? = null
+    ) {
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
             val catDetails = getCategoryByName(categoryName)
@@ -721,7 +736,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 categoryIcon = catDetails.iconName,
                 categoryColor = catDetails.colorHex,
                 note = overrideNote?.takeIf { it.isNotBlank() } ?: log.note.takeIf { it.isNotBlank() } ?: "Ghi từ thông báo",
-                timestamp = log.timestamp
+                timestamp = log.timestamp,
+                eventId = overrideEventId
             )
             repository.insertTransaction(tx)
             updateLogStatus(log, "AUTO_ADDED", wallet.name)
@@ -750,7 +766,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 categoryColor = "#2196F3",
                 note = note.takeIf { it.isNotBlank() } ?: "Chuyển tiền nội bộ",
                 timestamp = logExpense.timestamp,
-                destinationWalletId = destWalletId
+                destinationWalletId = destWalletId,
+                eventId = null
             )
             repository.insertTransaction(tx)
             updateLogStatus(logExpense, "AUTO_ADDED", sourceWallet.name)
@@ -846,7 +863,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     categoryIcon = categoryIcon,
                     categoryColor = categoryColor,
                     note = log.note.ifEmpty { "Ghi từ thông báo hàng loạt" },
-                    timestamp = log.timestamp
+                    timestamp = log.timestamp,
+                    eventId = null
                 )
                 repository.insertTransaction(tx)
             }
@@ -934,7 +952,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 categoryIcon = cat.iconName,
                 categoryColor = cat.colorHex,
                 note = log.note.ifEmpty { "Ghi từ thông báo" },
-                timestamp = log.timestamp
+                timestamp = log.timestamp,
+                eventId = null
             )
             repository.insertTransaction(tx)
         }
@@ -2183,6 +2202,89 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             // Sức khỏe
             addTransaction(walletId = cashWallet, type = "EXPENSE", amount = 350000.0, categoryName = "Sức khỏe", note = "Mua thuốc và vitamin", timestamp = now - oneDay * 5)
             
+            // 3. Add demo events
+            val eventId1 = repository.insertEvent(Event(
+                name = "Du lịch hè Nha Trang",
+                description = "Chuyến đi Nha Trang 4 ngày 3 đêm cùng gia đình",
+                startDate = now - oneDay * 2,
+                endDate = now + oneDay * 5,
+                limitAmount = 8000000.0,
+                colorHex = "#2196F3"
+            )).toInt()
+
+            val eventId2 = repository.insertEvent(Event(
+                name = "Liên hoan phòng ban",
+                description = "Tiệc liên hoan cuối quý của bộ phận phát triển sản phẩm",
+                startDate = now - oneDay,
+                endDate = now + oneDay,
+                limitAmount = 1500000.0,
+                colorHex = "#4CAF50"
+            )).toInt()
+
+            // Add some transactions under these events
+            val transportCategory = getCategoryByName("Di chuyển")
+            val foodCategory = getCategoryByName("Ăn uống")
+            
+            val tx1 = Transaction(
+                walletId = bankWallet,
+                walletName = wts.find { it.id == bankWallet }?.name ?: "Ví điện tử",
+                type = "EXPENSE",
+                amount = 1200000.0,
+                categoryName = transportCategory.name,
+                categoryIcon = transportCategory.iconName,
+                categoryColor = transportCategory.colorHex,
+                note = "Vé máy bay khứ hồi Nha Trang",
+                timestamp = now - oneDay,
+                eventId = eventId1
+            )
+            repository.insertTransaction(tx1)
+
+            val tx2 = Transaction(
+                walletId = cashWallet,
+                walletName = wts.find { it.id == cashWallet }?.name ?: "Tiền mặt",
+                type = "EXPENSE",
+                amount = 850000.0,
+                categoryName = foodCategory.name,
+                categoryIcon = foodCategory.iconName,
+                categoryColor = foodCategory.colorHex,
+                note = "Ăn hải sản tối Nha Trang",
+                timestamp = now - oneDay,
+                eventId = eventId1
+            )
+            repository.insertTransaction(tx2)
+
+            // 4. Seed PENDING bank notification logs that fall under these events' timeframes
+            val pendingLogs = org.json.JSONArray()
+            
+            val log1 = org.json.JSONObject().apply {
+                put("timestamp", now)
+                put("title", "Vietcombank")
+                put("text", "TK 9967618785 -550,000 VND luc 12:14. ND: Thanhtoan khachsan NhaTrang")
+                put("bankName", "Vietcombank")
+                put("amount", 550000.0)
+                put("type", "EXPENSE")
+                put("note", "Thanh toán khách sạn Nha Trang")
+                put("walletName", wts.find { it.id == bankWallet }?.name ?: "Ví điện tử")
+                put("status", "PENDING")
+            }
+            pendingLogs.put(log1)
+
+            val log2 = org.json.JSONObject().apply {
+                put("timestamp", now)
+                put("title", "Techcombank")
+                put("text", "Techcombank: TK 1903 -420,000 VND. ND: Lien hoan nhe phong")
+                put("bankName", "Techcombank")
+                put("amount", 420000.0)
+                put("type", "EXPENSE")
+                put("note", "Liên hoan nhẹ phòng")
+                put("walletName", wts.find { it.id == bankWallet }?.name ?: "Ví điện tử")
+                put("status", "PENDING")
+            }
+            pendingLogs.put(log2)
+
+            repository.saveSetting("notification_logs", pendingLogs.toString())
+            loadNotificationLogs()
+
             // Refresh
             loadCategories()
         }

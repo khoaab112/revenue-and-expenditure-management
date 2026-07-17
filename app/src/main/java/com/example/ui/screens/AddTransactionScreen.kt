@@ -671,7 +671,7 @@ fun AddTransactionScreen(
                                         )
                                     }
                             } else if (isTransfer) {
-                                val transferLabel = if (selectedType == "EXPENSE") "Ví nhận tiền (Đích)" else "Ví rút tiền (Nguồn)"
+                                val transferLabel = if (selectedType == "EXPENSE") "Ví chuyển đi (Nguồn)" else "Ví nhận về (Đích)"
                                 Text(
                                     text = transferLabel,
                                     fontSize = 13.sp,
@@ -687,8 +687,8 @@ fun AddTransactionScreen(
                                         fontSize = 13.sp
                                     )
                                 } else {
-                                    // Filter out the primary selected wallet to avoid transfer to self!
-                                    val availableTransferWallets = wallets.filter { it.id != selectedWalletId }
+                                    // Filter out the transfer target/destination wallet to avoid transfer to self!
+                                    val availableTransferWallets = wallets.filter { it.id != transferWalletId }
                                     if (availableTransferWallets.isEmpty()) {
                                         Text(
                                             text = "Vui lòng tạo thêm ví khác để chuyển tiền.",
@@ -704,7 +704,7 @@ fun AddTransactionScreen(
                                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     rowWallets.forEach { wt ->
-                                                        val isSelected = transferWalletId == wt.id
+                                                        val isSelected = selectedWalletId == wt.id
                                                         val accentColor = FormatHelper.parseColor(wt.colorHex)
                                                         val cardColor = if (isSelected) accentColor.copy(alpha = 0.15f)
                                                                         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -716,7 +716,7 @@ fun AddTransactionScreen(
                                                                 .weight(1f)
                                                                 .height(48.dp)
                                                                 .clip(RoundedCornerShape(12.dp))
-                                                                .clickable { transferWalletId = wt.id }
+                                                                .clickable { selectedWalletId = wt.id }
                                                                 .testTag("tx_transfer_wallet_chip_${wt.id}"),
                                                             colors = CardDefaults.cardColors(containerColor = cardColor),
                                                             border = BorderStroke(if (isSelected) 1.8.dp else 1.dp, borderColor)
@@ -817,7 +817,7 @@ fun AddTransactionScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = if (isTransfer) {
-                    if (selectedType == "EXPENSE") "Ví chuyển đi (Nguồn)" else "Ví nhận về (Đích)"
+                    if (selectedType == "EXPENSE") "Ví nhận tiền (Đích)" else "Ví rút tiền (Nguồn)"
                 } else "Tài khoản thanh toán",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
@@ -831,7 +831,8 @@ fun AddTransactionScreen(
                     fontSize = 13.sp
                 )
             } else {
-                val chunkedWallets = wallets.chunked(2)
+                val bottomWallets = if (isTransfer) wallets.filter { it.id != selectedWalletId } else wallets
+                val chunkedWallets = bottomWallets.chunked(2)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     chunkedWallets.forEach { rowWallets ->
                         Row(
@@ -839,7 +840,7 @@ fun AddTransactionScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             rowWallets.forEach { wt ->
-                                val isSelected = selectedWalletId == wt.id
+                                val isSelected = if (isTransfer) transferWalletId == wt.id else selectedWalletId == wt.id
                                 val accentColor = FormatHelper.parseColor(wt.colorHex)
                                 val cardColor = if (isSelected) accentColor.copy(alpha = 0.15f)
                                                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -851,7 +852,13 @@ fun AddTransactionScreen(
                                         .weight(1f)
                                         .height(52.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .clickable { selectedWalletId = wt.id }
+                                        .clickable { 
+                                            if (isTransfer) {
+                                                transferWalletId = wt.id
+                                            } else {
+                                                selectedWalletId = wt.id
+                                            }
+                                        }
                                         .testTag("tx_wallet_chip_${wt.id}"),
                                     colors = CardDefaults.cardColors(containerColor = cardColor),
                                     border = BorderStroke(if (isSelected) 1.8.dp else 1.dp, borderColor)

@@ -1032,6 +1032,29 @@ fun PendingLogItem(
         mutableStateOf(log.note)
     }
 
+    val events by viewModel.allEvents.collectAsState()
+    
+    val activeEvents = remember(log.timestamp, events) {
+        val now = log.timestamp
+        events.filter {
+            now >= it.startDate && (it.endDate == null || now <= it.endDate + 86400000L - 1)
+        }.sortedWith(compareBy<com.example.data.Event> {
+            if (it.endDate != null) 0 else 1
+        }.thenBy {
+            if (it.endDate != null) (it.endDate - it.startDate) else Long.MAX_VALUE
+        }.thenBy {
+            it.endDate ?: Long.MAX_VALUE
+        }.thenByDescending {
+            it.startDate
+        })
+    }
+    
+    var selectedEventId by remember(log, activeEvents) {
+        mutableStateOf(activeEvents.firstOrNull()?.id)
+    }
+
+    var eventDropdownExpanded by remember(log) { mutableStateOf(false) }
+
     var walletDropdownExpanded by remember(log) { mutableStateOf(false) }
     var isCategoriesExpanded by remember(log) { mutableStateOf(false) }
 
@@ -1414,6 +1437,197 @@ fun PendingLogItem(
                             }
                         }
 
+                        // EVENT DROPDOWN BOX
+                        if (activeEvents.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Event,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "Sự kiện:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            ExposedDropdownMenuBox(
+                                expanded = eventDropdownExpanded,
+                                onExpandedChange = { eventDropdownExpanded = !eventDropdownExpanded },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            ) {
+                                val selectedEvent = events.find { it.id == selectedEventId }
+                                val eventColor = try {
+                                    Color(android.graphics.Color.parseColor(selectedEvent?.colorHex ?: "#757575"))
+                                } catch (e: Exception) {
+                                    MaterialTheme.colorScheme.secondary
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(44.dp)
+                                        .menuAnchor(),
+                                    colors = CardDefaults.cardColors(containerColor = eventColor),
+                                    shape = RoundedCornerShape(8.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                                            .fillMaxSize(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Event,
+                                                contentDescription = "Event Icon",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = selectedEvent?.name ?: "Không gắn sự kiện",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = Color.White,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDropDown,
+                                            contentDescription = "Mở rộng",
+                                            tint = Color.White
+                                        )
+                                    }
+                                }
+
+                                ExposedDropdownMenu(
+                                    expanded = eventDropdownExpanded,
+                                    onDismissRequest = { eventDropdownExpanded = false }
+                                ) {
+                                    // Option: No Event
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(24.dp)
+                                                        .background(Color(0xFF757575), CircleShape),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Block,
+                                                        contentDescription = "No Event",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "Không gắn sự kiện",
+                                                    fontWeight = if (selectedEventId == null) FontWeight.Bold else FontWeight.Medium,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedEventId = null
+                                            eventDropdownExpanded = false
+                                        }
+                                    )
+
+                                    // Option: All Active Events
+                                    activeEvents.forEachIndexed { idx, ev ->
+                                        val evColor = try {
+                                            Color(android.graphics.Color.parseColor(ev.colorHex))
+                                        } catch (e: Exception) {
+                                            MaterialTheme.colorScheme.secondary
+                                        }
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(24.dp)
+                                                            .background(evColor, CircleShape),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Event,
+                                                            contentDescription = "Event",
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(12.dp)
+                                                        )
+                                                    }
+                                                    Column {
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = ev.name,
+                                                                fontWeight = if (ev.id == selectedEventId) FontWeight.Bold else FontWeight.Medium,
+                                                                fontSize = 13.sp
+                                                            )
+                                                            if (idx == 0) {
+                                                                Surface(
+                                                                    color = Color(0xFFFFF3E0),
+                                                                    shape = RoundedCornerShape(4.dp)
+                                                                ) {
+                                                                    Text(
+                                                                        text = "Gợi ý 🎯",
+                                                                        color = Color(0xFFE65100),
+                                                                        fontSize = 9.sp,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                        if (ev.endDate != null) {
+                                                            val formatter = SimpleDateFormat("dd/MM", Locale.getDefault())
+                                                            Text(
+                                                                text = "Hạn: ${formatter.format(Date(ev.startDate))} - ${formatter.format(Date(ev.endDate))}",
+                                                                fontSize = 10.sp,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        } else {
+                                                            Text(
+                                                                text = "Hạn: Vô thời hạn",
+                                                                fontSize = 10.sp,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            onClick = {
+                                                selectedEventId = ev.id
+                                                eventDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                         // CATEGORIES ROW
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(
@@ -1427,7 +1641,7 @@ fun PendingLogItem(
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
-                                    text = "Phân loại Danh Mục:",
+                                    text = "Danh mục:",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -1636,7 +1850,14 @@ fun PendingLogItem(
                                         return@Button
                                     }
                                     val finalAmount = customAmountStr.toDoubleOrNull() ?: log.amount
-                                    viewModel.confirmPendingNotificationLog(log, selectedWalletId, selectedCategoryName, finalAmount, customNoteStr)
+                                    viewModel.confirmPendingNotificationLog(
+                                        log = log,
+                                        walletId = selectedWalletId,
+                                        categoryName = selectedCategoryName,
+                                        overrideAmount = finalAmount,
+                                        overrideNote = customNoteStr,
+                                        overrideEventId = selectedEventId
+                                    )
                                     viewModel.showSuccessNotification("Xác nhận giao dịch thành công!")
                                 },
                                 modifier = Modifier
