@@ -308,7 +308,16 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         _hasSeenOnboarding.value = hasSeenOnboardingSetting?.value == "true"
 
         val initialWallets = repository.allWallets.first()
-        _isDatabaseEmpty.value = initialWallets.isEmpty()
+        
+        if (initialWallets.isEmpty()) {
+            val cashWallet = Wallet(name = "Tiền mặt", type = "CASH", balance = 0.0, colorHex = "#4CAF50", iconName = "wallet")
+            val bankWallet = Wallet(name = "Ngân hàng", type = "BANK", balance = 0.0, colorHex = "#2196F3", iconName = "account_balance")
+            repository.insertWallet(cashWallet)
+            repository.insertWallet(bankWallet)
+            _isDatabaseEmpty.value = false
+        } else {
+            _isDatabaseEmpty.value = false
+        }
 
         _geminiApiKey.value = geminiApiKeySetting?.value ?: ""
         _savedPinHash.value = pinHashSetting?.value ?: ""
