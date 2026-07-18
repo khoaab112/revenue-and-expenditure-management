@@ -132,7 +132,8 @@ fun TimelineDayHeaderUpdated(dateStr: String, totalIncome: Double, totalExpense:
 
 @Composable
 fun TimelineTransactionUpdated(tx: Transaction, isLast: Boolean) {
-    val isExpense = tx.type == "EXPENSE"
+    val isAdjustmentDecrease = tx.type == "ADJUSTMENT" && !tx.note.contains("tăng")
+    val isExpense = tx.type == "EXPENSE" || isAdjustmentDecrease
     val isTransfer = tx.type == "TRANSFER"
     val amountColor = if (isExpense) Color(0xFFF44336) else if (isTransfer) Color(0xFF2196F3) else Color(0xFF4CAF50)
 

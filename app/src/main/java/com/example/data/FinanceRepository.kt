@@ -39,6 +39,13 @@ class FinanceRepository(private val dao: FinanceDao) {
                 "EXPENSE" -> wallet.balance - transaction.amount
                 "INCOME" -> wallet.balance + transaction.amount
                 "TRANSFER" -> wallet.balance - transaction.amount
+                "ADJUSTMENT" -> {
+                    if (transaction.note.contains("tăng")) {
+                        wallet.balance + transaction.amount
+                    } else {
+                        wallet.balance - transaction.amount
+                    }
+                }
                 else -> wallet.balance
             }
             dao.updateWallet(wallet.copy(balance = newBalance))
@@ -68,6 +75,13 @@ class FinanceRepository(private val dao: FinanceDao) {
                 "EXPENSE" -> wallet.balance + transaction.amount
                 "INCOME" -> wallet.balance - transaction.amount
                 "TRANSFER" -> wallet.balance + transaction.amount
+                "ADJUSTMENT" -> {
+                    if (transaction.note.contains("tăng")) {
+                        wallet.balance - transaction.amount
+                    } else {
+                        wallet.balance + transaction.amount
+                    }
+                }
                 else -> wallet.balance
             }
             dao.updateWallet(wallet.copy(balance = newBalance))
@@ -100,6 +114,13 @@ class FinanceRepository(private val dao: FinanceDao) {
                 "EXPENSE" -> oldWallet.balance + oldTransaction.amount
                 "INCOME" -> oldWallet.balance - oldTransaction.amount
                 "TRANSFER" -> oldWallet.balance + oldTransaction.amount
+                "ADJUSTMENT" -> {
+                    if (oldTransaction.note.contains("tăng")) {
+                        oldWallet.balance - oldTransaction.amount
+                    } else {
+                        oldWallet.balance + oldTransaction.amount
+                    }
+                }
                 else -> oldWallet.balance
             }
             dao.updateWallet(oldWallet.copy(balance = revertedBalance))
@@ -127,6 +148,13 @@ class FinanceRepository(private val dao: FinanceDao) {
                 "EXPENSE" -> freshWallet.balance - newTransaction.amount
                 "INCOME" -> freshWallet.balance + newTransaction.amount
                 "TRANSFER" -> freshWallet.balance - newTransaction.amount
+                "ADJUSTMENT" -> {
+                    if (newTransaction.note.contains("tăng")) {
+                        freshWallet.balance + newTransaction.amount
+                    } else {
+                        freshWallet.balance - newTransaction.amount
+                    }
+                }
                 else -> freshWallet.balance
             }
             dao.updateWallet(freshWallet.copy(balance = appliedBalance))

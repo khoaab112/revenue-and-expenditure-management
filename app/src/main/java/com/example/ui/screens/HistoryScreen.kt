@@ -1371,14 +1371,15 @@ fun RemovableTransactionItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            val isAdjustmentDecrease = tx.type == "ADJUSTMENT" && !tx.note.contains("tăng")
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = if (tx.type == "EXPENSE") "-${FormatHelper.formatVND(tx.amount)}"
+                    text = if (tx.type == "EXPENSE" || isAdjustmentDecrease) "-${FormatHelper.formatVND(tx.amount)}"
                            else if (tx.type == "TRANSFER") "±${FormatHelper.formatVND(tx.amount)}"
                            else "+${FormatHelper.formatVND(tx.amount)}",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (tx.type == "EXPENSE") Color(0xFFF44336) else if (tx.type == "TRANSFER") Color(0xFF2196F3) else Color(0xFF4CAF50),
+                    color = if (tx.type == "EXPENSE" || isAdjustmentDecrease) Color(0xFFF44336) else if (tx.type == "TRANSFER") Color(0xFF2196F3) else Color(0xFF4CAF50),
                     textAlign = TextAlign.End
                 )
                 Spacer(modifier = Modifier.height(2.dp))

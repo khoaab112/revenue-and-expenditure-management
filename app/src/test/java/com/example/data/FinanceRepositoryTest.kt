@@ -218,4 +218,69 @@ class FinanceRepositoryTest {
         requireNotNull(foodBudget)
         assertEquals(500.0, foodBudget.spentAmount, 0.0)
     }
+
+    @Test
+    fun `reconcile wallet balance via adjustment transactions`() = runTest {
+        val walletId = repository.insertWallet(
+            Wallet(
+                name = "Test Wallet",
+                type = "CASH",
+                balance = 1000.0,
+                colorHex = "#FFFFFF",
+                iconName = "Icon"
+            )
+        ).toInt()
+
+        // 1. Reconcile up (+200)
+        val txId1 = repository.insertTransaction(
+            Transaction(
+                walletId = walletId,
+                walletName = "Test Wallet",
+                type = "ADJUSTMENT",
+                amount = 200.0,
+                categoryName = "Điều chỉnh số dư",
+                categoryIcon = "AccountBalance",
+                categoryColor = "#FF9800",
+                note = "Điều chỉnh tăng số dư ví",
+                timestamp = System.currentTimeMillis()
+            )
+        )
+
+        var wallet = repository.getWalletById(walletId)
+        assertEquals(1200.0, wallet!!.balance, 0.0)
+
+        // 2. Reconcile down (-500)
+        val txId2 = repository.insertTransaction(
+            Transaction(
+                walletId = walletId,
+                walletName = "Test Wallet",
+                type = "ADJUSTMENT",
+                amount = 500.0,
+                categoryName = "Điều chỉnh số dư",
+                categoryIcon = "AccountBalance",
+                categoryColor = "#FF9800",
+                note = "Điều chỉnh giảm số dư ví",
+                timestamp = System.currentTimeMillis()
+            )
+        )
+
+        wallet = repository.getWalletById(walletId)
+        assertEquals(700.0, wallet!!.balance, 0.0)
+
+        // 3. Delete the negative adjustment (+500 back to 1200)
+        val tx2 = repository.getTransactionById(txId2.toInt())
+        requireNotNull(tx2)
+        repository.deleteTransaction(tx2)
+
+        wallet = repository.getWalletById(walletId)
+        assertEquals(1200.0, wallet!!.balance, 0.0)
+
+        // 4. Update the positive adjustment to be different (+300 instead of +200)
+        val tx1 = repository.getTransactionById(txId1.toInt())
+        requireNotNull(tx1)
+        repository.updateTransaction(tx1.copy(amount = 300.0))
+
+        wallet = repository.getWalletById(walletId)
+        assertEquals(1300.0, wallet!!.balance, 0.0)
+    }
 }

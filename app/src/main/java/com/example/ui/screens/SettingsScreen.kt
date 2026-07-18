@@ -1,4 +1,4 @@
-package com.example.ui.screens
+﻿package com.example.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -3490,6 +3490,7 @@ fun SortableCategoryList(
                         }
 
                         txList.forEach { tx ->
+                            val isPositive = tx.type == "INCOME" || (tx.type == "ADJUSTMENT" && tx.note.contains("tăng"))
                             ListItem(
                                 headlineContent = { 
                                     Text(
@@ -3509,17 +3510,17 @@ fun SortableCategoryList(
                                 },
                                 leadingContent = {
                                     Icon(
-                                        imageVector = if (tx.type == "INCOME") Icons.Default.Add else Icons.Default.Remove,
+                                        imageVector = if (isPositive) Icons.Default.Add else Icons.Default.Remove,
                                         contentDescription = tx.type,
-                                        tint = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                        tint = if (isPositive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                     )
                                 },
                                 trailingContent = {
                                     Text(
-                                        text = "${if (tx.type == "INCOME") "+" else "-"}${FormatHelper.formatVND(tx.amount)}",
+                                        text = "${if (isPositive) "+" else "-"}${FormatHelper.formatVND(tx.amount)}",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
-                                        color = if (tx.type == "INCOME") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                        color = if (isPositive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                     )
                                 },
                                 modifier = Modifier
