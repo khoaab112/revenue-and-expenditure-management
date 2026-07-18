@@ -164,8 +164,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _hasSeenOnboarding = MutableStateFlow(false)
     val hasSeenOnboarding: StateFlow<Boolean> = _hasSeenOnboarding.asStateFlow()
 
-    private val _isDatabaseEmpty = MutableStateFlow(true)
-    val isDatabaseEmpty: StateFlow<Boolean> = _isDatabaseEmpty.asStateFlow()
+    val isDatabaseEmpty: StateFlow<Boolean>
 
     private val _openBankNotificationsEvent = MutableStateFlow(false)
     val openBankNotificationsEvent: StateFlow<Boolean> = _openBankNotificationsEvent.asStateFlow()
@@ -219,6 +218,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         // Base states
         allWallets = repository.allWallets
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+        isDatabaseEmpty = repository.allWallets
+            .map { it.isEmpty() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
         allTransactions = repository.allTransactions
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -307,17 +310,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         _isCloudSyncEnabled.value = cloudSyncSetting?.value == "true"
         _hasSeenOnboarding.value = hasSeenOnboardingSetting?.value == "true"
 
-        val initialWallets = repository.allWallets.first()
-        
-        if (initialWallets.isEmpty()) {
-            val cashWallet = Wallet(name = "Tiền mặt", type = "CASH", balance = 0.0, colorHex = "#4CAF50", iconName = "wallet")
-            val bankWallet = Wallet(name = "Ngân hàng", type = "BANK", balance = 0.0, colorHex = "#2196F3", iconName = "account_balance")
-            repository.insertWallet(cashWallet)
-            repository.insertWallet(bankWallet)
-            _isDatabaseEmpty.value = false
-        } else {
-            _isDatabaseEmpty.value = false
-        }
+
 
         _geminiApiKey.value = geminiApiKeySetting?.value ?: ""
         _savedPinHash.value = pinHashSetting?.value ?: ""
@@ -1124,6 +1117,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.saveSetting("has_seen_onboarding", hasSeen.toString())
             _hasSeenOnboarding.value = hasSeen
+            
+            // If starting fresh as a new user and database is empty, initialize default wallets
+            val initialWallets = repository.allWallets.first()
+            if (hasSeen && initialWallets.isEmpty()) {
+                val cashWallet = Wallet(name = "Tiền mặt", type = "CASH", balance = 0.0, colorHex = "#4CAF50", iconName = "wallet")
+                val bankWallet = Wallet(name = "Ngân hàng", type = "BANK", balance = 0.0, colorHex = "#2196F3", iconName = "account_balance")
+                repository.insertWallet(cashWallet)
+                repository.insertWallet(bankWallet)
+            }
         }
     }
 
