@@ -289,17 +289,17 @@ object NotificationParser {
 
         // Match numbers following signs or associated with currency keywords or direct transaction context
         val patterns = listOf(
-            // 1. Clear dynamic sign (+ or -) followed by a number
-            Pattern.compile("""[+-]\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
+            // 1. Clear dynamic sign (+ or -) followed by a number (lookahead prevents backtracking and truncating numbers with commas/dots)
+            Pattern.compile("""[+-]\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)(?!\d|[.,]\d)"""),
             
             // 2. Number followed directly by currency keyword (vnd, usd, eur, gbp)
             Pattern.compile("""(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s?(?:vnd|usd|eur|gbp)\b"""),
             
             // 3. Foreign currency prefix followed by a number
-            Pattern.compile("""(?:usd|eur|gbp)\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b"""),
+            Pattern.compile("""(?:usd|eur|gbp)\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)(?!\d|[.,]\d)"""),
             
             // 4. Number preceded by a direct transaction indicator to parse values safely
-            Pattern.compile("""\b(?:số tiền|so tien|sotien|trị giá|tri gia|tiền|tien|thanh toán|thanh toan|biến động|bien dong|giao dịch|giao dich|gd|gd:|ps|ps:|phát sinh|phat sinh|giá trị|gia tri|cộng|co:|nợ:)\s*:?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\b""")
+            Pattern.compile("""\b(?:số tiền|so tien|sotien|trị giá|tri gia|tiền|tien|thanh toán|thanh toan|biến động|bien dong|giao dịch|giao dich|gd|gd:|ps|ps:|phát sinh|phat sinh|giá trị|gia tri|cộng|co:|nợ:)\s*:?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)(?!\d|[.,]\d)""")
         )
 
         for (pattern in patterns) {

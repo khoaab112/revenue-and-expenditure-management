@@ -127,8 +127,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _isCloudSyncEnabled = MutableStateFlow(false)
     val isCloudSyncEnabled: StateFlow<Boolean> = _isCloudSyncEnabled.asStateFlow()
 
-    private val _isAiScannerEnabled = MutableStateFlow(false)
-    val isAiScannerEnabled: StateFlow<Boolean> = _isAiScannerEnabled.asStateFlow()
 
     private val _geminiApiKey = MutableStateFlow("")
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
@@ -138,6 +136,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     private val _advisorLoading = MutableStateFlow(false)
     val advisorLoading: StateFlow<Boolean> = _advisorLoading.asStateFlow()
+
+    private val _aiTransactionResult = MutableStateFlow<com.example.service.GeminiAdvisorService.AITransactionResult?>(null)
+    val aiTransactionResult: StateFlow<com.example.service.GeminiAdvisorService.AITransactionResult?> = _aiTransactionResult.asStateFlow()
+
+    private val _aiTransactionLoading = MutableStateFlow(false)
+    val aiTransactionLoading: StateFlow<Boolean> = _aiTransactionLoading.asStateFlow()
 
     private val _focusedWalletId = MutableStateFlow<Int?>(null)
     val focusedWalletId: StateFlow<Int?> = _focusedWalletId.asStateFlow()
@@ -156,6 +160,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     private val _isAppUnlocked = MutableStateFlow(false)
     val isAppUnlocked: StateFlow<Boolean> = _isAppUnlocked.asStateFlow()
+
+    private val _hasSeenOnboarding = MutableStateFlow(false)
+    val hasSeenOnboarding: StateFlow<Boolean> = _hasSeenOnboarding.asStateFlow()
+
+    private val _isDatabaseEmpty = MutableStateFlow(true)
+    val isDatabaseEmpty: StateFlow<Boolean> = _isDatabaseEmpty.asStateFlow()
 
     private val _openBankNotificationsEvent = MutableStateFlow(false)
     val openBankNotificationsEvent: StateFlow<Boolean> = _openBankNotificationsEvent.asStateFlow()
@@ -223,12 +233,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         dailyTransactions = combine(repository.allTransactions, repository.allWallets) { txs, wts ->
             val savingsIds = wts.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
-            txs.filter { it.walletId !in savingsIds }
+            txs.filter { it.walletId !in savingsIds || (it.destinationWalletId != null && it.destinationWalletId !in savingsIds) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         savingsTransactions = combine(repository.allTransactions, repository.allWallets) { txs, wts ->
             val savingsIds = wts.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
-            txs.filter { it.walletId in savingsIds }
+            txs.filter { it.walletId in savingsIds || (it.destinationWalletId != null && it.destinationWalletId in savingsIds) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         allBudgets = repository.getAllBudgets()
@@ -288,14 +298,27 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val pinHashSetting = repository.getSetting("pin_hash")
         val widgetsSetting = repository.getSetting("widgets_enabled")
         val startScreenSetting = repository.getSetting("start_screen")
-        val aiScannerSetting = repository.getSetting("ai_scanner_enabled")
         val cloudSyncSetting = repository.getSetting("cloud_sync_enabled")
         val geminiApiKeySetting = repository.getSetting("gemini_api_key")
+        val hasSeenOnboardingSetting = repository.getSetting("has_seen_onboarding")
 
         val enabled = pinEnabledSetting?.value == "true"
         _isPinEnabled.value = enabled
         _isCloudSyncEnabled.value = cloudSyncSetting?.value == "true"
-        _isAiScannerEnabled.value = aiScannerSetting?.value == "true"
+        _hasSeenOnboarding.value = hasSeenOnboardingSetting?.value == "true"
+
+        val initialWallets = repository.allWallets.first()
+        
+        if (initialWallets.isEmpty()) {
+            val cashWallet = Wallet(name = "Tiền mặt", type = "CASH", balance = 0.0, colorHex = "#4CAF50", iconName = "wallet")
+            val bankWallet = Wallet(name = "Ngân hàng", type = "BANK", balance = 0.0, colorHex = "#2196F3", iconName = "account_balance")
+            repository.insertWallet(cashWallet)
+            repository.insertWallet(bankWallet)
+            _isDatabaseEmpty.value = false
+        } else {
+            _isDatabaseEmpty.value = false
+        }
+
         _geminiApiKey.value = geminiApiKeySetting?.value ?: ""
         _savedPinHash.value = pinHashSetting?.value ?: ""
         _widgetsEnabled.value = widgetsSetting?.value == "true"
@@ -647,7 +670,22 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         repository.saveSetting("notification_logs", newList.toString())
     }
 
-    fun confirmPendingNotificationLog(log: NotificationLog, walletId: Int, categoryName: String, overrideAmount: Double? = null, overrideNote: String? = null) {
+    private fun getActiveEventIdForTimestamp(timestamp: Long): Int? {
+        val now = timestamp
+        val activeEvents = allEvents.value.filter {
+            now >= it.startDate && (it.endDate == null || now <= it.endDate + 86400000L - 1)
+        }
+        return activeEvents.maxByOrNull { it.startDate }?.id
+    }
+
+    fun confirmPendingNotificationLog(
+        log: NotificationLog,
+        walletId: Int,
+        categoryName: String,
+        overrideAmount: Double? = null,
+        overrideNote: String? = null,
+        overrideEventId: Int? = null
+    ) {
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
             val catDetails = getCategoryByName(categoryName)
@@ -724,10 +762,42 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 categoryIcon = catDetails.iconName,
                 categoryColor = catDetails.colorHex,
                 note = overrideNote?.takeIf { it.isNotBlank() } ?: log.note.takeIf { it.isNotBlank() } ?: "Ghi từ thông báo",
-                timestamp = log.timestamp
+                timestamp = log.timestamp,
+                eventId = overrideEventId
             )
             repository.insertTransaction(tx)
             updateLogStatus(log, "AUTO_ADDED", wallet.name)
+        }
+    }
+
+    fun confirmPendingInternalTransfer(
+        logExpense: NotificationLog,
+        logIncome: NotificationLog,
+        sourceWalletId: Int,
+        destWalletId: Int,
+        amount: Double,
+        note: String
+    ) {
+        viewModelScope.launch {
+            val sourceWallet = repository.getWalletById(sourceWalletId) ?: return@launch
+            val destWallet = repository.getWalletById(destWalletId) ?: return@launch
+            
+            val tx = Transaction(
+                walletId = sourceWalletId,
+                walletName = sourceWallet.name,
+                type = "TRANSFER",
+                amount = amount,
+                categoryName = "Chuyển khoản",
+                categoryIcon = "swap_horiz",
+                categoryColor = "#2196F3",
+                note = note.takeIf { it.isNotBlank() } ?: "Chuyển tiền nội bộ",
+                timestamp = logExpense.timestamp,
+                destinationWalletId = destWalletId,
+                eventId = null
+            )
+            repository.insertTransaction(tx)
+            updateLogStatus(logExpense, "AUTO_ADDED", sourceWallet.name)
+            updateLogStatus(logIncome, "AUTO_ADDED", destWallet.name)
         }
     }
 
@@ -819,7 +889,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     categoryIcon = categoryIcon,
                     categoryColor = categoryColor,
                     note = log.note.ifEmpty { "Ghi từ thông báo hàng loạt" },
-                    timestamp = log.timestamp
+                    timestamp = log.timestamp,
+                    eventId = null
                 )
                 repository.insertTransaction(tx)
             }
@@ -907,7 +978,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 categoryIcon = cat.iconName,
                 categoryColor = cat.colorHex,
                 note = log.note.ifEmpty { "Ghi từ thông báo" },
-                timestamp = log.timestamp
+                timestamp = log.timestamp,
+                eventId = null
             )
             repository.insertTransaction(tx)
         }
@@ -1048,6 +1120,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun setHasSeenOnboarding(hasSeen: Boolean) {
+        viewModelScope.launch {
+            repository.saveSetting("has_seen_onboarding", hasSeen.toString())
+            _hasSeenOnboarding.value = hasSeen
+        }
+    }
+
     fun disablePin() {
         viewModelScope.launch {
             repository.saveSetting("pin_enabled", "false")
@@ -1070,6 +1149,47 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             repository.saveSetting("gemini_api_key", key)
             _geminiApiKey.value = key
             showSuccessNotification("Đã lưu API Key thành công!")
+        }
+    }
+
+    fun resetAITransactionResult() {
+        _aiTransactionResult.value = null
+    }
+
+    fun parseTransactionsWithAI(text: String) {
+        if (_geminiApiKey.value.isBlank()) {
+            _aiTransactionResult.value = com.example.service.GeminiAdvisorService.AITransactionResult(
+                success = false,
+                errorMessage = "API Key chưa được cấu hình! Vui lòng cài đặt Gemini API Key trong phần Cài đặt."
+            )
+            return
+        }
+        
+        _aiTransactionLoading.value = true
+        _aiTransactionResult.value = null
+        
+        viewModelScope.launch {
+            try {
+                val wallets = allWallets.value
+                val walletsInfo = wallets.joinToString(", ") { it.name }
+                val categories = _categoriesList.value
+                val categoriesInfo = categories.joinToString(", ") { it.name }
+
+                val result = com.example.service.GeminiAdvisorService.parseTransactionsFromText(
+                    inputText = text,
+                    walletsInfo = walletsInfo,
+                    categoriesInfo = categoriesInfo,
+                    customApiKey = _geminiApiKey.value
+                )
+                _aiTransactionResult.value = result
+            } catch (e: Exception) {
+                _aiTransactionResult.value = com.example.service.GeminiAdvisorService.AITransactionResult(
+                    success = false,
+                    errorMessage = "Lỗi xử lý AI: ${e.message}"
+                )
+            } finally {
+                _aiTransactionLoading.value = false
+            }
         }
     }
 
@@ -1110,7 +1230,26 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
                 val totalIncome = txs.filter { it.type == "INCOME" }.sumOf { it.amount }
                 val totalExpense = txs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-                val monthlySummary = "Tháng: $currentMonthStr\n- Tổng Thu nhập: ${FormatHelper.formatVND(totalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(totalExpense)}"
+
+                // Calculate previous month values
+                val cal = Calendar.getInstance()
+                val year = currentMonthStr.substring(0, 4).toInt()
+                val month = currentMonthStr.substring(5, 7).toInt()
+                cal.set(Calendar.YEAR, year)
+                cal.set(Calendar.MONTH, month - 2)
+                val prevMonthStr = SimpleDateFormat("yyyy-MM", Locale.US).format(cal.time)
+                val prevMonthTxs = allTransactions.value.filter { 
+                    try {
+                        val date = Date(it.timestamp)
+                        sdf.format(date) == prevMonthStr
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                val prevTotalIncome = prevMonthTxs.filter { it.type == "INCOME" }.sumOf { it.amount }
+                val prevTotalExpense = prevMonthTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+
+                val monthlySummary = "Tháng hiện tại: $currentMonthStr\n- Tổng Thu nhập: ${FormatHelper.formatVND(totalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(totalExpense)}\nTháng trước ($prevMonthStr):\n- Tổng Thu nhập: ${FormatHelper.formatVND(prevTotalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(prevTotalExpense)}"
 
                 // 3. Top Expenses
                 val topExpensesList = txs.filter { it.type == "EXPENSE" }
@@ -1165,12 +1304,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun setAiScannerEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            repository.saveSetting("ai_scanner_enabled", if (enabled) "true" else "false")
-            _isAiScannerEnabled.value = enabled
-        }
-    }
 
     fun setStartScreen(route: String) {
         viewModelScope.launch {
@@ -1358,12 +1491,63 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun closeSavingsVault(vault: Wallet, targetWalletId: Int?) {
+        viewModelScope.launch {
+            val freshVault = repository.getWalletById(vault.id) ?: vault
+            if (freshVault.balance > 0 && targetWalletId != null) {
+                val targetWallet = repository.getWalletById(targetWalletId)
+                if (targetWallet != null) {
+                    val transferTx = Transaction(
+                        walletId = freshVault.id,
+                        walletName = freshVault.name,
+                        type = "TRANSFER",
+                        amount = freshVault.balance,
+                        categoryName = "Đóng hũ tiết kiệm",
+                        categoryIcon = "Savings",
+                        categoryColor = freshVault.colorHex,
+                        note = "Chuyển số dư tích lũy về ví ${targetWallet.name} để đóng hũ",
+                        timestamp = System.currentTimeMillis(),
+                        destinationWalletId = targetWallet.id
+                    )
+                    repository.insertTransaction(transferTx)
+                }
+            }
+            val updatedVault = freshVault.copy(isClosed = true, balance = 0.0)
+            repository.updateWallet(updatedVault)
+        }
+    }
+
     fun updateWalletsOrder(orderedList: List<Wallet>) {
         viewModelScope.launch {
             orderedList.forEachIndexed { index, wallet ->
                 if (wallet.displayOrder != index) {
                     repository.updateWallet(wallet.copy(displayOrder = index))
                 }
+            }
+        }
+    }
+
+    fun reconcileWallet(walletId: Int, actualBalance: Double) {
+        viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId) ?: return@launch
+            val difference = actualBalance - wallet.balance
+            
+            if (difference != 0.0) {
+                val amount = Math.abs(difference)
+                
+                val tx = Transaction(
+                    walletId = wallet.id,
+                    walletName = wallet.name,
+                    type = "ADJUSTMENT",
+                    amount = amount,
+                    categoryName = "Điều chỉnh số dư",
+                    categoryIcon = "AccountBalance",
+                    categoryColor = "#FF9800",
+                    note = if (difference > 0) "Điều chỉnh tăng số dư ví" else "Điều chỉnh giảm số dư ví",
+                    timestamp = System.currentTimeMillis()
+                )
+                repository.insertTransaction(tx)
+                showSuccessNotification("Đã cân bằng số dư ví thành công!")
             }
         }
     }
@@ -1703,8 +1887,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 val budgetsList = repository.getAllBudgets().first()
                 val savingsGoalsList = repository.allSavingsGoals.first()
                 val eventsList = repository.allEvents.first()
+                val debtsList = repository.allDebts.first()
 
-                addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy, ${eventsList.size} sự kiện.")
+                addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy, ${eventsList.size} sự kiện, ${debtsList.size} khoản nợ.")
 
                 val root = org.json.JSONObject()
                 root.put("version", 2)
@@ -1742,6 +1927,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     obj.put("isRecurring", t.isRecurring)
                     obj.put("recurrencePeriod", t.recurrencePeriod)
                     obj.put("eventId", t.eventId)
+                    t.destinationWalletId?.let { obj.put("destinationWalletId", it) }
                     transactionsArray.put(obj)
                 }
                 root.put("transactions", transactionsArray)
@@ -1790,6 +1976,27 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     eventsArray.put(obj)
                 }
                 root.put("events", eventsArray)
+
+                // Debts
+                val debtsArray = org.json.JSONArray()
+                debtsList.forEach { d ->
+                    val obj = org.json.JSONObject()
+                    obj.put("id", d.id)
+                    obj.put("personName", d.personName)
+                    obj.put("type", d.type)
+                    obj.put("totalAmount", d.totalAmount)
+                    obj.put("remainingAmount", d.remainingAmount)
+                    obj.put("walletId", d.walletId)
+                    obj.put("creationDate", d.creationDate)
+                    d.dueDate?.let { obj.put("dueDate", it) }
+                    obj.put("note", d.note)
+                    obj.put("status", d.status)
+                    obj.put("repaymentType", d.repaymentType)
+                    d.periodicAmount?.let { obj.put("periodicAmount", it) }
+                    d.periodType?.let { obj.put("periodType", it) }
+                    debtsArray.put(obj)
+                }
+                root.put("debts", debtsArray)
 
                 // Application & Protection Settings
                 val settingsObj = org.json.JSONObject()
@@ -2120,6 +2327,89 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             // Sức khỏe
             addTransaction(walletId = cashWallet, type = "EXPENSE", amount = 350000.0, categoryName = "Sức khỏe", note = "Mua thuốc và vitamin", timestamp = now - oneDay * 5)
             
+            // 3. Add demo events
+            val eventId1 = repository.insertEvent(Event(
+                name = "Du lịch hè Nha Trang",
+                description = "Chuyến đi Nha Trang 4 ngày 3 đêm cùng gia đình",
+                startDate = now - oneDay * 2,
+                endDate = now + oneDay * 5,
+                limitAmount = 8000000.0,
+                colorHex = "#2196F3"
+            )).toInt()
+
+            val eventId2 = repository.insertEvent(Event(
+                name = "Liên hoan phòng ban",
+                description = "Tiệc liên hoan cuối quý của bộ phận phát triển sản phẩm",
+                startDate = now - oneDay,
+                endDate = now + oneDay,
+                limitAmount = 1500000.0,
+                colorHex = "#4CAF50"
+            )).toInt()
+
+            // Add some transactions under these events
+            val transportCategory = getCategoryByName("Di chuyển")
+            val foodCategory = getCategoryByName("Ăn uống")
+            
+            val tx1 = Transaction(
+                walletId = bankWallet,
+                walletName = wts.find { it.id == bankWallet }?.name ?: "Ví điện tử",
+                type = "EXPENSE",
+                amount = 1200000.0,
+                categoryName = transportCategory.name,
+                categoryIcon = transportCategory.iconName,
+                categoryColor = transportCategory.colorHex,
+                note = "Vé máy bay khứ hồi Nha Trang",
+                timestamp = now - oneDay,
+                eventId = eventId1
+            )
+            repository.insertTransaction(tx1)
+
+            val tx2 = Transaction(
+                walletId = cashWallet,
+                walletName = wts.find { it.id == cashWallet }?.name ?: "Tiền mặt",
+                type = "EXPENSE",
+                amount = 850000.0,
+                categoryName = foodCategory.name,
+                categoryIcon = foodCategory.iconName,
+                categoryColor = foodCategory.colorHex,
+                note = "Ăn hải sản tối Nha Trang",
+                timestamp = now - oneDay,
+                eventId = eventId1
+            )
+            repository.insertTransaction(tx2)
+
+            // 4. Seed PENDING bank notification logs that fall under these events' timeframes
+            val pendingLogs = org.json.JSONArray()
+            
+            val log1 = org.json.JSONObject().apply {
+                put("timestamp", now)
+                put("title", "Vietcombank")
+                put("text", "TK 9967618785 -550,000 VND luc 12:14. ND: Thanhtoan khachsan NhaTrang")
+                put("bankName", "Vietcombank")
+                put("amount", 550000.0)
+                put("type", "EXPENSE")
+                put("note", "Thanh toán khách sạn Nha Trang")
+                put("walletName", wts.find { it.id == bankWallet }?.name ?: "Ví điện tử")
+                put("status", "PENDING")
+            }
+            pendingLogs.put(log1)
+
+            val log2 = org.json.JSONObject().apply {
+                put("timestamp", now)
+                put("title", "Techcombank")
+                put("text", "Techcombank: TK 1903 -420,000 VND. ND: Lien hoan nhe phong")
+                put("bankName", "Techcombank")
+                put("amount", 420000.0)
+                put("type", "EXPENSE")
+                put("note", "Liên hoan nhẹ phòng")
+                put("walletName", wts.find { it.id == bankWallet }?.name ?: "Ví điện tử")
+                put("status", "PENDING")
+            }
+            pendingLogs.put(log2)
+
+            repository.saveSetting("notification_logs", pendingLogs.toString())
+            loadNotificationLogs()
+
             // Refresh
             loadCategories()
         }
@@ -2174,7 +2464,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                             isRecurring = obj.optBoolean("isRecurring", false),
                             recurrencePeriod = obj.optString("recurrencePeriod", "NONE"),
-                            eventId = if (obj.has("eventId") && !obj.isNull("eventId")) obj.optInt("eventId") else null
+                            eventId = if (obj.has("eventId") && !obj.isNull("eventId")) obj.optInt("eventId") else null,
+                            destinationWalletId = if (obj.has("destinationWalletId") && !obj.isNull("destinationWalletId")) obj.optInt("destinationWalletId") else null
                         )
                         repository.insertTransactionDirect(t)
                     }
@@ -2234,6 +2525,31 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             colorHex = obj.optString("colorHex", "#2196F3")
                         )
                         repository.insertEventDirect(e)
+                    }
+                }
+
+                // 4.6 Debts
+                val debtsArray = root.optJSONArray("debts")
+                if (debtsArray != null) {
+                    addLog("Đang nhập lại ${debtsArray.length()} khoản nợ...")
+                    for (i in 0 until debtsArray.length()) {
+                        val obj = debtsArray.getJSONObject(i)
+                        val d = com.example.data.Debt(
+                            id = obj.optInt("id", 0),
+                            personName = obj.optString("personName", ""),
+                            type = obj.optString("type", "DEBT"),
+                            totalAmount = obj.optDouble("totalAmount", 0.0),
+                            remainingAmount = obj.optDouble("remainingAmount", 0.0),
+                            walletId = obj.optInt("walletId", 0),
+                            creationDate = obj.optLong("creationDate", System.currentTimeMillis()),
+                            dueDate = if (obj.has("dueDate") && !obj.isNull("dueDate")) obj.optLong("dueDate") else null,
+                            note = obj.optString("note", ""),
+                            status = obj.optString("status", "ACTIVE"),
+                            repaymentType = obj.optString("repaymentType", "FLEXIBLE"),
+                            periodicAmount = if (obj.has("periodicAmount") && !obj.isNull("periodicAmount")) obj.optDouble("periodicAmount") else null,
+                            periodType = if (obj.has("periodType") && !obj.isNull("periodType")) obj.optString("periodType") else null
+                        )
+                        repository.insertDebtDirect(d)
                     }
                 }
 
@@ -2568,6 +2884,13 @@ val folderName = "[APP_FINANCE]"
                     }
                     addLog("Tải file thành công. Tiến hành khôi phục...")
                     performRestoreFromJsonString(jsonString, ::addLog)
+                    
+                    try {
+                        kotlinx.coroutines.withTimeout(3000) {
+                            allWallets.first { it.isNotEmpty() }
+                        }
+                    } catch (e: Exception) {}
+                    
                     addLog("🎉 KHÔI PHỤC TỪ GOOGLE DRIVE THÀNH CÔNG!")
                     _syncStatus.value = "SUCCESS"
                     showSuccessNotification("Khôi phục dữ liệu đám mây thành công!")
@@ -2638,6 +2961,13 @@ val folderName = "[APP_FINANCE]"
 
                 
                 performRestoreFromJsonString(jsonString, ::addLog)
+                
+                try {
+                    kotlinx.coroutines.withTimeout(3000) {
+                        allWallets.first { it.isNotEmpty() }
+                    }
+                } catch (e: Exception) {}
+                
                 _syncStatus.value = "SUCCESS"
                 showSuccessNotification("Khôi phục dữ liệu từ bản sao lưu thành công!")
             } catch (e: Exception) {

@@ -191,7 +191,16 @@ fun MainContent(
                 .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.AccountBalanceWallet,
+                    contentDescription = "App Logo",
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
         }
     } else if (!isAppUnlocked) {
         // App is locked by PIN protection -> display overlay lock screen gate
@@ -203,17 +212,26 @@ fun MainContent(
             PinLockScreen(viewModel = viewModel)
         }
     } else {
-        // App is unlocked -> display primary dashboard or nested modules
-        val focusManager = LocalFocusManager.current
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = {
-                        focusManager.clearFocus()
-                    })
-                }
-        ) {
+        val hasSeenOnboarding by viewModel.hasSeenOnboarding.collectAsState()
+        val isDatabaseEmpty by viewModel.isDatabaseEmpty.collectAsState()
+
+        if (!hasSeenOnboarding && isDatabaseEmpty) {
+            com.example.ui.screens.OnboardingScreen(
+                viewModel = viewModel,
+                onComplete = { viewModel.setHasSeenOnboarding(true) }
+            )
+        } else {
+            // App is unlocked -> display primary dashboard or nested modules
+            val focusManager = LocalFocusManager.current
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {
+                            focusManager.clearFocus()
+                        })
+                    }
+            ) {
             if (isWideScreen) {
             // Adaptive wide layout: use Left Navigation Rail + Right Box
             Row(modifier = Modifier.fillMaxSize()) {
@@ -676,6 +694,7 @@ fun MainContent(
         }
         }
     }
+    }
 }
 
 @Composable
@@ -703,8 +722,10 @@ fun NavHostContainer(
         }
     ) {
         composable(Routes.DASHBOARD) {
+            val canPop = navController.previousBackStackEntry != null
             DashboardScreen(
                 viewModel = viewModel,
+                onNavigateBack = if (canPop) { { navController.popBackStack() } } else null,
                 onNavigateToWallets = { wallet ->
                     if (wallet != null) {
                         viewModel.setFocusedWalletId(wallet.id)

@@ -515,11 +515,21 @@ fun HistoryScreen(
         filteredTransactions.groupBy { FormatHelper.formatDate(it.timestamp) }
     }
 
+    val savingsWalletIds = remember(walletsList) {
+        walletsList.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
+    }
+
     // Precompute daily summaries to optimize lazy list scrolling performance
-    val dailySummaries = remember(groupedTransactions) {
+    val dailySummaries = remember(groupedTransactions, savingsWalletIds) {
         groupedTransactions.mapValues { (_, txList) ->
-            val totalIncome = txList.filter { it.type == "INCOME" }.sumOf { it.amount }
-            val totalExpense = txList.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+            val incomeTxs = txList.filter { 
+                it.type == "INCOME" || (it.type == "TRANSFER" && it.destinationWalletId !in savingsWalletIds && it.walletId in savingsWalletIds)
+            }
+            val expenseTxs = txList.filter { 
+                it.type == "EXPENSE" || (it.type == "TRANSFER" && it.walletId !in savingsWalletIds && it.destinationWalletId in savingsWalletIds)
+            }
+            val totalIncome = incomeTxs.sumOf { it.amount }
+            val totalExpense = expenseTxs.sumOf { it.amount }
             Pair(totalIncome, totalExpense)
         }
     }
@@ -1152,7 +1162,8 @@ fun HistoryScreen(
                             RemovableTransactionItem(
                                 tx = tx,
                                 onDelete = { transactionToDelete = tx },
-                                onEdit = { editingTransaction = tx }
+                                onEdit = { editingTransaction = tx },
+                                walletsList = walletsList
                             )
                         }
                     }
@@ -1207,7 +1218,8 @@ fun HistoryScreen(
                     onDeleteTransaction = { tx ->
                         transactionToDelete = tx
                     },
-                    onNavigateToTimeline = onNavigateToTimeline
+                    onNavigateToTimeline = onNavigateToTimeline,
+                    walletsList = walletsList
                 )
             }
         }
@@ -1274,13 +1286,18 @@ fun RemovableTransactionItem(
     tx: Transaction,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    walletsList: List<Wallet> = emptyList()
 ) {
+    val isTransfer = tx.type == "TRANSFER"
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+            .background(
+                if (isTransfer) Color(0xFF2196F3).copy(alpha = 0.08f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+            )
             .clickable { onEdit() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1291,12 +1308,12 @@ fun RemovableTransactionItem(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(FormatHelper.parseColor(tx.categoryColor)),
+                .background(if (isTransfer) Color(0xFF2196F3) else FormatHelper.parseColor(tx.categoryColor)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = IconMapper.getIconByName(tx.categoryIcon),
-                contentDescription = tx.categoryName,
+                imageVector = if (isTransfer) Icons.AutoMirrored.Filled.CompareArrows else IconMapper.getIconByName(tx.categoryIcon),
+                contentDescription = if (isTransfer) "Nội bộ" else tx.categoryName,
                 tint = Color.White,
                 modifier = Modifier.size(22.dp)
             )
@@ -1305,10 +1322,10 @@ fun RemovableTransactionItem(
         // Details Column
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = tx.categoryName,
+                text = if (isTransfer) "Nội bộ" else tx.categoryName,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (isTransfer) Color(0xFF2196F3) else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1317,10 +1334,23 @@ fun RemovableTransactionItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val subText = remember(tx, walletsList) {
+                    if (isTransfer) {
+                        val destWallet = walletsList.find { it.id == tx.destinationWalletId }
+                        val destName = destWallet?.name ?: "Ví nhận"
+                        if (tx.note.isNotBlank()) {
+                            "${tx.walletName} ➔ $destName - ${tx.note}"
+                        } else {
+                            "${tx.walletName} ➔ $destName"
+                        }
+                    } else {
+                        if (tx.note.isNotBlank()) "${tx.walletName} - ${tx.note}" else tx.walletName
+                    }
+                }
                 Text(
-                    text = if (tx.note.isNotBlank()) "${tx.walletName} - ${tx.note}" else tx.walletName,
+                    text = subText,
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (isTransfer) Color(0xFF2196F3) else MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1401,7 +1431,7 @@ fun EditTransactionDialog(
 
     var amountText by remember { mutableStateOf(tx.amount.toLong().toString()) }
     var selectedType by remember { mutableStateOf(tx.type) } // EXPENSE, INCOME
-    var selectedCategoryName by remember { mutableStateOf(tx.categoryName) }
+    var selectedCategoryName by remember { mutableStateOf(if (tx.type == "TRANSFER") "Nội bộ" else tx.categoryName) }
     var selectedWalletId by remember { mutableStateOf<Int?>(tx.walletId) }
     var noteText by remember { mutableStateOf(tx.note) }
     var isRecurring by remember { mutableStateOf(tx.isRecurring) }
@@ -1419,6 +1449,10 @@ fun EditTransactionDialog(
     
     // Ensure the category chosen is kept valid
     LaunchedEffect(selectedType) {
+        if (selectedType == "TRANSFER") {
+            selectedCategoryName = "Nội bộ"
+            return@LaunchedEffect
+        }
         val hasCategory = filteredCategories.any { it.name == selectedCategoryName }
         if (!hasCategory && filteredCategories.isNotEmpty()) {
             selectedCategoryName = filteredCategories.first().name
@@ -1627,14 +1661,25 @@ fun EditTransactionDialog(
                                         value = selectedCategoryName,
                                         onValueChange = {},
                                         readOnly = true,
-                                        leadingIcon = currentCategoryObject?.let { cat ->
+                                        leadingIcon = if (selectedType == "TRANSFER") {
                                             {
                                                 Icon(
-                                                    imageVector = IconMapper.getIconByName(cat.iconName),
-                                                    contentDescription = cat.name,
-                                                    tint = FormatHelper.parseColor(cat.colorHex),
+                                                    imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                                                    contentDescription = "TRANSFER",
+                                                    tint = Color(0xFF2196F3),
                                                     modifier = Modifier.size(20.dp)
                                                 )
+                                            }
+                                        } else {
+                                            currentCategoryObject?.let { cat ->
+                                                {
+                                                    Icon(
+                                                        imageVector = IconMapper.getIconByName(cat.iconName),
+                                                        contentDescription = cat.name,
+                                                        tint = FormatHelper.parseColor(cat.colorHex),
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
                                             }
                                         },
                                         trailingIcon = {
@@ -1646,12 +1691,14 @@ fun EditTransactionDialog(
                                             .testTag("edit_tx_category_selector")
                                     )
                                     // Bắt sự kiện click mượt mà phủ lên toàn bộ ô input
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .background(Color.Transparent)
-                                            .clickable { categoryDropdownExpanded = !categoryDropdownExpanded }
-                                    )
+                                    if (selectedType != "TRANSFER") {
+                                        Box(
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .background(Color.Transparent)
+                                                .clickable { categoryDropdownExpanded = !categoryDropdownExpanded }
+                                        )
+                                    }
 
                                     DropdownMenu(
                                         expanded = categoryDropdownExpanded,
@@ -1807,22 +1854,37 @@ fun EditTransactionDialog(
                             val finalAmount = FormatHelper.evaluateExpression(amountText)
                             Button(
                                 onClick = {
-                                    val targetCat = categoriesList.find { it.name == selectedCategoryName } ?: categoriesList.first()
                                     val targetWallet = walletsList.find { it.id == selectedWalletId } ?: walletsList.first()
-                                    
-                                    val updatedTx = tx.copy(
-                                        walletId = targetWallet.id,
-                                        walletName = targetWallet.name,
-                                        type = selectedType,
-                                        amount = finalAmount,
-                                        categoryName = targetCat.name,
-                                        categoryIcon = targetCat.iconName,
-                                        categoryColor = targetCat.colorHex,
-                                        note = noteText.ifEmpty { targetCat.name },
-                                        timestamp = selectedTimestamp,
-                                        isRecurring = isRecurring,
-                                        recurrencePeriod = if (isRecurring) recurrencePeriod else "NONE"
-                                    )
+                                    val updatedTx = if (selectedType == "TRANSFER") {
+                                        tx.copy(
+                                            walletId = targetWallet.id,
+                                            walletName = targetWallet.name,
+                                            type = selectedType,
+                                            amount = finalAmount,
+                                            categoryName = "Nội bộ",
+                                            categoryIcon = "swap_horiz",
+                                            categoryColor = "#2196F3",
+                                            note = noteText.ifEmpty { "Chuyển tiền nội bộ" },
+                                            timestamp = selectedTimestamp,
+                                            isRecurring = isRecurring,
+                                            recurrencePeriod = if (isRecurring) recurrencePeriod else "NONE"
+                                        )
+                                    } else {
+                                        val targetCat = categoriesList.find { it.name == selectedCategoryName } ?: categoriesList.first()
+                                        tx.copy(
+                                            walletId = targetWallet.id,
+                                            walletName = targetWallet.name,
+                                            type = selectedType,
+                                            amount = finalAmount,
+                                            categoryName = targetCat.name,
+                                            categoryIcon = targetCat.iconName,
+                                            categoryColor = targetCat.colorHex,
+                                            note = noteText.ifEmpty { targetCat.name },
+                                            timestamp = selectedTimestamp,
+                                            isRecurring = isRecurring,
+                                            recurrencePeriod = if (isRecurring) recurrencePeriod else "NONE"
+                                        )
+                                    }
                                     onSave(updatedTx)
                                 },
                                 enabled = finalAmount > 0.0 && selectedWalletId != null,
@@ -2283,11 +2345,21 @@ fun DayTransactionsInline(
     transactions: List<Transaction>,
     onEditTransaction: (Transaction) -> Unit,
     onDeleteTransaction: (Transaction) -> Unit,
-    onNavigateToTimeline: (String) -> Unit = {}
+    onNavigateToTimeline: (String) -> Unit = {},
+    walletsList: List<Wallet> = emptyList()
 ) {
     val dateLabel = "%02d/%02d/%d".format(day.dayOfMonth, day.month + 1, day.year)
-    val totalIncome = transactions.filter { it.type == "INCOME" }.sumOf { it.amount }
-    val totalExpense = transactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+    val savingsWalletIds = remember(walletsList) {
+        walletsList.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
+    }
+    val incomeTxs = transactions.filter { 
+        it.type == "INCOME" || (it.type == "TRANSFER" && it.destinationWalletId !in savingsWalletIds && it.walletId in savingsWalletIds)
+    }
+    val expenseTxs = transactions.filter { 
+        it.type == "EXPENSE" || (it.type == "TRANSFER" && it.walletId !in savingsWalletIds && it.destinationWalletId in savingsWalletIds)
+    }
+    val totalIncome = incomeTxs.sumOf { it.amount }
+    val totalExpense = expenseTxs.sumOf { it.amount }
 
     Column(
         modifier = Modifier
@@ -2314,13 +2386,13 @@ fun DayTransactionsInline(
                         Spacer(modifier = Modifier.width(8.dp))
                         androidx.compose.material3.IconButton(
                             onClick = { onNavigateToTimeline(dateLabel) },
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             androidx.compose.material3.Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.Timeline,
-                                contentDescription = "Timeline",
+                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Xem Dòng thời gian",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -2373,7 +2445,8 @@ fun DayTransactionsInline(
                     RemovableTransactionItem(
                         tx = tx,
                         onDelete = { onDeleteTransaction(tx) },
-                        onEdit = { onEditTransaction(tx) }
+                        onEdit = { onEditTransaction(tx) },
+                        walletsList = walletsList
                     )
                 }
             }

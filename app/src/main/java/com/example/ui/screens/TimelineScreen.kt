@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -159,13 +160,13 @@ fun TimelineTransactionUpdated(tx: Transaction, isLast: Boolean) {
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(FormatHelper.parseColor(tx.categoryColor))
+                    .background(if (isTransfer) Color(0xFF2196F3) else FormatHelper.parseColor(tx.categoryColor))
                     .align(Alignment.TopCenter),
                 contentAlignment = Alignment.Center
             ) {
                  Icon(
-                     imageVector = IconMapper.getIconByName(tx.categoryIcon),
-                     contentDescription = tx.categoryName,
+                     imageVector = if (isTransfer) Icons.AutoMirrored.Filled.CompareArrows else IconMapper.getIconByName(tx.categoryIcon),
+                     contentDescription = if (isTransfer) "Nội bộ" else tx.categoryName,
                      tint = Color.White,
                      modifier = Modifier.size(20.dp)
                  )
@@ -187,7 +188,7 @@ fun TimelineTransactionUpdated(tx: Transaction, isLast: Boolean) {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = tx.categoryName,
+                        text = if (isTransfer) "Nội bộ" else tx.categoryName,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground,
@@ -226,7 +227,8 @@ fun TimelineTransactionUpdated(tx: Transaction, isLast: Boolean) {
 @Composable
 fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
     val categoryStats = remember(dayTransactions) {
-        dayTransactions.groupBy { Triple(it.categoryName, it.categoryIcon, it.categoryColor) }
+        dayTransactions.filter { it.type != "TRANSFER" }
+            .groupBy { Triple(it.categoryName, it.categoryIcon, it.categoryColor) }
             .map { (cat, txs) ->
                 val income = txs.filter { it.type == "INCOME" }.sumOf { it.amount }
                 val expense = txs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
@@ -235,10 +237,15 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
             .filter { it.second > 0 || it.third > 0 }
     }
 
-    val hasIncome = categoryStats.any { it.second > 0 }
-    val hasExpense = categoryStats.any { it.third > 0 }
+    val totalTransfer = remember(dayTransactions) {
+        dayTransactions.filter { it.type == "TRANSFER" }.sumOf { it.amount }
+    }
 
-    if (categoryStats.isEmpty()) return
+    val hasTransfer = totalTransfer > 0.0
+    val hasIncome = categoryStats.any { it.second > 0 } || hasTransfer
+    val hasExpense = categoryStats.any { it.third > 0 } || hasTransfer
+
+    if (categoryStats.isEmpty() && !hasTransfer) return
 
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
@@ -354,8 +361,64 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
                     }
                 }
             }
-            if (index < categoryStats.size - 1) {
+            if (index < categoryStats.size - 1 || hasTransfer) {
                 HorizontalDivider(color = borderColor)
+            }
+        }
+
+        // Dedicated Transfer Row
+        if (hasTransfer) {
+            val transferBgColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+                    .background(transferBgColor),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Category Col (Nội bộ)
+                Row(
+                    modifier = Modifier.weight(0.8f).fillMaxHeight().padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF2196F3)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                            contentDescription = "Chuyển khoản nội bộ",
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    Text(
+                        text = "Nội bộ", 
+                        fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(borderColor))
+                
+                // Merged Cell of weight(2f) spanning both Thu and Chi
+                Box(
+                    modifier = Modifier
+                        .weight(2f)
+                        .fillMaxHeight()
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "±${FormatHelper.formatVND(totalTransfer)}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF2196F3),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

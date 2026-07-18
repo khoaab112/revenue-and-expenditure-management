@@ -216,6 +216,7 @@ class FinanceRepository(private val dao: FinanceDao) {
         val budgets = dao.getAllBudgets().first()
         val goals = dao.getAllSavingsGoals().first()
         val events = dao.getAllEvents().first()
+        val debts = dao.getAllDebts().first()
         val settingsList = dao.getAllSettings()
         
         val moshi = com.squareup.moshi.Moshi.Builder()
@@ -231,6 +232,7 @@ class FinanceRepository(private val dao: FinanceDao) {
         root.put("budgets", org.json.JSONArray(moshi.adapter<List<Budget>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Budget::class.java)).toJson(budgets)))
         root.put("savingsGoals", org.json.JSONArray(moshi.adapter<List<SavingsGoal>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, SavingsGoal::class.java)).toJson(goals)))
         root.put("events", org.json.JSONArray(moshi.adapter<List<Event>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Event::class.java)).toJson(events)))
+        root.put("debts", org.json.JSONArray(moshi.adapter<List<Debt>>(com.squareup.moshi.Types.newParameterizedType(List::class.java, Debt::class.java)).toJson(debts)))
         
         val settingsObj = org.json.JSONObject()
         settingsList.forEach { settingsObj.put(it.key, it.value) }
@@ -296,6 +298,7 @@ class FinanceRepository(private val dao: FinanceDao) {
         dao.deleteAllBudgets()
         dao.deleteAllSavingsGoals()
         dao.deleteAllEvents()
+        dao.deleteAllDebts()
     }
 
     suspend fun deleteAllSettings() = dao.deleteAllSettings()
@@ -305,4 +308,5 @@ class FinanceRepository(private val dao: FinanceDao) {
     suspend fun insertBudgetDirect(budget: Budget) = dao.insertBudget(budget)
     suspend fun insertSavingsGoalDirect(goal: SavingsGoal) = dao.insertSavingsGoal(goal)
     suspend fun insertEventDirect(event: Event) = dao.insertEvent(event)
+    suspend fun insertDebtDirect(debt: Debt) = dao.insertDebt(debt)
 }

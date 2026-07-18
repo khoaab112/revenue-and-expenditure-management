@@ -43,6 +43,7 @@ fun DashboardScreen(
     onNavigateToBankNotifications: () -> Unit = {},
     onNavigateToDebtBook: () -> Unit = {},
     onNavigateToAIAdvisor: () -> Unit = {},
+    onNavigateBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val wallets by viewModel.dailyWallets.collectAsState()
@@ -101,94 +102,121 @@ fun DashboardScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        // --- Header Row with Title and Back Button ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (onNavigateBack != null) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Quay lại"
+                    )
+                }
+            }
+            Text(
+                text = "Tổng quan",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
         // --- Total Balance Section ---
         Card(
             modifier = Modifier.fillMaxWidth().testTag("total_balance_card"),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp)
+                modifier = Modifier.padding(16.dp)
             ) {
-                Text(
-                    text = "Tổng số dư khả dụng",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = FormatHelper.formatVND(totalBalance),
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    Column {
+                        Text(
+                            text = "Tổng số dư khả dụng",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = FormatHelper.formatVND(totalBalance),
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.TrendingUp,
                         contentDescription = "Trending Up",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f))
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.08f))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowDownward,
-                                contentDescription = "Income",
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDownward,
+                            contentDescription = "Income",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Column {
                             Text(
                                 text = "Thu nhập ($displayMonthShort)",
-                                fontSize = 12.sp,
+                                fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                             )
+                            Text(
+                                text = FormatHelper.formatVND(totalIncome),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4CAF50)
+                            )
                         }
-                        Text(
-                            text = FormatHelper.formatVND(totalIncome),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF4CAF50)
-                        )
                     }
 
-                    Column(horizontalAlignment = Alignment.End) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowUpward,
-                                contentDescription = "Expense",
-                                tint = Color(0xFFF44336),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowUpward,
+                            contentDescription = "Expense",
+                            tint = Color(0xFFF44336),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 text = "Chi tiêu ($displayMonthShort)",
-                                fontSize = 12.sp,
+                                fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                             )
+                            Text(
+                                text = FormatHelper.formatVND(totalExpense),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF44336)
+                            )
                         }
-                        Text(
-                            text = FormatHelper.formatVND(totalExpense),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF44336)
-                        )
                     }
                 }
             }
@@ -229,14 +257,14 @@ fun DashboardScreen(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Giao dịch chờ duyệt mới!",
+                            text = "Có giao dịch mới!",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFE65100)
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Phát hiện $pendingCount giao dịch mới từ tin ngân hàng cần bạn xác nhận.",
+                            text = "Phát hiện $pendingCount giao dịch mới.",
                             fontSize = 12.sp,
                             color = Color(0xFF5D4037)
                         )
@@ -340,7 +368,7 @@ fun DashboardScreen(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "[Trợ lý AI]",
+                        text = "Trợ lý AI",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -469,8 +497,50 @@ fun DashboardScreen(
             val screenWidth = LocalConfiguration.current.screenWidthDp.dp
             val chunkWidth = if (wallets.size > 4) (screenWidth - 48.dp) / 2 else (screenWidth - 32.dp) / 2
 
+            val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+            
+            val pagesCount = remember(wallets) {
+                if (wallets.size <= 4) 1
+                else {
+                    val totalCols = (wallets.size + 1) / 2
+                    totalCols - 1
+                }
+            }
+
+            val currentColumn by remember {
+                derivedStateOf {
+                    val layoutInfo = gridState.layoutInfo
+                    val visibleItemsInfo = layoutInfo.visibleItemsInfo
+                    if (visibleItemsInfo.isEmpty()) 0
+                    else {
+                        val firstItem = visibleItemsInfo.first()
+                        val lastItem = visibleItemsInfo.last()
+                        val totalItems = layoutInfo.totalItemsCount
+                        val totalCols = (totalItems + 1) / 2
+                        
+                        val isAtStart = gridState.firstVisibleItemIndex == 0
+                        val isAtEnd = lastItem.index >= totalItems - 1
+                        
+                        if (isAtStart) 0
+                        else if (isAtEnd) {
+                            if (totalCols - 2 >= 0) totalCols - 2 else 0
+                        } else {
+                            val firstVisibleCol = gridState.firstVisibleItemIndex / 2
+                            val firstItemOffset = firstItem.offset.x
+                            if (Math.abs(firstItemOffset) > firstItem.size.width / 2) {
+                                val target = firstVisibleCol + 1
+                                if (target <= totalCols - 2) target else firstVisibleCol
+                            } else {
+                                firstVisibleCol
+                            }
+                        }
+                    }
+                }
+            }
+
             androidx.compose.foundation.lazy.grid.LazyHorizontalGrid(
                 rows = androidx.compose.foundation.lazy.grid.GridCells.Fixed(if (wallets.size > 2) 2 else 1),
+                state = gridState,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 0.dp),
@@ -485,6 +555,31 @@ fun DashboardScreen(
                         onClick = onNavigateToWallets,
                         modifier = Modifier.width(chunkWidth)
                     )
+                }
+            }
+
+            if (pagesCount > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(pagesCount) { index ->
+                        val isSelected = currentColumn == index
+                        val size = if (isSelected) 8.dp else 5.dp
+                        val color = if (isSelected) MaterialTheme.colorScheme.primary 
+                                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 3.dp)
+                                .size(size)
+                                .clip(CircleShape)
+                                .background(color)
+                                .animateContentSize()
+                        )
+                    }
                 }
             }
         }
@@ -865,200 +960,202 @@ fun DashboardScreen(
                 }
 
                 // Insights section list
-                val computedInsights = remember(transactions, currentMonthTransactions, totalIncome, totalExpense, wallets, savingsWallets, currentMonthBudgets, savingsGoals) {
-                    val insightsList = mutableListOf<SmartSpendingInsight>()
-                    val exps = transactions.filter { it.type == "EXPENSE" }
-                    
+                val aiAdvisorData = remember(transactions, currentMonthTransactions, wallets, savingsWallets, currentMonthBudgets, savingsGoals, totalIncome, totalExpense) {
+                    val riskAlerts = mutableListOf<SmartSpendingInsight>()
+                    val recommendations = mutableListOf<SmartSpendingInsight>()
+                    val evaluations = mutableListOf<SmartSpendingInsight>()
+
                     val now = System.currentTimeMillis()
-                    val MS_DAY = 24 * 60 * 60 * 1000L
+                    val oneDay = 24L * 60L * 60L * 1000L
                     
+                    val cal = Calendar.getInstance()
+                    val daysElapsed = cal.get(Calendar.DAY_OF_MONTH)
+                    val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                    val remainingDays = maxDays - daysElapsed + 1
+                    
+                    val daysElapsedSafe = if (daysElapsed > 0) daysElapsed.toDouble() else 1.0
+
                     // --- 1. RISK ALERTS (Cảnh báo rủi ro) ---
-                    // Ví đang âm / sắp âm (loại trừ Thẻ tín dụng vì mặc định là số âm)
-                    val lowestWallet = wallets.filter { it.type != "CREDIT" }.minByOrNull { it.balance }
-                    if (lowestWallet != null) {
-                        if (lowestWallet.balance <= 0.0) {
-                            insightsList.add(
+                    val nonCreditNonSavingsBalance = wallets.filter { it.type != "CREDIT" && it.type != "SAVINGS" }.sumOf { it.balance }
+                    val monthlyExpense = currentMonthTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                    val dailyExpenseRate = monthlyExpense / daysElapsedSafe
+                    
+                    if (dailyExpenseRate > 0 && nonCreditNonSavingsBalance > 0) {
+                        val daysToDry = nonCreditNonSavingsBalance / dailyExpenseRate
+                        if (daysToDry <= 7) {
+                            riskAlerts.add(
                                 SmartSpendingInsight(
-                                    title = "Cảnh báo: Ví '${lowestWallet.name}' đang cạn kiệt",
-                                    description = "Số dư hiện tại là ${FormatHelper.formatVND(lowestWallet.balance)}. Cần nạp thêm tiền để duy trì chi tiêu thiết yếu.",
+                                    title = "Tài khoản sắp cạn tiền!",
+                                    description = "Với tốc độ chi tiêu trung bình ${FormatHelper.formatVND(dailyExpenseRate)}/ngày, tài khoản khả dụng của bạn có thể bị cạn kiệt trong ${daysToDry.toInt()} ngày tới.",
                                     icon = Icons.Default.Warning,
-                                    tint = Color(0xFFF44336), 
-                                    score = 110 // Highest priority
-                                )
-                            )
-                        } else if (lowestWallet.balance < 500000.0) {
-                            insightsList.add(
-                                SmartSpendingInsight(
-                                    title = "Lưu ý: Số dư '${lowestWallet.name}' ở mức thấp",
-                                    description = "Chỉ còn lại ${FormatHelper.formatVND(lowestWallet.balance)}. Hãy cẩn trọng với các khoản mua sắm tùy hứng nhé.",
-                                    icon = Icons.Default.Info,
-                                    tint = Color(0xFFFF9800),
-                                    score = 80
+                                    tint = Color(0xFFF44336)
                                 )
                             )
                         }
                     }
 
-                    // Vượt ngân sách
                     currentMonthBudgets.forEach { bug ->
                         val spent = bug.spentAmount
-                        if (bug.limitAmount > 0) {
-                            val ratio = spent / bug.limitAmount
-                            if (ratio >= 1.0) {
-                                insightsList.add(
+                        val limit = bug.limitAmount
+                        if (limit > 0) {
+                            val remaining = limit - spent
+                            val dailySpent = spent / daysElapsedSafe
+                            
+                            if (spent >= limit) {
+                                riskAlerts.add(
                                     SmartSpendingInsight(
-                                        title = "Đã vượt ngân sách '${bug.categoryName}'",
-                                        description = "Tháng này bạn đã dùng ${FormatHelper.formatVND(spent)}, vượt ${FormatHelper.formatVND(spent - bug.limitAmount)} so với hạn mức.",
+                                        title = "Đã vượt hạn mức '${bug.categoryName}'",
+                                        description = "Bạn đã chi tiêu ${FormatHelper.formatVND(spent)}, vượt ${FormatHelper.formatVND(spent - limit)} so với hạn mức ngân sách tháng.",
                                         icon = Icons.Default.Report,
-                                        tint = Color(0xFFD32F2F),
-                                        score = 105
+                                        tint = Color(0xFFD32F2F)
                                     )
                                 )
-                            } else if (ratio >= 0.8) {
-                                insightsList.add(
+                            } else if (dailySpent > 0) {
+                                val daysToExhaust = remaining / dailySpent
+                                if (daysToExhaust > 0 && daysToExhaust <= 3) {
+                                    riskAlerts.add(
+                                        SmartSpendingInsight(
+                                            title = "Dự đoán vượt hạn mức '${bug.categoryName}'",
+                                            description = "Với thói quen hiện tại, chi phí cho '${bug.categoryName}' dự kiến sẽ vượt hạn mức ngân sách trong ${daysToExhaust.toInt()} ngày tới.",
+                                            icon = Icons.Default.TrendingUp,
+                                            tint = Color(0xFFE57373)
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (riskAlerts.isEmpty()) {
+                        riskAlerts.add(
+                            SmartSpendingInsight(
+                                title = "Chưa phát hiện rủi ro",
+                                description = "Tình hình chi tiêu trong tháng của bạn hiện tại vẫn nằm trong ngưỡng an toàn.",
+                                icon = Icons.Default.CheckCircle,
+                                tint = Color(0xFF4CAF50)
+                            )
+                        )
+                    }
+
+                    // --- 2. RECOMMENDATIONS (Khuyến nghị) ---
+                    currentMonthBudgets.forEach { bug ->
+                        val limit = bug.limitAmount
+                        val spent = bug.spentAmount
+                        if (limit > 0) {
+                            val remaining = limit - spent
+                            if (remaining > 0) {
+                                val dailyLimit = remaining / remainingDays
+                                recommendations.add(
                                     SmartSpendingInsight(
-                                        title = "Chạm ngưỡng ngân sách '${bug.categoryName}'",
-                                        description = "Đã tiêu ${(ratio * 100).toInt()}% hạn mức tháng. Giảm nhịp độ chi tiêu ngay thôi!",
-                                        icon = Icons.Default.AvTimer,
-                                        tint = Color(0xFFFF9800),
-                                        score = 90
+                                        title = "Định mức '${bug.categoryName}' khuyên dùng",
+                                        description = "Bạn nên duy trì chi tiêu '${bug.categoryName}' trung bình khoảng ${FormatHelper.formatVND(dailyLimit)}/ngày từ nay đến cuối tháng.",
+                                        icon = Icons.Default.Lightbulb,
+                                        tint = Color(0xFFFFB300)
+                                    )
+                                )
+                            } else {
+                                recommendations.add(
+                                    SmartSpendingInsight(
+                                        title = "Lời khuyên về '${bug.categoryName}'",
+                                        description = "Ngân sách tháng cho '${bug.categoryName}' đã hết sạch. Hãy tạm hoãn mọi khoản chi tiêu cho danh mục này.",
+                                        icon = Icons.Default.Block,
+                                        tint = Color(0xFFE53935)
                                     )
                                 )
                             }
                         }
                     }
-
-                    // Cashflow alert
-                    if (totalIncome > 0.0) {
-                        val svRatio = (totalIncome - totalExpense) / totalIncome
-                        if (svRatio < 0.0) {
-                            insightsList.add(
-                                SmartSpendingInsight(
-                                    title = "Dòng tiền tháng này đang âm!",
-                                    description = "Tốc độ chi tiêu đang vượt xa thu nhập. Hãy rà soát lại các khoản chi không cần thiết nhé.",
-                                    icon = Icons.AutoMirrored.Filled.TrendingDown,
-                                    tint = Color(0xFFF44336),
-                                    score = 100
-                                )
-                            )
-                        } else if (svRatio >= 0.2) {
-                            insightsList.add(
-                                SmartSpendingInsight(
-                                    title = "Dòng tiền khỏe mạnh",
-                                    description = "Bạn đã giữ lại được ${(svRatio * 100).toInt()}% thu nhập tháng này.",
-                                    icon = Icons.Default.ThumbUp,
-                                    tint = Color(0xFF4CAF50),
-                                    score = 95
-                                )
-                            )
-                        }
-                    } else if (totalExpense > 0.0) {
-                        insightsList.add(
+                    
+                    if (recommendations.isEmpty()) {
+                        recommendations.add(
                             SmartSpendingInsight(
-                                title = "Chưa có nguồn thu trong tháng",
-                                description = "Bạn đã chi ${FormatHelper.formatVND(totalExpense)} ra nhưng chưa có khoản tiền vào.",
-                                icon = Icons.AutoMirrored.Filled.TrendingDown,
-                                tint = Color(0xFFFF9800),
-                                score = 75
+                                title = "Chưa có khuyến nghị",
+                                description = "Hãy tạo Hạn mức chi tiêu trong mục ngân sách để trợ lý AI tính toán lời khuyên định mức.",
+                                icon = Icons.Default.Lightbulb,
+                                tint = Color(0xFF78909C)
                             )
                         )
                     }
 
-                    // --- 2. GOALS & TÍCH LŨY (Mục tiêu) ---
-                    val nearGoalvault = savingsGoals.find { 
-                        it.targetAmount > 0.0 && 
-                        (it.currentAmount / it.targetAmount) >= 0.8 && it.currentAmount < it.targetAmount 
-                    }
-                    if (nearGoalvault != null) {
-                        val remaining = nearGoalvault.targetAmount - nearGoalvault.currentAmount
-                        insightsList.add(
-                            SmartSpendingInsight(
-                                title = "Mục tiêu '${nearGoalvault.name}' sắp hoàn thành",
-                                description = "Tuyệt vời! Chỉ còn ${FormatHelper.formatVND(remaining)} nữa là bạn chạm đích. Tiếp tục phát huy!",
-                                icon = Icons.Default.EmojiEvents,
-                                tint = Color(0xFF4CAF50),
-                                score = 98
-                            )
-                        )
-                    }
-
-                    val completedVault = savingsGoals.find { it.targetAmount > 0.0 && it.currentAmount >= it.targetAmount }
-                    if (completedVault != null) {
-                        insightsList.add(
-                            SmartSpendingInsight(
-                                title = "Thành tựu: Đạt mục tiêu '${completedVault.name}'",
-                                description = "Chúc mừng! Bạn đã hoàn thành 100% mục tiêu tích lũy này.",
-                                icon = Icons.Default.Celebration,
-                                tint = Color(0xFF9C27B0),
-                                score = 85
-                            )
-                        )
-                    }
-
-                    // --- 3. PHÂN TÍCH HÀNH VI CHI TIÊU & XU HƯỚNG ---
+                    // --- 3. EVALUATIONS (Đánh giá xu hướng) ---
+                    val exps = transactions.filter { it.type == "EXPENSE" }
                     if (exps.isNotEmpty()) {
-                        // So sánh tuần này & trước
-                        val cWeek = exps.filter { now - it.timestamp <= 7 * MS_DAY }.sumOf { it.amount }
+                        val cWeek = exps.filter { now - it.timestamp <= 7 * oneDay }.sumOf { it.amount }
                         val pWeek = exps.filter { 
                             val diff = now - it.timestamp
-                            diff > 7 * MS_DAY && diff <= 14 * MS_DAY 
+                            diff > 7 * oneDay && diff <= 14 * oneDay 
                         }.sumOf { it.amount }
 
-                        if (pWeek > 0.0) {
-                            val diffPercent = ((cWeek - pWeek) / pWeek * 100).toInt()
-                            if (diffPercent < 0) {
-                                insightsList.add(
+                        val allCategoryNames = transactions.map { it.categoryName }.distinct()
+                        var foundCatEval = false
+                        for (catName in allCategoryNames) {
+                            val cCatSpent = exps.filter { it.categoryName == catName && now - it.timestamp <= 7 * oneDay }.sumOf { it.amount }
+                            val pCatSpent = exps.filter { 
+                                it.categoryName == catName && (now - it.timestamp) > 7 * oneDay && (now - it.timestamp) <= 14 * oneDay 
+                            }.sumOf { it.amount }
+                            
+                            if (pCatSpent > 0.0) {
+                                val change = ((pCatSpent - cCatSpent) / pCatSpent * 100).toInt()
+                                if (change >= 20) {
+                                    evaluations.add(
+                                        SmartSpendingInsight(
+                                            title = "Đánh giá: Giảm chi '${catName}'",
+                                            description = "Chúc mừng! Bạn đã cắt giảm thành công chi phí nhóm '${catName}' đi ${change}% so với tuần trước.",
+                                            icon = Icons.Default.TrendingDown,
+                                            tint = Color(0xFF4CAF50)
+                                        )
+                                    )
+                                    foundCatEval = true
+                                } else if (change <= -30) {
+                                    evaluations.add(
+                                        SmartSpendingInsight(
+                                            title = "Đánh giá: Tăng chi '${catName}'",
+                                            description = "Cảnh báo: Chi phí dành cho nhóm '${catName}' đang tăng mạnh thêm ${-change}% so với tuần trước.",
+                                            icon = Icons.Default.TrendingUp,
+                                            tint = Color(0xFFF44336)
+                                        )
+                                    )
+                                    foundCatEval = true
+                                }
+                            }
+                        }
+                        
+                        if (!foundCatEval && pWeek > 0.0) {
+                            val diffPercent = ((pWeek - cWeek) / pWeek * 100).toInt()
+                            if (diffPercent >= 10) {
+                                evaluations.add(
                                     SmartSpendingInsight(
-                                        title = "Tiết chế chi tiêu tốt",
-                                        description = "Tuần này bạn tiêu ít hơn tuần trước ${-diffPercent}%. Rất đáng khen ngợi!",
-                                        icon = Icons.AutoMirrored.Filled.TrendingDown,
-                                        tint = Color(0xFF4CAF50),
-                                        score = 90
+                                        title = "Đánh giá chung: Tiết kiệm tốt",
+                                        description = "Tổng chi tiêu tuần này giảm ${diffPercent}% so với tuần trước. Bạn quản lý ngân sách rất tốt!",
+                                        icon = Icons.Default.CheckCircle,
+                                        tint = Color(0xFF4CAF50)
                                     )
                                 )
-                            } else if (diffPercent > 30) {
-                                insightsList.add(
+                            } else if (diffPercent <= -20) {
+                                evaluations.add(
                                     SmartSpendingInsight(
-                                        title = "Chi tiêu tăng vọt bất thường",
-                                        description = "Tuần này chi phí của bạn tăng đột biến ${diffPercent}% so với tuần trước. Hãy kiểm tra lại lịch sử giao dịch.",
-                                        icon = Icons.Default.SsidChart,
-                                        tint = Color(0xFFE91E63),
-                                        score = 88
+                                        title = "Đánh giá chung: Tăng chi tiêu",
+                                        description = "Tổng chi tiêu tuần này đang tăng ${-diffPercent}% so với tuần trước. Cần rà soát các khoản chi lớn.",
+                                        icon = Icons.Default.TrendingUp,
+                                        tint = Color(0xFFE91E63)
                                     )
                                 )
                             }
                         }
-
-                        // Khoản chi định kỳ (Recurring bills)
-                        val specNotes = exps.filter { it.note.isNotBlank() && now - it.timestamp <= 30 * MS_DAY }
-                            .groupBy { it.note.trim().lowercase() }
-                            .mapValues { it.value.size }
-
-                        val topNoteMatch = specNotes.entries.filter { it.value >= 3 }.maxByOrNull { it.value }
-                        if (topNoteMatch != null) {
-                            val item = exps.first { it.note.trim().lowercase() == topNoteMatch.key }
-                            insightsList.add(
-                                SmartSpendingInsight(
-                                    title = "Phát hiện khoản chi lặp lại",
-                                    description = "Giao dịch '${item.note}' xuất hiện thường xuyên. Hãy chắc chắn bạn đã chuẩn bị đủ số dư cho các kỳ tiếp theo.",
-                                    icon = Icons.Default.Sync,
-                                    tint = Color(0xFF2196F3),
-                                    score = 75
-                                )
-                            )
-                        }
-                    } else {
-                        insightsList.add(
+                    }
+                    
+                    if (evaluations.isEmpty()) {
+                        evaluations.add(
                             SmartSpendingInsight(
-                                title = "Khởi tạo dữ liệu sinh trắc",
-                                description = "Thêm các khoản chi tiêu để AI học hỏi và đưa ra những gợi ý phù hợp nhất.",
-                                icon = Icons.Default.Lightbulb,
-                                tint = Color(0xFFA0A0A0)
+                                title = "Chưa có đánh giá",
+                                description = "Tiếp tục chi tiêu và ghi chép để AI đánh giá và so sánh định kỳ giữa các tuần.",
+                                icon = Icons.Default.History,
+                                tint = Color(0xFF90A4AE)
                             )
                         )
                     }
 
-                    insightsList.sortedByDescending { it.score }.take(3)
+                    Triple(riskAlerts, recommendations, evaluations)
                 }
 
                 // Financial Health Score UI
@@ -1117,48 +1214,42 @@ fun DashboardScreen(
                     )
                 }
 
-                computedInsights.forEachIndexed { idx, ins ->
-                    if (idx > 0) {
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            thickness = 0.5.dp
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().animateContentSize(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(ins.tint.copy(alpha = 0.1f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = ins.icon,
-                                contentDescription = ins.title,
-                                tint = ins.tint,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                // 1. RISK ALERTS SECTION
+                Text(
+                    text = "⚠️ Cảnh báo rủi ro",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                aiAdvisorData.first.take(2).forEach { ins ->
+                    InsightRow(ins)
+                }
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = ins.title,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = ins.description,
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 15.sp
-                            )
-                        }
-                    }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
+
+                // 2. RECOMMENDATIONS SECTION
+                Text(
+                    text = "💡 Khuyến nghị",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                aiAdvisorData.second.take(2).forEach { ins ->
+                    InsightRow(ins)
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
+
+                // 3. EVALUATIONS SECTION
+                Text(
+                    text = "📊 Đánh giá xu hướng",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                aiAdvisorData.third.take(2).forEach { ins ->
+                    InsightRow(ins)
                 }
             }
         }
@@ -1316,5 +1407,44 @@ data class SmartSpendingInsight(
     val tint: Color,
     val score: Int = 0
 )
+
+@Composable
+private fun InsightRow(ins: SmartSpendingInsight) {
+    Row(
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .background(ins.tint.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = ins.icon,
+                contentDescription = ins.title,
+                tint = ins.tint,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = ins.title,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = ins.description,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
 
 

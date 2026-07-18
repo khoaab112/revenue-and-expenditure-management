@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.FinanceViewModel
 import com.example.ui.FormatHelper
 import com.example.ui.IconMapper
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.draw.alpha
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,6 +119,20 @@ fun ReportsScreen(
 
     var selectedCategoryForHistory by remember { mutableStateOf<String?>(null) }
     var selectedReportType by remember { mutableStateOf("EXPENSE") } // or INCOME
+    var selectedCategoryName by remember { mutableStateOf<String?>(null) }
+    
+    val animProgress = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(activeMonth, selectedReportType) {
+        selectedCategoryName = null
+        animProgress.snapTo(0f)
+        animProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = androidx.compose.animation.core.tween(
+                durationMillis = 800,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing
+            )
+        )
+    }
 
     if (selectedCategoryForHistory != null) {
         com.example.ui.components.CategoryTransactionsDialog(
@@ -256,8 +273,24 @@ fun ReportsScreen(
             }
         }
 
-        // --- Custom Canvas category expenditure chart ---
-        if (totalExpenses == 0.0) {
+        // --- Selector tab row ---
+        Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f))) {
+            Box(modifier = Modifier.weight(1f).clickable { selectedReportType = "EXPENSE" }.background(if (selectedReportType == "EXPENSE") MaterialTheme.colorScheme.primary else Color.Transparent).padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                Text("Khoản chi", fontWeight = FontWeight.Bold, color = if (selectedReportType == "EXPENSE") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+            }
+            Box(modifier = Modifier.weight(1f).clickable { selectedReportType = "INCOME" }.background(if (selectedReportType == "INCOME") MaterialTheme.colorScheme.primary else Color.Transparent).padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                Text("Khoản thu", fontWeight = FontWeight.Bold, color = if (selectedReportType == "INCOME") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        val currentTotal = if (selectedReportType == "EXPENSE") totalExpenses else totalIncome
+        val currentCategories = if (selectedReportType == "EXPENSE") categoryExpenses else categoryIncomes
+        val chartTitle = if (selectedReportType == "EXPENSE") "BIỂU ĐỒ PHÂN BỔ CHI TIÊU" else "BIỂU ĐỒ PHÂN BỔ THU NHẬP"
+        val totalLabel = if (selectedReportType == "EXPENSE") "Tổng chi" else "Tổng thu"
+        val totalColor = if (selectedReportType == "EXPENSE") Color(0xFFF44336) else Color(0xFF4CAF50)
+
+        if (currentTotal == 0.0) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -273,7 +306,7 @@ fun ReportsScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Không phát sinh chi tiêu trong tháng này",
+                        text = if (selectedReportType == "EXPENSE") "Không phát sinh chi tiêu trong tháng này" else "Không phát sinh thu nhập trong tháng này",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -292,23 +325,72 @@ fun ReportsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "BIỂU ĐỒ PHÂN BỔ CHI TIÊU",
+                        text = chartTitle,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    // Canvas-based multi-colored donut chart
+                    // Canvas-based donut chart
                     Box(
                         modifier = Modifier.size(200.dp).testTag("report_canvas_donut_box"),
                         contentAlignment = Alignment.Center
                     ) {
-                        Canvas(modifier = Modifier.size(160.dp)) {
+                        val density = androidx.compose.ui.platform.LocalDensity.current
+                        val strokeWidthPx = with(density) { 28.dp.toPx() }
+                        val radiusPx = with(density) { 160.dp.toPx() / 2f }
+                        val innerRadius = radiusPx - strokeWidthPx / 2f
+                        val outerRadius = radiusPx + strokeWidthPx / 2f
+
+                        Canvas(
+                            modifier = Modifier
+                                .size(160.dp)
+                                .pointerInput(currentCategories, currentTotal, animProgress.value) {
+                                    detectTapGestures { offset ->
+                                        val centerX = size.width / 2f
+                                        val centerY = size.height / 2f
+                                        val dx = offset.x - centerX
+                                        val dy = offset.y - centerY
+                                        val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                                        
+                                        if (distance in innerRadius..outerRadius) {
+                                            var angleRad = Math.atan2(dy.toDouble(), dx.toDouble())
+                                            var angleDeg = Math.toDegrees(angleRad).toFloat()
+                                            if (angleDeg < 0) {
+                                                angleDeg += 360f
+                                            }
+                                            var adjustedAngle = angleDeg - 270f
+                                            if (adjustedAngle < 0) {
+                                                adjustedAngle += 360f
+                                            }
+                                            
+                                            var accumulatedAngle = 0f
+                                            var found = false
+                                            for (cat in currentCategories) {
+                                                val sweepAngle = (cat.amount / currentTotal * 360f).toFloat() * animProgress.value
+                                                if (adjustedAngle >= accumulatedAngle && adjustedAngle < accumulatedAngle + sweepAngle) {
+                                                    selectedCategoryName = if (selectedCategoryName == cat.name) null else cat.name
+                                                    found = true
+                                                    break
+                                                }
+                                                accumulatedAngle += sweepAngle
+                                            }
+                                            if (!found) {
+                                                selectedCategoryName = null
+                                            }
+                                        } else {
+                                            selectedCategoryName = null
+                                        }
+                                    }
+                                }
+                        ) {
                             var startAngle = -90f
-                            for (cat in categoryExpenses) {
-                                val sweepAngle = (cat.amount / totalExpenses * 360f).toFloat()
+                            for (cat in currentCategories) {
+                                val sweepAngle = (cat.amount / currentTotal * 360f).toFloat() * animProgress.value
+                                val isSelected = selectedCategoryName == cat.name
+                                val alpha = if (selectedCategoryName == null || isSelected) 1f else 0.2f
                                 drawArc(
-                                    color = FormatHelper.parseColor(cat.colorHex),
+                                    color = FormatHelper.parseColor(cat.colorHex).copy(alpha = alpha),
                                     startAngle = startAngle,
                                     sweepAngle = sweepAngle,
                                     useCenter = false,
@@ -318,17 +400,25 @@ fun ReportsScreen(
                             }
                         }
 
+                        // Display selected category's info in center if any, otherwise global total
+                        val selectedCat = remember(selectedCategoryName, currentCategories) {
+                            currentCategories.firstOrNull { it.name == selectedCategoryName }
+                        }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Tổng chi",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = selectedCat?.name ?: totalLabel,
+                                fontSize = 14.sp,
+                                fontWeight = if (selectedCat != null) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedCat != null) FormatHelper.parseColor(selectedCat.colorHex) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 24.dp)
                             )
                             Text(
-                                text = FormatHelper.formatVND(totalExpenses),
+                                text = FormatHelper.formatVND(selectedCat?.amount ?: currentTotal),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Black,
-                                color = Color(0xFFF44336)
+                                color = if (selectedCat != null) FormatHelper.parseColor(selectedCat.colorHex) else totalColor
                             )
                         }
                     }
@@ -339,9 +429,18 @@ fun ReportsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        categoryExpenses.take(5).forEach { cat ->
+                        currentCategories.take(5).forEach { cat ->
+                            val isSelected = selectedCategoryName == cat.name
+                            val alpha = if (selectedCategoryName == null || isSelected) 1f else 0.3f
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        selectedCategoryName = if (selectedCategoryName == cat.name) null else cat.name
+                                    }
+                                    .padding(vertical = 6.dp, horizontal = 4.dp)
+                                    .alpha(alpha),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -358,14 +457,15 @@ fun ReportsScreen(
                                     Text(
                                         text = cat.name,
                                         fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) FormatHelper.parseColor(cat.colorHex) else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 Text(
                                     text = "${String.format("%.1f", cat.percentage)}%",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = if (isSelected) FormatHelper.parseColor(cat.colorHex) else MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -374,15 +474,6 @@ fun ReportsScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f))) {
-                Box(modifier = Modifier.weight(1f).clickable { selectedReportType = "EXPENSE" }.background(if (selectedReportType == "EXPENSE") MaterialTheme.colorScheme.primary else Color.Transparent).padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                    Text("Khoản chi", fontWeight = FontWeight.Bold, color = if (selectedReportType == "EXPENSE") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
-                }
-                Box(modifier = Modifier.weight(1f).clickable { selectedReportType = "INCOME" }.background(if (selectedReportType == "INCOME") MaterialTheme.colorScheme.primary else Color.Transparent).padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                    Text("Khoản thu", fontWeight = FontWeight.Bold, color = if (selectedReportType == "INCOME") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
 
             // Category detail breakdown list
             Text(
@@ -398,13 +489,18 @@ fun ReportsScreen(
             ) {
                 val displayCategories = if (selectedReportType == "EXPENSE") categoryExpenses else categoryIncomes
                 displayCategories.forEach { cat ->
+                    val isSelected = selectedCategoryName == cat.name
+                    val alpha = if (selectedCategoryName == null || isSelected) 1f else 0.3f
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
-                            .clickable { selectedCategoryForHistory = cat.name }
-                            .padding(16.dp),
+                            .clickable {
+                                selectedCategoryName = if (selectedCategoryName == cat.name) null else cat.name
+                            }
+                            .padding(16.dp)
+                            .alpha(alpha),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
@@ -445,11 +541,23 @@ fun ReportsScreen(
                                     fontWeight = FontWeight.Black,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
-                                Text(
-                                    text = "${String.format("%.1f", cat.percentage)}%",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                if (isSelected) {
+                                    Text(
+                                        text = "Xem lịch sử ➜",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.clickable {
+                                            selectedCategoryForHistory = cat.name
+                                        }
+                                    )
+                                } else {
+                                    Text(
+                                        text = "${String.format("%.1f", cat.percentage)}%",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         }
 
