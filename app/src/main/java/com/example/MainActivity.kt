@@ -722,8 +722,10 @@ fun NavHostContainer(
         }
     ) {
         composable(Routes.DASHBOARD) {
+            val canPop = navController.previousBackStackEntry != null
             DashboardScreen(
                 viewModel = viewModel,
+                onNavigateBack = if (canPop) { { navController.popBackStack() } } else null,
                 onNavigateToWallets = { wallet ->
                     if (wallet != null) {
                         viewModel.setFocusedWalletId(wallet.id)

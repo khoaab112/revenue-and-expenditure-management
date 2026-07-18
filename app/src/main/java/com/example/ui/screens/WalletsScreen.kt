@@ -809,9 +809,19 @@ fun AdjustWalletFlowDialog(
                                     }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(onClick = onDismiss) { Text("Đóng") }
+                                Button(
+                                    onClick = onDismiss,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.defaultMinSize(minWidth = 80.dp)
+                                ) {
+                                    Text("Đóng", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }

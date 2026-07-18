@@ -233,12 +233,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         dailyTransactions = combine(repository.allTransactions, repository.allWallets) { txs, wts ->
             val savingsIds = wts.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
-            txs.filter { it.walletId !in savingsIds }
+            txs.filter { it.walletId !in savingsIds || (it.destinationWalletId != null && it.destinationWalletId !in savingsIds) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         savingsTransactions = combine(repository.allTransactions, repository.allWallets) { txs, wts ->
             val savingsIds = wts.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
-            txs.filter { it.walletId in savingsIds }
+            txs.filter { it.walletId in savingsIds || (it.destinationWalletId != null && it.destinationWalletId in savingsIds) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         allBudgets = repository.getAllBudgets()
@@ -1488,6 +1488,32 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun deleteWallet(wallet: Wallet) {
         viewModelScope.launch {
             repository.deleteWallet(wallet)
+        }
+    }
+
+    fun closeSavingsVault(vault: Wallet, targetWalletId: Int?) {
+        viewModelScope.launch {
+            val freshVault = repository.getWalletById(vault.id) ?: vault
+            if (freshVault.balance > 0 && targetWalletId != null) {
+                val targetWallet = repository.getWalletById(targetWalletId)
+                if (targetWallet != null) {
+                    val transferTx = Transaction(
+                        walletId = freshVault.id,
+                        walletName = freshVault.name,
+                        type = "TRANSFER",
+                        amount = freshVault.balance,
+                        categoryName = "Đóng hũ tiết kiệm",
+                        categoryIcon = "Savings",
+                        categoryColor = freshVault.colorHex,
+                        note = "Chuyển số dư tích lũy về ví ${targetWallet.name} để đóng hũ",
+                        timestamp = System.currentTimeMillis(),
+                        destinationWalletId = targetWallet.id
+                    )
+                    repository.insertTransaction(transferTx)
+                }
+            }
+            val updatedVault = freshVault.copy(isClosed = true, balance = 0.0)
+            repository.updateWallet(updatedVault)
         }
     }
 

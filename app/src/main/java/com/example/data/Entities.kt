@@ -11,7 +11,9 @@ data class Wallet(
     val balance: Double,
     val colorHex: String,
     val iconName: String,
-    val displayOrder: Int = 0
+    val displayOrder: Int = 0,
+    val createdAt: Long = System.currentTimeMillis(),
+    val isClosed: Boolean = false
 )
 
 @Entity(tableName = "transactions")
