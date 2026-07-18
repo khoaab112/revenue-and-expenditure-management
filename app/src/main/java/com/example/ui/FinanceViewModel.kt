@@ -221,7 +221,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         isDatabaseEmpty = repository.allWallets
             .map { it.isEmpty() }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
         allTransactions = repository.allTransactions
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -286,6 +286,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         // Check settings and default data
         viewModelScope.launch {
+            try {
+                repository.allWallets.first()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             loadCategories()
             loadSecuritySettings()
             loadNotificationSettings()
