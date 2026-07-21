@@ -1,0 +1,766 @@
+package com.app.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.app.ui.FinanceViewModel
+import com.app.ui.FormatHelper
+import com.app.ui.IconMapper
+import com.app.ui.components.CustomMoneyInputField
+import java.text.SimpleDateFormat
+import java.util.Locale
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SavingsVaultScreen(
+    viewModel: FinanceViewModel,
+    onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
+    val dailyWallets by viewModel.dailyWallets.collectAsState()
+    val savingsWallets by viewModel.savingsWallets.collectAsState()
+    val savingsTransactions by viewModel.savingsTransactions.collectAsState()
+    
+    val sortedVaults = remember(savingsWallets) {
+        savingsWallets.sortedWith(compareBy<com.app.data.Wallet> { it.isClosed }.thenByDescending { it.createdAt })
+    }
+    
+    // Quick Add Savings Wallet State
+    var showQuickAddWallet by remember { mutableStateOf(false) }
+    var newSavingsWalletName by remember { mutableStateOf("") }
+    var newSavingsWalletGoalStr by remember { mutableStateOf("") }
+    
+    var savingsWalletToClose by remember { mutableStateOf<com.app.data.Wallet?>(null) }
+    var savingsWalletToDelete by remember { mutableStateOf<com.app.data.Wallet?>(null) }
+    var closeVaultTargetWalletId by remember { mutableStateOf<Int?>(null) }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    // Detail View State
+    var selectedVaultDetails by remember { mutableStateOf<com.app.data.Wallet?>(null) }
+    var selectedTabIndex by remember { mutableStateOf(0) } // 0 = Lịch sử, 1 = Giao dịch
+    
+    // Transaction Panel State
+    var isDeposit by remember { mutableStateOf(true) } // true for Deposit (Gửi), false for withdraw (Rút)
+    var amountStr by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var selectedDailyWalletId by remember { mutableStateOf<Int?>(null) } // Everyday transaction source / target
+
+    if (savingsWalletToClose != null) {
+        val vault = savingsWalletToClose!!
+        val hasBalance = vault.balance > 0
+        
+        // Auto-select first wallet if available
+        LaunchedEffect(vault.id) {
+            if (dailyWallets.isNotEmpty()) {
+                closeVaultTargetWalletId = dailyWallets.first().id
+            } else {
+                closeVaultTargetWalletId = null
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { 
+                savingsWalletToClose = null
+                dropdownExpanded = false
+            },
+            title = { Text("Đóng hũ tiết kiệm?", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (hasBalance) {
+                        Text(
+                            text = "Chọn ví để chuyển toàn bộ số tiền còn lại của hũ về ví đã chọn",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 280.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(dailyWallets.size) { index ->
+                                val w = dailyWallets[index]
+                                val isWalletSelected = closeVaultTargetWalletId == w.id
+                                WalletBigCard(
+                                    wallet = w,
+                                    isSelected = isWalletSelected,
+                                    onSelect = { closeVaultTargetWalletId = w.id },
+                                    onDelete = {},
+                                    showDeleteButton = false,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Bạn có chắc chắn muốn đóng hũ tiết kiệm '${vault.name}'? Hũ tiết kiệm này hiện không có số dư. Hũ sẽ được đóng trực tiếp.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (!hasBalance || closeVaultTargetWalletId != null) {
+                            viewModel.closeSavingsVault(vault, closeVaultTargetWalletId)
+                            if (selectedVaultDetails?.id == vault.id) {
+                                selectedVaultDetails = null
+                            }
+                            savingsWalletToClose = null
+                        }
+                    },
+                    enabled = !hasBalance || closeVaultTargetWalletId != null,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Đồng ý", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { 
+                        savingsWalletToClose = null
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Hủy", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (savingsWalletToDelete != null) {
+        val vault = savingsWalletToDelete!!
+        AlertDialog(
+            onDismissRequest = { savingsWalletToDelete = null },
+            title = { Text("Xác nhận xóa hũ tiết kiệm?", fontWeight = FontWeight.Bold) },
+            text = { Text("Bạn có chắc chắn muốn xóa hoàn toàn hũ tiết kiệm '${vault.name}' khỏi hệ thống? Hành động này cũng sẽ xóa lịch sử tích lũy liên quan và không thể phục hồi.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteWallet(vault)
+                        viewModel.showSuccessNotification("Xóa hũ tiết kiệm thành công")
+                        if (selectedVaultDetails?.id == vault.id) {
+                            selectedVaultDetails = null
+                        }
+                        savingsWalletToDelete = null
+                    }
+                ) {
+                    Text("XÓA", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { savingsWalletToDelete = null }) {
+                    Text("HỦY")
+                }
+            }
+        )
+    }
+
+    val totalSavings = remember(savingsWallets) { savingsWallets.sumOf { it.balance } }
+
+    Scaffold(
+        topBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Text(
+                    text = "QUẢN LÝ SỔ & HŨ TIẾT KIỆM", 
+                    fontSize = 18.sp, 
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                // SAVINGS KPI TOTAL ACCUMULATOR
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Tổng quỹ tiết kiệm", 
+                            fontSize = 14.sp, 
+                            fontWeight = FontWeight.Bold, 
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = FormatHelper.formatVND(totalSavings),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            item {
+                // --- SAVINGS WALLETS COLUMN ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Danh sách", fontSize = 12.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                    IconButton(onClick = { showQuickAddWallet = !showQuickAddWallet }) {
+                        Icon(imageVector = if (showQuickAddWallet) Icons.Default.Remove else Icons.Default.AddCircle, contentDescription = "Toggle add", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+
+            if (showQuickAddWallet) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("KHỞI TẠO HŨ TIẾT KIỆM MỚI", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            OutlinedTextField(
+                                value = newSavingsWalletName,
+                                onValueChange = { newSavingsWalletName = it },
+                                label = { Text("Tên hũ tích lũy") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            CustomMoneyInputField(
+                                value = newSavingsWalletGoalStr,
+                                onValueChange = { newSavingsWalletGoalStr = it },
+                                label = "Số dư tích lũy ban đầu (đ)",
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Button(
+                                onClick = {
+                                    if (newSavingsWalletName.isNotBlank()) {
+                                        val initialBalance = newSavingsWalletGoalStr.toDoubleOrNull() ?: 0.0
+                                        viewModel.addWallet(
+                                            name = newSavingsWalletName,
+                                            type = "SAVINGS",
+                                            initialBalance = initialBalance,
+                                            colorHex = "#9C27B0", // Savings Purple standard
+                                            iconName = "Savings"
+                                        )
+                                        viewModel.showSuccessNotification("Khởi tạo hũ tích lũy thành công!")
+                                        newSavingsWalletName = ""
+                                        newSavingsWalletGoalStr = ""
+                                        showQuickAddWallet = false
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Khởi tạo hũ")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (sortedVaults.isEmpty()) {
+                item {
+                    Text("Chưa có hũ tiết kiệm nào. Vui lòng bấm dấu (+) bên trên để khởi tạo hũ!", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                items(sortedVaults, key = { it.id }) { wt ->
+                    val isSelected = selectedVaultDetails?.id == wt.id
+                    ListItem(
+                        headlineContent = { 
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(wt.name, fontWeight = FontWeight.Bold)
+                                if (wt.isClosed) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "ĐÃ ĐÓNG", 
+                                            fontSize = 8.sp, 
+                                            fontWeight = FontWeight.Bold, 
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        supportingContent = { 
+                            val dateStr = remember(wt.createdAt) {
+                                if (wt.createdAt > 0) {
+                                    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                    "Ngày tạo: " + sdf.format(java.util.Date(wt.createdAt))
+                                } else {
+                                    ""
+                                }
+                            }
+                            val prefix = if (wt.isClosed) "[ĐÃ ĐÓNG] " else ""
+                            Text(
+                                text = "${prefix}Hũ Tích Lũy • ${FormatHelper.formatVND(wt.balance)}" + if (dateStr.isNotEmpty()) " • $dateStr" else "",
+                                fontSize = 11.sp
+                            )
+                        },
+                        leadingContent = {
+                            Icon(imageVector = Icons.Default.Savings, contentDescription = "Savings", tint = FormatHelper.parseColor(wt.colorHex))
+                        },
+                        trailingContent = {
+                            if (!wt.isClosed) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    IconButton(onClick = { savingsWalletToClose = wt }) {
+                                        Icon(imageVector = Icons.Default.Archive, contentDescription = "Đóng hũ", tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                    IconButton(onClick = { savingsWalletToDelete = wt }) {
+                                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Xóa hũ", tint = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .then(if (wt.isClosed) Modifier.alpha(0.55f) else Modifier)
+                            .background(
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .border(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable { 
+                                if (isSelected) {
+                                    selectedVaultDetails = null
+                                } else {
+                                    selectedVaultDetails = wt
+                                    selectedTabIndex = 0
+                                }
+                            }
+                    )
+                }
+            }
+
+            // TABS AND CONTENT FOR SELECTED WALLET
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 8.dp))
+                
+                if (selectedVaultDetails != null) {
+                    val vaultDetails = savingsWallets.find { it.id == selectedVaultDetails?.id } ?: selectedVaultDetails!!
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "HŨ ĐANG CHỌN: ${vaultDetails.name.uppercase()}", 
+                                fontSize = 12.sp, 
+                                fontWeight = FontWeight.Black, 
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            if (vaultDetails.createdAt > 0) {
+                                val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                Text(
+                                    text = "Ngày tạo: ${sdf.format(java.util.Date(vaultDetails.createdAt))}",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Số dư: ${FormatHelper.formatVND(vaultDetails.balance)}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+
+                TabRow(selectedTabIndex = selectedTabIndex, modifier = Modifier.padding(top = 8.dp)) {
+                    Tab(
+                        selected = selectedTabIndex == 0,
+                        onClick = { selectedTabIndex = 0 },
+                        text = { Text("Lịch sử", fontWeight = FontWeight.Bold) }
+                    )
+                    Tab(
+                        selected = selectedTabIndex == 1,
+                        onClick = { selectedTabIndex = 1 },
+                        text = { Text("Giao dịch", fontWeight = FontWeight.Bold) }
+                    )
+                }
+            }
+
+            if (selectedVaultDetails == null) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Inbox,
+                                contentDescription = "Empty",
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "Hãy chọn hũ để xem chi tiết",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            } else {
+                val vaultDetails = savingsWallets.find { it.id == selectedVaultDetails?.id } ?: selectedVaultDetails!!
+                val specificVaultTxs = savingsTransactions.filter { it.walletId == vaultDetails.id || it.destinationWalletId == vaultDetails.id }
+
+                if (selectedTabIndex == 0) {
+                    if (specificVaultTxs.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Không có lịch sử biến động.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    } else {
+                        val groupedTxs = specificVaultTxs.groupBy { FormatHelper.formatDate(it.timestamp) }
+                        groupedTxs.forEach { (dateStr, txList) ->
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 10.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = "Date",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = dateStr,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
+                            items(txList, key = { it.id }) { tx ->
+                                val isIncrease = tx.type == "INCOME" || (tx.type == "TRANSFER" && tx.destinationWalletId == vaultDetails.id)
+                                val statusColor = if (isIncrease) Color(0xFF4CAF50) else Color(0xFFF44336)
+                                ListItem(
+                                    headlineContent = { 
+                                        Text(
+                                            text = tx.categoryName, 
+                                            fontWeight = FontWeight.Medium, 
+                                            fontSize = 13.sp, 
+                                            maxLines = 1,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        ) 
+                                    },
+                                    supportingContent = {
+                                        Text(
+                                            text = "${tx.walletName}${if(tx.note.isNotBlank()) " • " + tx.note else ""} • ${SimpleDateFormat("HH:mm", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).format(tx.timestamp)}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                        )
+                                    },
+                                    leadingContent = {
+                                        Icon(
+                                            imageVector = if (isIncrease) Icons.Default.Add else Icons.Default.Remove,
+                                            contentDescription = tx.type,
+                                            tint = statusColor
+                                        )
+                                    },
+                                    trailingContent = {
+                                        Text(
+                                            text = "${if (isIncrease) "+" else "-"}${FormatHelper.formatVND(tx.amount)}",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = statusColor
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .padding(vertical = 2.dp)
+                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                                        .border(1.dp, statusColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                )
+                            }
+                        }
+                    }
+                } else if (selectedTabIndex == 1) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Gửi hoặc Rút Tab rows
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = { isDeposit = true },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isDeposit) Color(0xFF4CAF50) else MaterialTheme.colorScheme.surfaceVariant,
+                                            contentColor = if (isDeposit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    ) {
+                                        Text("Nạp", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    }
+                                    Button(
+                                        onClick = { isDeposit = false },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (!isDeposit) Color(0xFFF44336) else MaterialTheme.colorScheme.surfaceVariant,
+                                            contentColor = if (!isDeposit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    ) {
+                                        Text("Rút", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    }
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically, 
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CustomMoneyInputField(
+                                        value = amountStr,
+                                        onValueChange = { amountStr = it },
+                                        label = "Số tiền",
+                                        modifier = Modifier.weight(1f).testTag("savings_amount_input")
+                                    )
+                                    if (!isDeposit) {
+                                        Button(
+                                            onClick = { 
+                                                amountStr = vaultDetails.balance.toLong().toString()
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp),
+                                            modifier = Modifier.height(56.dp)
+                                        ) {
+                                            Text("Rút toàn bộ", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = note,
+                                    onValueChange = { note = it },
+                                    label = { Text("Nội dung ghi chú") },
+                                    modifier = Modifier.fillMaxWidth().testTag("savings_note_input")
+                                )
+
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = if (isDeposit) "Trích xuất từ ví thường:" else "Chuyển tiền về ví thường:",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        val checkedVal = selectedDailyWalletId != null
+                                        Switch(
+                                            checked = checkedVal,
+                                            onCheckedChange = { isChecked ->
+                                                if (isChecked && dailyWallets.isNotEmpty()) {
+                                                    selectedDailyWalletId = dailyWallets.first().id
+                                                } else {
+                                                    selectedDailyWalletId = null
+                                                }
+                                            }
+                                        )
+                                    }
+                                    
+                                    if (selectedDailyWalletId != null) {
+                                        @OptIn(ExperimentalLayoutApi::class)
+                                        androidx.compose.foundation.layout.FlowRow(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            dailyWallets.forEach { wt ->
+                                                val isSelected = selectedDailyWalletId == wt.id
+                                                Surface(
+                                                    onClick = { selectedDailyWalletId = wt.id },
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                                    border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = IconMapper.getIconByName(wt.iconName),
+                                                            contentDescription = wt.name,
+                                                            tint = try { FormatHelper.parseColor(wt.colorHex) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                        Text(
+                                                            text = "${wt.name} (${FormatHelper.formatVND(wt.balance)})",
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Button(
+                                    onClick = {
+                                        val amount = amountStr.toDoubleOrNull() ?: 0.0
+                                        val tgtWalletId = vaultDetails.id
+                                        if (amount > 0.0) {
+                                            val now = System.currentTimeMillis()
+                                            
+                                            if (isDeposit) {
+                                                if (selectedDailyWalletId != null) {
+                                                    viewModel.addTransaction(
+                                                        walletId = selectedDailyWalletId!!,
+                                                        type = "TRANSFER",
+                                                        amount = amount,
+                                                        categoryName = "Chuyển tiền",
+                                                        note = note.ifEmpty { "Nạp quỹ tiết kiệm '${vaultDetails.name}'" },
+                                                        timestamp = now,
+                                                        destinationWalletId = tgtWalletId
+                                                    )
+                                                } else {
+                                                    viewModel.addTransaction(
+                                                        walletId = tgtWalletId,
+                                                        type = "INCOME",
+                                                        amount = amount,
+                                                        categoryName = "Tiết kiệm",
+                                                        note = note.ifEmpty { "Gửi tiền hũ tiết kiệm" },
+                                                        timestamp = now
+                                                    )
+                                                }
+                                            } else {
+                                                if (selectedDailyWalletId != null) {
+                                                    viewModel.addTransaction(
+                                                        walletId = tgtWalletId,
+                                                        type = "TRANSFER",
+                                                        amount = amount,
+                                                        categoryName = "Chuyển tiền",
+                                                        note = note.ifEmpty { "Rút tiền từ hũ '${vaultDetails.name}' về ví" },
+                                                        timestamp = now,
+                                                        destinationWalletId = selectedDailyWalletId!!
+                                                    )
+                                                } else {
+                                                    viewModel.addTransaction(
+                                                        walletId = tgtWalletId,
+                                                        type = "EXPENSE",
+                                                        amount = amount,
+                                                        categoryName = "Tiết kiệm",
+                                                        note = note.ifEmpty { "Rút tiền hũ tiết kiệm" },
+                                                        timestamp = now
+                                                    )
+                                                }
+                                            }
+                                            
+                                            amountStr = ""
+                                            note = ""
+                                            selectedDailyWalletId = null
+                                            focusManager.clearFocus()
+                                            viewModel.showSuccessNotification("Thực hiện giao dịch thành công!")
+                                        } else {
+                                            viewModel.showWarningNotification("Vui lòng nhập số tiền lớn hơn 0")
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().testTag("add_savings_transaction_confirm"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (isDeposit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                                ) {
+                                    Text(if (isDeposit) "Thực hiện Nạp" else "Thực hiện Rút", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                item {
+                    Spacer(modifier = Modifier.height(32.dp)) // bottom padding
+                }
+            }
+        }
+    }
+}

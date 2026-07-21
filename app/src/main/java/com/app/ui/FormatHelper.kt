@@ -1,0 +1,143 @@
+package com.app.ui
+
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+
+object FormatHelper {
+    private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
+    private val timeFormatter = SimpleDateFormat("HH:mm", java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build())
+
+    private val vndSymbols = DecimalFormatSymbols(java.util.Locale.Builder().setLanguage("vi").setRegion("VN").build()).apply {
+        groupingSeparator = '.'
+        decimalSeparator = ','
+    }
+    private val vndFormatter = DecimalFormat("#,###", vndSymbols)
+
+    fun formatVND(amount: Double): String {
+        return try {
+            val formatted = synchronized(vndFormatter) {
+                vndFormatter.format(amount)
+            }
+            "$formatted ₫"
+        } catch (e: Exception) {
+            "${String.format("%.0f", amount)} ₫"
+        }
+    }
+
+    fun formatTime(timestamp: Long): String {
+        return try {
+            synchronized(timeFormatter) {
+                timeFormatter.format(timestamp)
+            }
+        } catch (e: Exception) {
+            val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+            String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
+        }
+    }
+
+    fun formatInputNumber(input: String): String {
+        val clean = input.filter { it.isDigit() }
+        if (clean.isEmpty()) return ""
+        val parsed = clean.toDoubleOrNull() ?: 0.0
+        return try {
+            synchronized(vndFormatter) {
+                vndFormatter.format(parsed)
+            }
+        } catch (e: Exception) {
+            clean
+        }
+    }
+
+    fun formatExpression(expr: String): String {
+        val regex = Regex("\\d+")
+        return regex.replace(expr) { matchResult ->
+            formatInputNumber(matchResult.value)
+        }
+    }
+
+    fun evaluateExpression(expr: String): Double {
+        var clean = expr.replace(".", "").replace("x", "*").replace("×", "*").replace("÷", "/")
+        clean = clean.trim()
+        while (clean.endsWith("+") || clean.endsWith("-") || clean.endsWith("*") || clean.endsWith("/")) {
+            clean = clean.substring(0, clean.length - 1).trim()
+        }
+        if (clean.isEmpty()) return 0.0
+        return try {
+            evalSimpleExpr(clean)
+        } catch (e: Exception) {
+            0.0
+        }
+    }
+
+    private fun evalSimpleExpr(str: String): Double {
+        var opIndex = -1
+        var opType = ' '
+
+        // Prioritize + and - from right to left (respects left-associativity)
+        for (i in str.length - 1 downTo 0) {
+            val c = str[i]
+            if (c == '+' || c == '-') {
+                opIndex = i
+                opType = c
+                break
+            }
+        }
+
+        if (opIndex != -1) {
+            val left = str.substring(0, opIndex).trim()
+            val right = str.substring(opIndex + 1).trim()
+            val leftVal = if (left.isEmpty()) 0.0 else evalSimpleExpr(left)
+            val rightVal = if (right.isEmpty()) 0.0 else evalSimpleExpr(right)
+            return if (opType == '+') leftVal + rightVal else leftVal - rightVal
+        }
+
+        // Parentheses / Higher precedence operators: * and /
+        for (i in str.length - 1 downTo 0) {
+            val c = str[i]
+            if (c == '*' || c == '/') {
+                opIndex = i
+                opType = c
+                break
+            }
+        }
+
+        if (opIndex != -1) {
+            val left = str.substring(0, opIndex).trim()
+            val right = str.substring(opIndex + 1).trim()
+            val leftVal = if (left.isEmpty()) 1.0 else evalSimpleExpr(left)
+            val rightVal = if (right.isEmpty()) 1.0 else evalSimpleExpr(right)
+            return if (opType == '*') leftVal * rightVal else {
+                if (rightVal == 0.0) 0.0 else leftVal / rightVal
+            }
+        }
+
+        return str.toDoubleOrNull() ?: 0.0
+    }
+
+    fun parseInputNumber(input: String): Double {
+        val clean = input.filter { it.isDigit() }
+        return clean.toDoubleOrNull() ?: 0.0
+    }
+
+    fun parseColor(hex: String): androidx.compose.ui.graphics.Color {
+        return try {
+            androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(hex))
+        } catch (e: Exception) {
+            androidx.compose.ui.graphics.Color(0xFF607D8B)
+        }
+    }
+
+    fun formatDate(timestamp: Long): String {
+        return try {
+            synchronized(dateFormatter) {
+                dateFormatter.format(timestamp)
+            }
+        } catch (e: Exception) {
+            val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+            String.format("%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
+        }
+    }
+}

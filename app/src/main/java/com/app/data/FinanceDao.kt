@@ -1,0 +1,138 @@
+package com.app.data
+
+import androidx.room.*
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface FinanceDao {
+    // ---- Wallets ----
+    @Query("SELECT * FROM wallets ORDER BY displayOrder ASC, id ASC")
+    fun getAllWallets(): Flow<List<Wallet>>
+
+    @Query("SELECT * FROM wallets WHERE id = :id")
+    suspend fun getWalletById(id: Int): Wallet?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWallet(wallet: Wallet): Long
+
+    @Update
+    suspend fun updateWallet(wallet: Wallet)
+
+    @Delete
+    suspend fun deleteWallet(wallet: Wallet)
+
+    // ---- Transactions ----
+    @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
+    fun getAllTransactions(): Flow<List<Transaction>>
+
+    @Query("SELECT * FROM transactions WHERE walletId = :walletId ORDER BY timestamp DESC")
+    fun getTransactionsByWallet(walletId: Int): Flow<List<Transaction>>
+
+    @Query("SELECT * FROM transactions WHERE id = :id")
+    suspend fun getTransactionById(id: Int): Transaction?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTransaction(transaction: Transaction): Long
+
+    @Update
+    suspend fun updateTransaction(transaction: Transaction)
+
+    @Delete
+    suspend fun deleteTransaction(transaction: Transaction)
+
+    // ---- Budgets ----
+    @Query("SELECT * FROM budgets WHERE month = :month ORDER BY limitAmount DESC")
+    fun getBudgetsByMonth(month: String): Flow<List<Budget>>
+
+    @Query("SELECT * FROM budgets ORDER BY month DESC")
+    fun getAllBudgets(): Flow<List<Budget>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBudget(budget: Budget): Long
+
+    @Update
+    suspend fun updateBudget(budget: Budget)
+
+    @Delete
+    suspend fun deleteBudget(budget: Budget)
+
+    // Cascading updates for Categories since they are String-based
+    @Query("UPDATE transactions SET categoryName = :newName, categoryIcon = :newIcon, categoryColor = :newColor WHERE categoryName = :oldName")
+    suspend fun updateCategoryInTransactions(oldName: String, newName: String, newIcon: String, newColor: String)
+
+    @Query("UPDATE budgets SET categoryName = :newName, categoryIcon = :newIcon, categoryColor = :newColor WHERE categoryName = :oldName")
+    suspend fun updateCategoryInBudgets(oldName: String, newName: String, newIcon: String, newColor: String)
+
+    // ---- Savings Goals ----
+    @Query("SELECT * FROM savings_goals ORDER BY targetDate ASC")
+    fun getAllSavingsGoals(): Flow<List<SavingsGoal>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSavingsGoal(goal: SavingsGoal): Long
+
+    @Update
+    suspend fun updateSavingsGoal(goal: SavingsGoal)
+
+    @Delete
+    suspend fun deleteSavingsGoal(goal: SavingsGoal)
+
+    // ---- Events ----
+    @Query("SELECT * FROM events ORDER BY startDate DESC")
+    fun getAllEvents(): Flow<List<Event>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEvent(event: Event): Long
+
+    @Update
+    suspend fun updateEvent(event: Event)
+
+    @Delete
+    suspend fun deleteEvent(event: Event)
+
+    @Query("DELETE FROM events")
+    suspend fun deleteAllEvents()
+
+    // ---- Debts ----
+    @Query("SELECT * FROM debts ORDER BY creationDate DESC")
+    fun getAllDebts(): Flow<List<Debt>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDebt(debt: Debt): Long
+
+    @Update
+    suspend fun updateDebt(debt: Debt)
+
+    @Delete
+    suspend fun deleteDebt(debt: Debt)
+
+    @Query("DELETE FROM debts")
+    suspend fun deleteAllDebts()
+
+    // ---- App Settings ----
+    @Query("SELECT * FROM settings")
+    suspend fun getAllSettings(): List<AppSetting>
+
+    @Query("SELECT * FROM settings WHERE `key` = :key")
+    suspend fun getSetting(key: String): AppSetting?
+
+    @Query("SELECT * FROM settings WHERE `key` = :key")
+    fun observeSetting(key: String): Flow<AppSetting?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSetting(setting: AppSetting)
+
+    @Query("DELETE FROM wallets")
+    suspend fun deleteAllWallets()
+
+    @Query("DELETE FROM transactions")
+    suspend fun deleteAllTransactions()
+
+    @Query("DELETE FROM budgets")
+    suspend fun deleteAllBudgets()
+
+    @Query("DELETE FROM savings_goals")
+    suspend fun deleteAllSavingsGoals()
+
+    @Query("DELETE FROM settings")
+    suspend fun deleteAllSettings()
+}
