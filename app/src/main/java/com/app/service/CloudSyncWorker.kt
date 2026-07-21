@@ -160,6 +160,22 @@ val folderName = "[APP_FINANCE]"
     }
 
     companion object {
+        fun triggerOneTimeSync(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+
+            val syncRequest = androidx.work.OneTimeWorkRequestBuilder<CloudSyncWorker>()
+                .setConstraints(constraints)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "CloudSyncOneTime",
+                androidx.work.ExistingWorkPolicy.REPLACE,
+                syncRequest
+            )
+        }
+
         fun setupPeriodicSync(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)

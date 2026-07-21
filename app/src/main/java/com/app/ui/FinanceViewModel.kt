@@ -210,6 +210,30 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     )
     val activeMonth: StateFlow<String> = _activeMonth.asStateFlow()
 
+    fun copyBudgetsFromPreviousMonth(targetMonth: String) {
+        viewModelScope.launch {
+            val parts = targetMonth.split("-")
+            var y = parts[0].toInt()
+            var m = parts[1].toInt()
+            m--
+            if (m < 1) {
+                m = 12
+                y--
+            }
+            val prevMonth = String.format("%04d-%02d", y, m)
+            val allBud = repository.getAllBudgets().firstOrNull() ?: emptyList()
+            val prevBudgets = allBud.filter { it.month == prevMonth }
+            if (prevBudgets.isNotEmpty()) {
+                for (b in prevBudgets) {
+                    addBudget(b.categoryName, b.limitAmount, targetMonth, b.isRecurring)
+                }
+                showSuccessNotification("Đã sao chép ${prevBudgets.size} ngân sách từ tháng $prevMonth!")
+            } else {
+                showWarningNotification("Không tìm thấy ngân sách từ tháng $prevMonth để sao chép.")
+            }
+        }
+    }
+
     init {
         val database = AppDatabase.getDatabase(application)
         val dao = database.financeDao()
@@ -297,6 +321,24 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             processRecurringTransactions()
             processRecurringBudgets()
             _isLoadingSettings.value = false
+
+            // Auto-trigger background cloud sync if enabled on app startup
+            if (_isCloudSyncEnabled.value) {
+                com.app.service.CloudSyncWorker.setupPeriodicSync(getApplication())
+                triggerSilentCloudSync()
+            }
+        }
+
+        // Automatic background sync observer: triggers silent background sync 3s after any database change
+        viewModelScope.launch(Dispatchers.IO) {
+            combine(allWallets, allTransactions, allBudgets) { _, _, _ -> Unit }
+                .drop(1)
+                .debounce(3000L)
+                .collect {
+                    if (_isCloudSyncEnabled.value) {
+                        triggerSilentCloudSync()
+                    }
+                }
         }
     }
 
@@ -1144,10 +1186,23 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun triggerSilentCloudSync() {
+        if (_isCloudSyncEnabled.value) {
+            val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(getApplication())?.account
+            if (account != null) {
+                com.app.service.CloudSyncWorker.triggerOneTimeSync(getApplication())
+            }
+        }
+    }
+
     fun toggleCloudSync(enabled: Boolean) {
         viewModelScope.launch {
             repository.saveSetting("cloud_sync_enabled", enabled.toString())
             _isCloudSyncEnabled.value = enabled
+            if (enabled) {
+                com.app.service.CloudSyncWorker.setupPeriodicSync(getApplication())
+                triggerSilentCloudSync()
+            }
         }
     }
 
@@ -1235,8 +1290,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
-                val totalIncome = txs.filter { it.type == "INCOME" }.sumOf { it.amount }
-                val totalExpense = txs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                val savingsWalletIds = savingsWallets.value.map { it.id }.toSet()
+                val currentSummary = calculateRealFinancialSummary(txs, savingsWalletIds)
+                val totalIncome = currentSummary.realIncome
+                val totalExpense = currentSummary.realExpense
 
                 // Calculate previous month values
                 val cal = Calendar.getInstance()
@@ -1253,8 +1310,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                         false
                     }
                 }
-                val prevTotalIncome = prevMonthTxs.filter { it.type == "INCOME" }.sumOf { it.amount }
-                val prevTotalExpense = prevMonthTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                val prevSummary = calculateRealFinancialSummary(prevMonthTxs, savingsWalletIds)
+                val prevTotalIncome = prevSummary.realIncome
+                val prevTotalExpense = prevSummary.realExpense
 
                 val monthlySummary = "Tháng hiện tại: $currentMonthStr\n- Tổng Thu nhập: ${FormatHelper.formatVND(totalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(totalExpense)}\nTháng trước ($prevMonthStr):\n- Tổng Thu nhập: ${FormatHelper.formatVND(prevTotalIncome)}\n- Tổng Chi tiêu: ${FormatHelper.formatVND(prevTotalExpense)}"
 
@@ -2589,6 +2647,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 loadCategories()
                 loadSecuritySettings()
                 loadNotificationSettings()
+
+                // Fix: Always ensure has_seen_onboarding remains true after data restore so user is not kicked back to onboarding
+                repository.saveSetting("has_seen_onboarding", "true")
+                _hasSeenOnboarding.value = true
 
                 addLog("🎉 KHÔI PHỤC DỮ LIỆU THÀNH CÔNG HOÀN TOÀN!")
                 _syncStatus.value = "SUCCESS"

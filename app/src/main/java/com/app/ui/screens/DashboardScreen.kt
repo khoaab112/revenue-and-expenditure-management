@@ -72,8 +72,13 @@ fun DashboardScreen(
         }
     }
 
-    val totalIncome = currentMonthTransactions.filter { it.type == "INCOME" }.sumOf { it.amount }
-    val totalExpense = currentMonthTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+    val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
+    val financialSummary = remember(currentMonthTransactions, savingsWalletIds) {
+        com.app.ui.calculateRealFinancialSummary(currentMonthTransactions, savingsWalletIds)
+    }
+    val totalIncome = financialSummary.realIncome
+    val totalExpense = financialSummary.realExpense
+    val totalNetSavings = financialSummary.netSavings
 
     val displayMonth = remember(activeMonth) {
         if (activeMonth.length >= 7) {

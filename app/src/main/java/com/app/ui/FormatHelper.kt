@@ -141,3 +141,67 @@ object FormatHelper {
         }
     }
 }
+
+data class FinancialSummary(
+    val realIncome: Double,
+    val realExpense: Double,
+    val netSavings: Double,
+    val internalTransfers: Double
+)
+
+fun calculateRealFinancialSummary(
+    transactions: List<com.app.data.Transaction>,
+    savingsWalletIds: Set<Int> = emptySet()
+): FinancialSummary {
+    var income = 0.0
+    var expense = 0.0
+    var savings = 0.0
+    var internalTransfers = 0.0
+
+    for (tx in transactions) {
+        val catName = tx.categoryName.trim()
+        val isAdjustment = tx.type == "ADJUSTMENT" || catName.contains("Điều chỉnh số dư", ignoreCase = true)
+        val isInternalTransfer = tx.type == "TRANSFER" && (tx.destinationWalletId == null || (tx.walletId !in savingsWalletIds && tx.destinationWalletId !in savingsWalletIds))
+        val isSavingsDeposit = catName.contains("Gửi tiết kiệm", ignoreCase = true) || catName.contains("Cất quỹ", ignoreCase = true) || (tx.destinationWalletId != null && tx.destinationWalletId in savingsWalletIds)
+        val isSavingsWithdraw = catName.contains("Đóng hũ", ignoreCase = true) || catName.contains("Rút từ tiết kiệm", ignoreCase = true) || (tx.walletId in savingsWalletIds && tx.destinationWalletId != null && tx.destinationWalletId !in savingsWalletIds)
+
+        if (isAdjustment) {
+            continue
+        }
+
+        if (isInternalTransfer) {
+            internalTransfers += tx.amount
+            continue
+        }
+
+        if (isSavingsDeposit) {
+            savings += tx.amount
+            continue
+        }
+
+        if (isSavingsWithdraw) {
+            continue
+        }
+
+        when (tx.type) {
+            "INCOME" -> {
+                if (!isSavingsWithdraw && !catName.contains("Hoàn quỹ", ignoreCase = true)) {
+                    income += tx.amount
+                }
+            }
+            "EXPENSE" -> {
+                if (!isSavingsDeposit) {
+                    expense += tx.amount
+                }
+            }
+        }
+    }
+
+    return FinancialSummary(
+        realIncome = income,
+        realExpense = expense,
+        netSavings = savings,
+        internalTransfers = internalTransfers
+    )
+}
+

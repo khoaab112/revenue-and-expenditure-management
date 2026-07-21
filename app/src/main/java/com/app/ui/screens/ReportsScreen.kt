@@ -75,18 +75,26 @@ fun ReportsScreen(
         }
     }
 
-    val totalExpenses = remember(monthTransactions) {
-        monthTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+    val savingsWallets by viewModel.savingsWallets.collectAsState()
+    val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
+
+    val financialSummary = remember(monthTransactions, savingsWalletIds) {
+        com.app.ui.calculateRealFinancialSummary(monthTransactions, savingsWalletIds)
     }
 
-    val totalIncome = remember(monthTransactions) {
-        monthTransactions.filter { it.type == "INCOME" }.sumOf { it.amount }
-    }
+    val totalExpenses = financialSummary.realExpense
+    val totalIncome = financialSummary.realIncome
 
     // Group expenses by category
-    val categoryExpenses = remember(monthTransactions) {
+    val categoryExpenses = remember(monthTransactions, savingsWalletIds, totalExpenses) {
         monthTransactions
-            .filter { it.type == "EXPENSE" }
+            .filter { tx ->
+                val catName = tx.categoryName.trim()
+                val isAdjustment = tx.type == "ADJUSTMENT" || catName.contains("Điều chỉnh số dư", ignoreCase = true)
+                val isInternalTransfer = tx.type == "TRANSFER"
+                val isSavingsDeposit = catName.contains("Gửi tiết kiệm", ignoreCase = true) || catName.contains("Cất quỹ", ignoreCase = true) || (tx.destinationWalletId != null && tx.destinationWalletId in savingsWalletIds)
+                tx.type == "EXPENSE" && !isAdjustment && !isInternalTransfer && !isSavingsDeposit
+            }
             .groupBy { it.categoryName }
             .map { (catName, txs) ->
                 val sum = txs.sumOf { it.amount }
@@ -101,9 +109,15 @@ fun ReportsScreen(
     }
 
     // Group incomes by category
-    val categoryIncomes = remember(monthTransactions) {
+    val categoryIncomes = remember(monthTransactions, savingsWalletIds, totalIncome) {
         monthTransactions
-            .filter { it.type == "INCOME" }
+            .filter { tx ->
+                val catName = tx.categoryName.trim()
+                val isAdjustment = tx.type == "ADJUSTMENT" || catName.contains("Điều chỉnh số dư", ignoreCase = true)
+                val isInternalTransfer = tx.type == "TRANSFER"
+                val isSavingsWithdraw = catName.contains("Đóng hũ", ignoreCase = true) || catName.contains("Rút từ tiết kiệm", ignoreCase = true) || catName.contains("Hoàn quỹ", ignoreCase = true) || (tx.walletId in savingsWalletIds)
+                tx.type == "INCOME" && !isAdjustment && !isInternalTransfer && !isSavingsWithdraw
+            }
             .groupBy { it.categoryName }
             .map { (catName, txs) ->
                 val sum = txs.sumOf { it.amount }

@@ -69,6 +69,9 @@ fun OnboardingScreen(
                 isWaitingForSync = true
                 viewModel.checkAndPerformGoogleSignInOnboarding(context) { onboardingResult ->
                     isWaitingForSync = false
+                    if (onboardingResult !is GoogleOnboardingResult.Error) {
+                        viewModel.toggleCloudSync(true)
+                    }
                     when (onboardingResult) {
                         is GoogleOnboardingResult.ExistingUserSuccess -> {
                             // CASE 2: Đã có thư mục + File hợp lệ

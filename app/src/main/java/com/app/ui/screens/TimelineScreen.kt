@@ -41,13 +41,13 @@ fun TimelineScreen(
             .sortedByDescending { it.timestamp }
     }
     
-    val totalIncome = remember(dayTransactions) {
-        dayTransactions.filter { it.type == "INCOME" }.sumOf { it.amount }
+    val savingsWallets by viewModel.savingsWallets.collectAsState()
+    val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
+    val daySummary = remember(dayTransactions, savingsWalletIds) {
+        com.app.ui.calculateRealFinancialSummary(dayTransactions, savingsWalletIds)
     }
-    
-    val totalExpense = remember(dayTransactions) {
-        dayTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-    }
+    val totalIncome = daySummary.realIncome
+    val totalExpense = daySummary.realExpense
 
     Scaffold(
         topBar = {

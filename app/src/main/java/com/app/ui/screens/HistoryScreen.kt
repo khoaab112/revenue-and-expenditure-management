@@ -522,15 +522,8 @@ fun HistoryScreen(
     // Precompute daily summaries to optimize lazy list scrolling performance
     val dailySummaries = remember(groupedTransactions, savingsWalletIds) {
         groupedTransactions.mapValues { (_, txList) ->
-            val incomeTxs = txList.filter { 
-                it.type == "INCOME" || (it.type == "TRANSFER" && it.destinationWalletId !in savingsWalletIds && it.walletId in savingsWalletIds)
-            }
-            val expenseTxs = txList.filter { 
-                it.type == "EXPENSE" || (it.type == "TRANSFER" && it.walletId !in savingsWalletIds && it.destinationWalletId in savingsWalletIds)
-            }
-            val totalIncome = incomeTxs.sumOf { it.amount }
-            val totalExpense = expenseTxs.sumOf { it.amount }
-            Pair(totalIncome, totalExpense)
+            val summary = com.app.ui.calculateRealFinancialSummary(txList, savingsWalletIds)
+            Pair(summary.realIncome, summary.realExpense)
         }
     }
 
@@ -2237,12 +2230,11 @@ fun CalendarCell(
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val totalIncome = remember(transactions) {
-        transactions.filter { it.type == "INCOME" }.sumOf { it.amount }
+    val daySummary = remember(transactions) {
+        com.app.ui.calculateRealFinancialSummary(transactions)
     }
-    val totalExpense = remember(transactions) {
-        transactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-    }
+    val totalIncome = daySummary.realIncome
+    val totalExpense = daySummary.realExpense
     
     val hasTransactions = transactions.isNotEmpty()
     
@@ -2353,14 +2345,11 @@ fun DayTransactionsInline(
     val savingsWalletIds = remember(walletsList) {
         walletsList.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
     }
-    val incomeTxs = transactions.filter { 
-        it.type == "INCOME" || (it.type == "TRANSFER" && it.destinationWalletId !in savingsWalletIds && it.walletId in savingsWalletIds)
+    val daySummary = remember(transactions, savingsWalletIds) {
+        com.app.ui.calculateRealFinancialSummary(transactions, savingsWalletIds)
     }
-    val expenseTxs = transactions.filter { 
-        it.type == "EXPENSE" || (it.type == "TRANSFER" && it.walletId !in savingsWalletIds && it.destinationWalletId in savingsWalletIds)
-    }
-    val totalIncome = incomeTxs.sumOf { it.amount }
-    val totalExpense = expenseTxs.sumOf { it.amount }
+    val totalIncome = daySummary.realIncome
+    val totalExpense = daySummary.realExpense
 
     Column(
         modifier = Modifier

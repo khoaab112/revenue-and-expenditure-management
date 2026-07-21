@@ -2870,15 +2870,6 @@ fun SortableCategoryList(
                                         }
                                 )
 
-                                // Decorative left-side color block
-                                Box(
-                                    modifier = Modifier
-                                        .width(4.dp)
-                                        .height(32.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(colorValue)
-                                )
-
                                 Box(
                                     modifier = Modifier
                                         .size(38.dp)
