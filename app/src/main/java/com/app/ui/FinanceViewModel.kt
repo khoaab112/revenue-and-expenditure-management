@@ -2802,6 +2802,159 @@ val folderName = "[APP_FINANCE]"
         }
     }
 
+    sealed class GoogleOnboardingResult {
+        data class ExistingUserSuccess(val message: String = "Chào mừng bạn đã quay trở lại") : GoogleOnboardingResult()
+        data class InvalidFileNewUser(val message: String = "Không tìm thấy tệp sao lưu hợp lệ. Đã khởi tạo dữ liệu mới.") : GoogleOnboardingResult()
+        data class NoFolderNewUser(val message: String = "Chào mừng bạn đến với Ứng dụng lịch sử chi tiêu") : GoogleOnboardingResult()
+        data class Error(val message: String) : GoogleOnboardingResult()
+    }
+
+    fun checkAndPerformGoogleSignInOnboarding(
+        context: android.content.Context,
+        onResult: (GoogleOnboardingResult) -> Unit
+    ) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _syncStatus.value = "SYNCING"
+            try {
+                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
+                if (account == null) {
+                    _syncStatus.value = "ERROR"
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(GoogleOnboardingResult.Error("Lỗi: Không tìm thấy tài khoản Google."))
+                    }
+                    return@launch
+                }
+
+                val scope = "oauth2:https://www.googleapis.com/auth/drive.file"
+                val token = com.google.android.gms.auth.GoogleAuthUtil.getToken(context, account, scope)
+                
+                val folderName = "[APP_FINANCE]"
+                val fileName = "finance_backup.json"
+                val client = okhttp3.OkHttpClient()
+                
+                // 1. Check folder [APP_FINANCE]
+                var folderId: String? = null
+                val searchFolderRequest = okhttp3.Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder'&spaces=drive")
+                    .header("Authorization", "Bearer ${token}")
+                    .build()
+                val searchFolderResponse = client.newCall(searchFolderRequest).execute()
+                if (searchFolderResponse.isSuccessful) {
+                    val json = searchFolderResponse.body?.string()
+                    if (json != null) {
+                        val jsonObj = org.json.JSONObject(json)
+                        val files = jsonObj.optJSONArray("files")
+                        if (files != null && files.length() > 0) {
+                            folderId = files.getJSONObject(0).getString("id")
+                        }
+                    }
+                }
+
+                // CASE 3: Check ra không có thư mục -> Coi là new user, thông báo "Chào mừng bạn đến với Ứng dụng lịch sử chi tiêu"
+                if (folderId == null) {
+                    _syncStatus.value = "SUCCESS"
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(GoogleOnboardingResult.NoFolderNewUser())
+                    }
+                    return@launch
+                }
+
+                // Folder exists -> Check backup file
+                var fileId: String? = null
+                val searchFileRequest = okhttp3.Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and '${folderId}' in parents&spaces=drive")
+                    .header("Authorization", "Bearer ${token}")
+                    .build()
+                
+                val searchResponse = client.newCall(searchFileRequest).execute()
+                if (searchResponse.isSuccessful) {
+                    val json = searchResponse.body?.string()
+                    if (json != null) {
+                        val jsonObj = org.json.JSONObject(json)
+                        val files = jsonObj.optJSONArray("files")
+                        if (files != null && files.length() > 0) {
+                            fileId = files.getJSONObject(0).getString("id")
+                        }
+                    }
+                }
+
+                // CASE 1: Thư mục có nhưng không có file tồn tại -> Báo không tìm được file, tạo dữ liệu mới, coi là new user
+                if (fileId == null) {
+                    _syncStatus.value = "SUCCESS"
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(GoogleOnboardingResult.InvalidFileNewUser())
+                    }
+                    return@launch
+                }
+
+                // Download file content and check format validity
+                val downloadRequest = okhttp3.Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files/${fileId}?alt=media")
+                    .header("Authorization", "Bearer ${token}")
+                    .build()
+                    
+                val downloadResponse = client.newCall(downloadRequest).execute()
+                if (downloadResponse.isSuccessful) {
+                    val jsonString = downloadResponse.body?.string()
+                    if (jsonString.isNullOrBlank()) {
+                        // CASE 1: File rỗng -> Báo không tìm được file hợp lệ
+                        _syncStatus.value = "SUCCESS"
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onResult(GoogleOnboardingResult.InvalidFileNewUser())
+                        }
+                        return@launch
+                    }
+
+                    // Test JSON format validity
+                    val isValidJson = try {
+                        org.json.JSONObject(jsonString)
+                        true
+                    } catch (e: Exception) {
+                        try {
+                            org.json.JSONArray(jsonString)
+                            true
+                        } catch (e2: Exception) {
+                            false
+                        }
+                    }
+
+                    if (!isValidJson) {
+                        // CASE 1: File không hợp lệ -> Báo không tìm thấy tệp sao lưu hợp lệ
+                        _syncStatus.value = "SUCCESS"
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onResult(GoogleOnboardingResult.InvalidFileNewUser())
+                        }
+                        return@launch
+                    }
+
+                    // CASE 2: File có và định dạng hợp lệ -> Xử lý khôi phục bình thường & báo chào mừng quay trở lại
+                    performRestoreFromJsonString(jsonString, {})
+                    try {
+                        kotlinx.coroutines.withTimeout(3000) {
+                            allWallets.first { it.isNotEmpty() }
+                        }
+                    } catch (e: Exception) {}
+
+                    _syncStatus.value = "SUCCESS"
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(GoogleOnboardingResult.ExistingUserSuccess())
+                    }
+                } else {
+                    _syncStatus.value = "SUCCESS"
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(GoogleOnboardingResult.InvalidFileNewUser())
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _syncStatus.value = "ERROR"
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(GoogleOnboardingResult.Error("Lỗi hệ thống: ${e.message}"))
+                }
+            }
+        }
+    }
+
     fun restoreFromDrive(context: android.content.Context) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _syncStatus.value = "SYNCING"
@@ -2944,7 +3097,11 @@ val folderName = "[APP_FINANCE]"
         }
     }
 
-    fun importLocalBackup(context: android.content.Context, uri: android.net.Uri) {
+    fun importLocalBackup(
+        context: android.content.Context,
+        uri: android.net.Uri,
+        onResult: ((Boolean) -> Unit)? = null
+    ) {
         viewModelScope.launch {
             _syncStatus.value = "SYNCING"
             val logs = mutableListOf<String>()
@@ -2963,10 +3120,12 @@ val folderName = "[APP_FINANCE]"
                 if (jsonString.isNullOrBlank()) {
                     addLog("Lỗi: File trống hoặc không đọc được.")
                     _syncStatus.value = "ERROR"
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult?.invoke(false)
+                    }
                     return@launch
                 }
 
-                
                 performRestoreFromJsonString(jsonString, ::addLog)
                 
                 try {
@@ -2976,11 +3135,16 @@ val folderName = "[APP_FINANCE]"
                 } catch (e: Exception) {}
                 
                 _syncStatus.value = "SUCCESS"
-                showSuccessNotification("Khôi phục dữ liệu từ bản sao lưu thành công!")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult?.invoke(true)
+                }
             } catch (e: Exception) {
                 addLog("Lỗi khôi phục: ${e.localizedMessage ?: "File JSON lỗi cấu trúc."}")
                 _syncStatus.value = "ERROR"
                 e.printStackTrace()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult?.invoke(false)
+                }
             }
         }
     }

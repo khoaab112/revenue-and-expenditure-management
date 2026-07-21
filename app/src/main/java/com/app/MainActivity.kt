@@ -215,7 +215,7 @@ fun MainContent(
         val hasSeenOnboarding by viewModel.hasSeenOnboarding.collectAsState()
         val isDatabaseEmpty by viewModel.isDatabaseEmpty.collectAsState()
 
-        if (!hasSeenOnboarding && isDatabaseEmpty) {
+        if (!hasSeenOnboarding) {
             com.app.ui.screens.OnboardingScreen(
                 viewModel = viewModel,
                 onComplete = { viewModel.setHasSeenOnboarding(true) }
