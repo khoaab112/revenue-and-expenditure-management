@@ -1,39 +1,36 @@
 package com.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.app.data.Event
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import java.util.*
-
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-
-import androidx.compose.foundation.border
-import androidx.compose.ui.graphics.drawscope.clipRect
 
 @Composable
 fun StripedProgressIndicator(
@@ -84,6 +81,75 @@ fun StripedProgressIndicator(
     }
 }
 
+data class EventStatusStyle(
+    val text: String,
+    val dotColor: Color,
+    val backgroundColor: Color,
+    val textColor: Color
+)
+
+fun getEventStatusStyle(event: Event, totalSpent: Double, now: Long = System.currentTimeMillis()): EventStatusStyle {
+    val isUpcoming = now < event.startDate
+    val isEnded = event.endDate != null && now > (event.endDate + 86400000L - 1)
+    val limit = event.limitAmount ?: 0.0
+    val isEndingSoon = !isEnded && !isUpcoming && (
+        (event.endDate != null && (event.endDate - now) <= 3 * 86400000L) ||
+        (limit > 0 && (totalSpent / limit) >= 0.8)
+    )
+
+    return when {
+        isEnded -> EventStatusStyle(
+            text = "Đã qua",
+            dotColor = Color.White,
+            backgroundColor = Color(0xFF757575),
+            textColor = Color.White
+        )
+        isUpcoming -> EventStatusStyle(
+            text = "Chưa diễn ra",
+            dotColor = Color.White,
+            backgroundColor = Color(0xFFE0E0E0),
+            textColor = Color(0xFF616161)
+        )
+        isEndingSoon -> EventStatusStyle(
+            text = "Sắp kết thúc",
+            dotColor = Color(0xFFFF9800),
+            backgroundColor = Color(0xFFFFF3E0),
+            textColor = Color(0xFFE65100)
+        )
+        else -> EventStatusStyle(
+            text = "Đang diễn ra",
+            dotColor = Color(0xFF4CAF50),
+            backgroundColor = Color(0xFFE8F5E9),
+            textColor = Color(0xFF2E7D32)
+        )
+    }
+}
+
+@Composable
+fun EventStatusChip(statusStyle: EventStatusStyle) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(statusStyle.backgroundColor)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(statusStyle.dotColor)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = statusStyle.text,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = statusStyle.textColor
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventManagementScreen(
@@ -97,28 +163,17 @@ fun EventManagementScreen(
     var eventToEdit by remember { mutableStateOf<Event?>(null) }
     var eventToDelete by remember { mutableStateOf<Event?>(null) }
     var eventToView by remember { mutableStateOf<Event?>(null) }
+    var showBottomSheetEvent by remember { mutableStateOf<Event?>(null) }
 
     Scaffold(
-        topBar = {
-            androidx.compose.material3.TopAppBar(
-                title = { Text("Quản lý sự kiện", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showAddEventDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Event")
-                    }
-                },
-                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    actionIconContentColor = MaterialTheme.colorScheme.onBackground,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
-                )
-            )
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddEventDialog = true },
+                containerColor = Color(0xFF00E676),
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Thêm sự kiện", tint = Color.White)
+            }
         }
     ) { paddingValues ->
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
@@ -128,128 +183,235 @@ fun EventManagementScreen(
                 }
             } else {
                 LazyColumn(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(events) { event ->
-                            val eventTransactions = transactions.filter { it.eventId == event.id }
-                            val totalSpent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-                            
-                            val now = System.currentTimeMillis()
-                            val isUpcoming = now < event.startDate
-                            val isEnded = event.endDate != null && now > (event.endDate + 86400000L - 1)
-                            val status = when {
-                                isEnded -> "Đã kết thúc"
-                                isUpcoming -> "Sắp diễn ra"
-                                else -> "Đang diễn ra"
-                            }
-                            val statusColor = when {
-                                isEnded -> Color(0xFF9E9E9E)
-                                isUpcoming -> Color(0xFFFF9800)
-                                else -> Color(0xFF4CAF50)
-                            }
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(events) { event ->
+                        val eventTransactions = transactions.filter { it.eventId == event.id }
+                        val totalSpent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                        val statusStyle = getEventStatusStyle(event, totalSpent)
+                        val limit = event.limitAmount ?: 0.0
+                        val eventColor = try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
+                        val now = System.currentTimeMillis()
+                        val isPast = statusStyle.text == "Đã qua" || (event.endDate != null && now > event.endDate)
 
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (isPast) Modifier.alpha(0.55f) else Modifier),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                                // Top Row: Status chip + 3 dots menu
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    EventStatusChip(statusStyle = statusStyle)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .clickable { showBottomSheetEvent = event },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MoreVert,
+                                            contentDescription = "Menu",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Event Name
+                                Text(
+                                    text = event.name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 19.sp,
+                                    color = eventColor
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Group 1: Group thời gian + Line (Màu đồng nhất với bên ngoài, không dùng box màu xám)
+                                Column(modifier = Modifier.fillMaxWidth()) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Column {
-                                            Text(
-                                                text = event.name,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 18.sp,
-                                                color = try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.onSurface }
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(50))
-                                                    .background(statusColor.copy(alpha = 0.1f))
-                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        val startStr = FormatHelper.formatDate(event.startDate)
+                                        val endStr = event.endDate?.let { FormatHelper.formatDate(it) } ?: "Vô thời hạn"
+                                        Text(
+                                            text = "$startStr - $endStr",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+
+                                        // Pill hiển thị thời gian (Dùng eventColor)
+                                        val remainingText = if (event.endDate == null) {
+                                            "Vô thời hạn"
+                                        } else if (now < event.startDate) {
+                                            val diffMillis = event.endDate - now
+                                            val diffDays = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diffMillis)
+                                            if (diffDays > 0) "Còn $diffDays ngày" else "Chưa diễn ra"
+                                        } else {
+                                            val diffMillis = event.endDate - now
+                                            val diffDays = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diffMillis)
+                                            if (diffMillis > 0 && diffDays == 0L) {
+                                                "Còn 1 ngày"
+                                            } else if (diffDays > 0) {
+                                                "Còn $diffDays ngày"
+                                            } else if (diffDays == 0L) {
+                                                "Hôm nay hết hạn"
+                                            } else {
+                                                "Đã hết hạn"
+                                            }
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = eventColor.copy(alpha = 0.12f),
+                                            contentColor = eventColor
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.DateRange,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = eventColor
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = status,
+                                                    text = remainingText,
                                                     fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = statusColor
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = eventColor
                                                 )
                                             }
                                         }
-                                        Row {
-                                            IconButton(onClick = { eventToView = event }, modifier = Modifier.size(36.dp)) {
-                                                Icon(Icons.Default.Info, contentDescription = "Chi tiết", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
-                                            }
-                                            IconButton(onClick = { eventToEdit = event }, modifier = Modifier.size(36.dp)) {
-                                                Icon(Icons.Default.Edit, contentDescription = "Sửa", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                            }
-                                            IconButton(onClick = { eventToDelete = event }, modifier = Modifier.size(36.dp)) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-                                            }
-                                        }
-                                    }
-
-                                    if (event.description.isNotBlank()) {
-                                        Text(
-                                            text = event.description,
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(vertical = 4.dp)
-                                        )
                                     }
 
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    
-                                    val startStr = FormatHelper.formatDate(event.startDate)
-                                    val endStr = event.endDate?.let { FormatHelper.formatDate(it) } ?: "Không giới hạn"
-                                    Text(
-                                        text = "$startStr - $endStr",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
 
-                                    Spacer(modifier = Modifier.height(12.dp))
-
-                                    // Progress Bar
-                                    val limit = event.limitAmount ?: 0.0
-                                    val progress = if (limit > 0) (totalSpent / limit).toFloat() else if (isEnded) 1f else 1f
-                                    val safeProgress = progress.coerceIn(0f, 1f)
-                                    
-                                    val progressColor = when {
-                                        isEnded -> MaterialTheme.colorScheme.error
-                                        limit > 0 && progress >= 0.9f -> MaterialTheme.colorScheme.error
-                                        else -> try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFF4CAF50) }
+                                    // Thanh line ngang: Thời gian hết hạn (Nếu chưa diễn ra -> 0f, vô thời hạn -> 0.4f, đã qua -> 1f)
+                                    val timeProgress = if (event.endDate == null) {
+                                        0.4f
+                                    } else if (now < event.startDate) {
+                                        0f
+                                    } else if (now >= event.endDate) {
+                                        1f
+                                    } else {
+                                        val totalDuration = (event.endDate - event.startDate).toFloat()
+                                        val elapsed = (now - event.startDate).toFloat()
+                                        if (totalDuration > 0) (elapsed / totalDuration).coerceIn(0f, 1f) else 0f
                                     }
 
                                     StripedProgressIndicator(
-                                        progress = safeProgress,
-                                        modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)),
-                                        color = progressColor,
+                                        progress = timeProgress,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(4.dp)),
+                                        color = eventColor,
                                         trackColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
+                                }
 
-                                    if (limit > 0) {
-                                        Text(
-                                            text = "${FormatHelper.formatVND(totalSpent)} / ${FormatHelper.formatVND(limit)}",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.padding(top = 4.dp).align(Alignment.End)
-                                        )
-                                    } else {
-                                        Text(
-                                            text = "Đã chi: ${FormatHelper.formatVND(totalSpent)}",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.padding(top = 4.dp).align(Alignment.End)
-                                        )
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                // Group 2: Group Đã chi, Hạn mức, % Vòng tròn (Cân bằng tỉ lệ 50/50, chữ in đậm, màu theo eventColor)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                        .padding(12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Đã chi",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = FormatHelper.formatVND(totalSpent),
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = eventColor
+                                                )
+                                            }
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(1.dp)
+                                                    .height(24.dp)
+                                                    .background(MaterialTheme.colorScheme.outlineVariant)
+                                            )
+
+                                            Spacer(modifier = Modifier.width(12.dp))
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Hạn mức",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = if (limit > 0) FormatHelper.formatVND(limit) else "Không có",
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        val percent = if (limit > 0) ((totalSpent / limit) * 100).toInt().coerceIn(0, 100) else 0
+                                        val safeProgress = if (limit > 0) (totalSpent / limit).toFloat().coerceIn(0f, 1f) else 0f
+
+                                        Box(
+                                            modifier = Modifier.size(44.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(
+                                                progress = { safeProgress },
+                                                modifier = Modifier.fillMaxSize(),
+                                                color = eventColor,
+                                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                strokeWidth = 4.dp
+                                            )
+                                            Text(
+                                                text = "$percent%",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = eventColor
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -258,13 +420,135 @@ fun EventManagementScreen(
                 }
             }
         }
+    }
+
+    // Modal Bottom Sheet for 3-dots menu action
+    if (showBottomSheetEvent != null) {
+        val event = showBottomSheetEvent!!
+        val sheetTitleColor = try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
+
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheetEvent = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = event.name,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = sheetTitleColor
+                    )
+                    IconButton(onClick = { showBottomSheetEvent = null }) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Xem chi tiết
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val target = event
+                            showBottomSheetEvent = null
+                            eventToView = target
+                        }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Chi tiết",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = "Chi tiết sự kiện",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Sửa sự kiện
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val target = event
+                            showBottomSheetEvent = null
+                            eventToEdit = target
+                        }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Sửa",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = "Sửa sự kiện",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Xóa sự kiện
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val target = event
+                            showBottomSheetEvent = null
+                            eventToDelete = target
+                        }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Xóa",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = "Xóa sự kiện",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
 
     if (eventToView != null) {
         val event = eventToView!!
         val eventTransactions = transactions.filter { it.eventId == event.id }
         val limit = event.limitAmount ?: 0.0
         val spent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-        
+
         AlertDialog(
             onDismissRequest = { eventToView = null },
             title = { Text(text = event.name, fontWeight = FontWeight.Bold) },
@@ -283,7 +567,7 @@ fun EventManagementScreen(
                         StripedProgressIndicator(
                             progress = progress,
                             modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
-                            color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
+                            color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
                             trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                         Text(
@@ -297,7 +581,7 @@ fun EventManagementScreen(
 
                     if (eventTransactions.isNotEmpty()) {
                         Text("Lịch sử giao dịch liên quan:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
-                        androidx.compose.foundation.lazy.LazyColumn(
+                        LazyColumn(
                             modifier = Modifier.heightIn(max = 200.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
@@ -317,7 +601,7 @@ fun EventManagementScreen(
                                         fontSize = 14.sp
                                     )
                                 }
-                                androidx.compose.material3.HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             }
                         }
                     } else {
@@ -343,10 +627,9 @@ fun EventManagementScreen(
         var selectedColor by remember { mutableStateOf(editingEvent?.colorHex ?: "#FF9800") }
 
         val colors = listOf(
-            "#F44336", "#E91E63", "#9C27B0", "#673AB7", "#3F51B5",
-            "#2196F3", "#03A9F4", "#00BCD4", "#009688", "#4CAF50",
-            "#8BC34A", "#CDDC39", "#FFEB3B", "#FFC107", "#FF9800",
-            "#FF5722", "#795548", "#9E9E9E", "#607D8B"
+            "#F44336", "#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3", "#03A9F4",
+            "#00BCD4", "#009688", "#4CAF50", "#8BC34A", "#CDDC39", "#FFEB3B", "#FFC107",
+            "#FF9800", "#FF5722", "#795548", "#9E9E9E", "#607D8B", "#3949AB", "#D81B60"
         )
 
         var showStartDatePicker by remember { mutableStateOf(false) }
@@ -389,25 +672,43 @@ fun EventManagementScreen(
             }
         }
 
-        AlertDialog(
-            onDismissRequest = { 
+        Dialog(
+            onDismissRequest = {
                 showAddEventDialog = false
-                eventToEdit = null 
-            },
-            title = { Text(if (editingEvent != null) "Sửa sự kiện" else "Thêm sự kiện mới", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                eventToEdit = null
+            }
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = if (editingEvent != null) "Sửa sự kiện" else "Thêm sự kiện mới",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
                         label = { Text("Tên sự kiện (*)") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
                         label = { Text("Mô tả") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     OutlinedTextField(
                         value = limitAmountStr,
@@ -426,114 +727,218 @@ fun EventManagementScreen(
                         },
                         label = { Text("Hạn mức chi tiêu") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
                     )
-                    
-                    Text("Màu sắc", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    androidx.compose.foundation.lazy.LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+
+                    Text("Màu sắc", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    // Color selection in Grid Format (7 equal-weight columns per row for 100% uniform spacing)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(colors) { hex ->
-                            val colorValue = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color.Black }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(colorValue)
-                                    .clickable { selectedColor = hex }
-                                    .border(
-                                        2.dp,
-                                        if (selectedColor == hex) MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                                        androidx.compose.foundation.shape.CircleShape
-                                    )
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Bắt đầu: ${FormatHelper.formatDate(startDate)}", fontSize = 14.sp)
-                        TextButton(onClick = { showStartDatePicker = true }) {
-                            Text("Chọn ngày")
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(if (endDate != null) "Kết thúc: ${FormatHelper.formatDate(endDate!!)}" else "Kết thúc: Không", fontSize = 14.sp)
-                        Row {
-                            if (endDate != null) {
-                                IconButton(onClick = { endDate = null }) {
-                                    Icon(Icons.Default.Clear, "Clear")
+                        colors.chunked(7).forEach { rowColors ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                for (i in 0 until 7) {
+                                    Box(
+                                        modifier = Modifier.weight(1f),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (i < rowColors.size) {
+                                            val hex = rowColors[i]
+                                            val colorValue = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color.Black }
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(30.dp)
+                                                    .clip(CircleShape)
+                                                    .background(colorValue)
+                                                    .clickable { selectedColor = hex }
+                                                    .border(
+                                                        2.dp,
+                                                        if (selectedColor == hex) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                                        CircleShape
+                                                    )
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                            TextButton(onClick = { showEndDatePicker = true }) {
-                                Text("Chọn")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    // Row Bắt đầu
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showStartDatePicker = true },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    tint = Color(0xFF4CAF50),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Bắt đầu", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Text(
+                            text = FormatHelper.formatDate(startDate),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    // Row Kết thúc
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showEndDatePicker = true },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    tint = Color(0xFFF44336),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Kết thúc", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (endDate != null) {
+                                Text(
+                                    text = FormatHelper.formatDate(endDate!!),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                IconButton(
+                                    onClick = { endDate = null },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = "Clear",
+                                        tint = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Chọn",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF1E88E5)
+                                )
                             }
                         }
                     }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (name.isBlank()) {
-                            viewModel.showWarningNotification("Vui lòng nhập tên sự kiện")
-                            return@Button
-                        }
-                        // Validate dates
-                        if (endDate != null && endDate!! < startDate) {
-                            viewModel.showWarningNotification("Ngày kết thúc phải sau ngày bắt đầu")
-                            return@Button
-                        }
-                        val limit = limitAmountStr.replace(".", "").toDoubleOrNull()
-                        
-                        if (editingEvent != null) {
-                            viewModel.updateEvent(editingEvent.copy(
-                                name = name,
-                                description = description,
-                                startDate = startDate,
-                                endDate = endDate,
-                                limitAmount = limit,
-                                colorHex = selectedColor
-                            ))
-                            viewModel.showSuccessNotification("Cập nhật thành công")
-                        } else {
-                            viewModel.addEvent(
-                                name = name,
-                                description = description,
-                                startDate = startDate,
-                                endDate = endDate,
-                                limitAmount = limit,
-                                colorHex = selectedColor
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Action buttons: Hủy & Lưu thay đổi
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                showAddEventDialog = false
+                                eventToEdit = null
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            viewModel.showSuccessNotification("Thêm thành công")
+                        ) {
+                            Text("Hủy", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
-                        showAddEventDialog = false
-                        eventToEdit = null
+
+                        Button(
+                            onClick = {
+                                if (name.isBlank()) {
+                                    viewModel.showWarningNotification("Vui lòng nhập tên sự kiện")
+                                    return@Button
+                                }
+                                if (endDate != null && endDate!! < startDate) {
+                                    viewModel.showWarningNotification("Ngày kết thúc phải sau ngày bắt đầu")
+                                    return@Button
+                                }
+                                val limit = limitAmountStr.replace(".", "").toDoubleOrNull()
+
+                                if (editingEvent != null) {
+                                    viewModel.updateEvent(editingEvent.copy(
+                                        name = name,
+                                        description = description,
+                                        startDate = startDate,
+                                        endDate = endDate,
+                                        limitAmount = limit,
+                                        colorHex = selectedColor
+                                    ))
+                                    viewModel.showSuccessNotification("Cập nhật thành công")
+                                } else {
+                                    viewModel.addEvent(
+                                        name = name,
+                                        description = description,
+                                        startDate = startDate,
+                                        endDate = endDate,
+                                        limitAmount = limit,
+                                        colorHex = selectedColor
+                                    )
+                                    viewModel.showSuccessNotification("Thêm thành công")
+                                }
+                                showAddEventDialog = false
+                                eventToEdit = null
+                            },
+                            modifier = Modifier
+                                .weight(1.5f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF6C5CE7),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text("Lưu thay đổi", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
                     }
-                ) {
-                    Text("Lưu")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { 
-                    showAddEventDialog = false 
-                    eventToEdit = null
-                }) {
-                    Text("Hủy")
                 }
             }
-        )
+        }
     }
 
     if (eventToDelete != null) {
