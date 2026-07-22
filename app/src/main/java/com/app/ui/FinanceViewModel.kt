@@ -59,6 +59,13 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     private val repository: FinanceRepository
 
+    private val _customTopBarTitle = MutableStateFlow<String?>(null)
+    val customTopBarTitle: StateFlow<String?> = _customTopBarTitle.asStateFlow()
+
+    fun setCustomTopBarTitle(title: String?) {
+        _customTopBarTitle.value = title
+    }
+
     private val _appNotifications = MutableStateFlow<List<AppNotification>>(emptyList())
     val appNotifications: StateFlow<List<AppNotification>> = _appNotifications.asStateFlow()
 
@@ -1547,6 +1554,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 repository.updateWallet(next.copy(displayOrder = currOrder))
                 repository.updateWallet(sortedList[index].copy(displayOrder = nextOrder))
             }
+        }
+    }
+
+    fun updateWallet(wallet: Wallet) {
+        viewModelScope.launch {
+            repository.updateWallet(wallet)
         }
     }
 

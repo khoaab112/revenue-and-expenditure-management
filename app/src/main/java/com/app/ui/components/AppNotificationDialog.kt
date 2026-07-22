@@ -25,7 +25,9 @@ import androidx.compose.ui.window.DialogProperties
  */
 data class DialogButtonConfig(
     val text: String,
-    val action: () -> Unit = {}
+    val action: () -> Unit = {},
+    val containerColor: Color? = null,
+    val contentColor: Color? = null
 )
 
 /**
@@ -136,15 +138,15 @@ fun AppNotificationDialog(
                                     )
                                 }
 
-                                Button(
+                                 Button(
                                     onClick = confirmButton.action,
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(50.dp),
                                     shape = RoundedCornerShape(25.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF191C24),
-                                        contentColor = Color.White
+                                        containerColor = confirmButton.containerColor ?: Color(0xFF191C24),
+                                        contentColor = confirmButton.contentColor ?: Color.White
                                     )
                                 ) {
                                     Text(
@@ -161,8 +163,8 @@ fun AppNotificationDialog(
                                         .height(50.dp),
                                     shape = RoundedCornerShape(25.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF191C24),
-                                        contentColor = Color.White
+                                        containerColor = confirmButton.containerColor ?: Color(0xFF191C24),
+                                        contentColor = confirmButton.contentColor ?: Color.White
                                     )
                                 ) {
                                     Text(

@@ -77,6 +77,8 @@ fun SettingsScreen(
     onNavigateToStats: () -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     onNavigateToDebtBook: () -> Unit = {},
+    onNavigateToWalletManagement: () -> Unit = {},
+    onNavigateToCategoryManagement: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -86,8 +88,6 @@ fun SettingsScreen(
     val preferredStartScreen by viewModel.preferredStartScreen.collectAsState()
     var isPreferredScreenExpanded by remember { mutableStateOf(false) }
     var showPinSetupDialog by remember { mutableStateOf(false) }
-    var showWalletManagement by remember { mutableStateOf(false) }
-    var showCategoryManagement by remember { mutableStateOf(false) }
     var showEventManagement by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
     var showCloudRestoreDialog by remember { mutableStateOf(false) }
@@ -346,7 +346,7 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
-                        .clickable { showWalletManagement = true }
+                        .clickable { onNavigateToWalletManagement() }
                         .testTag("manage_wallets_item")
                 )
 
@@ -369,7 +369,7 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
-                        .clickable { showCategoryManagement = true }
+                        .clickable { onNavigateToCategoryManagement() }
                         .testTag("manage_categories_item")
                 )
 
@@ -1046,22 +1046,6 @@ fun SettingsScreen(
                 viewModel.enablePin(pin)
                 showPinSetupDialog = false
             }
-        )
-    }
-
-    // Wallet Management Dialog
-    if (showWalletManagement) {
-        WalletManagementDialog(
-            viewModel = viewModel,
-            onDismiss = { showWalletManagement = false }
-        )
-    }
-
-    // Category Management Dialog
-    if (showCategoryManagement) {
-        CategoryManagementDialog(
-            viewModel = viewModel,
-            onDismiss = { showCategoryManagement = false }
         )
     }
 }

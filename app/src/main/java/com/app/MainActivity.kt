@@ -51,6 +51,8 @@ object Routes {
     const val EVENTS = "events"
     const val DEBT_BOOK = "debt_book"
     const val AI_ADVISOR = "ai_advisor"
+    const val WALLET_MANAGEMENT = "wallet_management"
+    const val CATEGORY_MANAGEMENT = "category_management"
 }
 
 class MainActivity : ComponentActivity() {
@@ -321,12 +323,22 @@ fun MainContent(
                         }
                     }
 
+                    val handleBackNavigation = {
+                        val customTitle = viewModel.customTopBarTitle.value
+                        if (customTitle != null) {
+                            viewModel.setCustomTopBarTitle(null)
+                        } else {
+                            navController.popBackStack()
+                        }
+                    }
+
                     // Screen container with Header and #D9D9D9 background
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         AppHeader(
                             currentRoute = currentRoute,
                             canPop = canPop,
-                            onNavigateBack = { navController.popBackStack() },
+                            onNavigateBack = { handleBackNavigation() },
+                            viewModel = viewModel,
                             modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
                         )
                         Box(
@@ -343,15 +355,27 @@ fun MainContent(
                     }
                 }
             } else {
+                val handleBackNavigation = {
+                    val customTitle = viewModel.customTopBarTitle.value
+                    if (customTitle != null) {
+                        viewModel.setCustomTopBarTitle(null)
+                    } else {
+                        navController.popBackStack()
+                    }
+                }
+
                 // Adaptive portrait layout: Standard Scaffold + Top AppHeader + Bottom Navigation Bar
                 Scaffold(
                     modifier = modifier.fillMaxSize(),
                     topBar = {
-                        AppHeader(
-                            currentRoute = currentRoute,
-                            canPop = canPop,
-                            onNavigateBack = { navController.popBackStack() }
-                        )
+                        if (currentRoute != Routes.CATEGORY_MANAGEMENT) {
+                            AppHeader(
+                                currentRoute = currentRoute,
+                                canPop = canPop,
+                                onNavigateBack = { handleBackNavigation() },
+                                viewModel = viewModel
+                            )
+                        }
                     },
                     bottomBar = {
                         NavigationBar {
@@ -772,7 +796,33 @@ fun NavHostContainer(
             )
         }
 
-        composable(Routes.WALLETS) {
+        composable(
+            route = Routes.WALLETS,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            }
+        ) {
             WalletsScreen(viewModel = viewModel)
         }
 
@@ -810,7 +860,75 @@ fun NavHostContainer(
                 onNavigateToEvents = { navController.navigate(Routes.EVENTS) },
                 onNavigateToStats = { navController.navigate(Routes.STATS) },
                 onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
-                onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) }
+                onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) },
+                onNavigateToWalletManagement = { navController.navigate(Routes.WALLET_MANAGEMENT) },
+                onNavigateToCategoryManagement = { navController.navigate(Routes.CATEGORY_MANAGEMENT) }
+            )
+        }
+
+        composable(
+            route = Routes.WALLET_MANAGEMENT,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            }
+        ) {
+            WalletManagementScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Routes.CATEGORY_MANAGEMENT,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            }
+        ) {
+            CategoryManagementScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
@@ -909,10 +1027,12 @@ fun AppHeader(
     currentRoute: String,
     canPop: Boolean,
     onNavigateBack: () -> Unit,
+    viewModel: FinanceViewModel? = null,
     modifier: Modifier = Modifier
 ) {
+    val customTitle = viewModel?.customTopBarTitle?.collectAsState()?.value
     val baseRoute = currentRoute.substringBefore("?")
-    val title = when {
+    val title = customTitle ?: when {
         baseRoute == Routes.DASHBOARD -> "TỔNG QUAN"
         baseRoute == Routes.WALLETS -> "QUẢN LÝ VÍ"
         baseRoute == Routes.HISTORY -> "LỊCH SỬ GIAO DỊCH"
@@ -926,6 +1046,8 @@ fun AppHeader(
         baseRoute == Routes.EVENTS -> "QUẢN LÝ SỰ KIỆN"
         baseRoute == Routes.DEBT_BOOK -> "SỔ NỢ"
         baseRoute == Routes.AI_ADVISOR -> "CỐ VẤN TÀI CHÍNH AI"
+        baseRoute == Routes.WALLET_MANAGEMENT -> "QUẢN LÝ VÍ & TÀI KHOẢN"
+        baseRoute == Routes.CATEGORY_MANAGEMENT -> "QUẢN LÝ DANH MỤC"
         else -> "QUẢN LÝ THU CHI"
     }
 
