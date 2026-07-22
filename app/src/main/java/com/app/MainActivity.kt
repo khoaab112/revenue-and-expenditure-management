@@ -232,100 +232,26 @@ fun MainContent(
                         })
                     }
             ) {
-            if (isWideScreen) {
-            // Adaptive wide layout: use Left Navigation Rail + Right Box
-            Row(modifier = Modifier.fillMaxSize()) {
-                NavigationRail(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
-                ) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    navigationItems.forEach { item ->
-                        val isSelected = when (item.route) {
-                            Routes.DASHBOARD -> currentRoute == Routes.DASHBOARD || currentRoute == Routes.WALLETS
-                            Routes.HISTORY -> currentRoute == Routes.HISTORY
-                            Routes.ADD_TRANSACTION -> currentRoute == Routes.ADD_TRANSACTION
-                            Routes.BANK_NOTIFICATION_HISTORY -> currentRoute == Routes.BANK_NOTIFICATION_HISTORY
-                            Routes.SETTINGS -> currentRoute == Routes.SETTINGS
-                            else -> false
-                        }
-                        if (item.route == Routes.ADD_TRANSACTION) {
-                            NavigationRailItem(
-                                selected = isSelected,
-                                onClick = {
-                                    if (currentRoute != item.route) {
-                                        navController.navigate(item.route) {
-                                            popUpTo(navController.graph.startDestinationId)
-                                            launchSingleTop = true
-                                        }
-                                    }
-                                },
-                                icon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .background(
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                                                shape = CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(imageVector = Icons.Default.Add, contentDescription = item.label, tint = Color.White)
-                                    }
-                                },
-                                label = { Text(item.label, fontWeight = FontWeight.Bold) },
-                                modifier = Modifier.testTag("nav_rail_item_${item.route}")
-                            )
-                        } else {
-                            NavigationRailItem(
-                                selected = isSelected,
-                                onClick = {
-                                    if (currentRoute != item.route) {
-                                        navController.navigate(item.route) {
-                                            popUpTo(navController.graph.startDestinationId)
-                                            launchSingleTop = true
-                                        }
-                                    }
-                                },
-                                icon = {
-                                    if (item.route == Routes.BANK_NOTIFICATION_HISTORY && pendingCount > 0) {
-                                        BadgedBox(
-                                            badge = {
-                                                Badge {
-                                                    Text(text = pendingCount.toString())
-                                                }
-                                            }
-                                        ) {
-                                            Icon(imageVector = item.icon, contentDescription = item.label)
-                                        }
-                                    } else {
-                                        Icon(imageVector = item.icon, contentDescription = item.label)
-                                    }
-                                },
-                                label = { Text(item.label) },
-                                modifier = Modifier.testTag("nav_rail_item_${item.route}")
-                            )
-                        }
-                    }
-                }
-
-                // Screen container
-                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    NavHostContainer(
-                        navController = navController,
-                        viewModel = viewModel,
-                        modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
-                    )
-                }
+            val topLevelRoutes = remember {
+                listOf(
+                    Routes.DASHBOARD,
+                    Routes.HISTORY,
+                    Routes.ADD_TRANSACTION,
+                    Routes.BANK_NOTIFICATION_HISTORY,
+                    Routes.SETTINGS
+                )
             }
-        } else {
-            // Adaptive portrait layout: Standard Scaffold + Bottom Navigation Bar
-            Scaffold(
-                modifier = modifier.fillMaxSize(),
-                bottomBar = {
-                    NavigationBar(
-                        modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+            val baseRoute = currentRoute.substringBefore("?")
+            val canPop = navController.previousBackStackEntry != null && baseRoute !in topLevelRoutes
+
+            if (isWideScreen) {
+                // Adaptive wide layout: use Left Navigation Rail + Right Column with Header and Body
+                Row(modifier = Modifier.fillMaxSize()) {
+                    NavigationRail(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
                     ) {
+                        Spacer(modifier = Modifier.height(16.dp))
                         navigationItems.forEach { item ->
                             val isSelected = when (item.route) {
                                 Routes.DASHBOARD -> currentRoute == Routes.DASHBOARD || currentRoute == Routes.WALLETS
@@ -336,7 +262,7 @@ fun MainContent(
                                 else -> false
                             }
                             if (item.route == Routes.ADD_TRANSACTION) {
-                                NavigationBarItem(
+                                NavigationRailItem(
                                     selected = isSelected,
                                     onClick = {
                                         if (currentRoute != item.route) {
@@ -349,38 +275,21 @@ fun MainContent(
                                     icon = {
                                         Box(
                                             modifier = Modifier
-                                                .size(52.dp)
+                                                .size(44.dp)
                                                 .background(
-                                                    if (isSelected) MaterialTheme.colorScheme.primary 
-                                                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), 
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
                                                     shape = CircleShape
-                                                )
-                                                .padding(10.dp),
+                                                ),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = item.label,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(28.dp)
-                                            )
+                                            Icon(imageVector = Icons.Default.Add, contentDescription = item.label, tint = Color.White)
                                         }
                                     },
-                                    label = {
-                                        Text(
-                                            text = item.label,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        indicatorColor = Color.Transparent
-                                    ),
-                                    modifier = Modifier.testTag("nav_bar_item_${item.route}")
+                                    label = { Text(item.label, fontWeight = FontWeight.Bold) },
+                                    modifier = Modifier.testTag("nav_rail_item_${item.route}")
                                 )
                             } else {
-                                NavigationBarItem(
+                                NavigationRailItem(
                                     selected = isSelected,
                                     onClick = {
                                         if (currentRoute != item.route) {
@@ -395,7 +304,7 @@ fun MainContent(
                                             BadgedBox(
                                                 badge = {
                                                     Badge {
-                                                        Text(text = pendingCount.toString(), modifier = Modifier.testTag("notification_badge_count"))
+                                                        Text(text = pendingCount.toString())
                                                     }
                                                 }
                                             ) {
@@ -405,24 +314,145 @@ fun MainContent(
                                             Icon(imageVector = item.icon, contentDescription = item.label)
                                         }
                                     },
-                                    label = { Text(item.label, fontSize = 11.sp, maxLines = 1) },
-                                    modifier = Modifier.testTag("nav_bar_item_${item.route}")
+                                    label = { Text(item.label) },
+                                    modifier = Modifier.testTag("nav_rail_item_${item.route}")
                                 )
                             }
                         }
                     }
+
+                    // Screen container with Header and #D9D9D9 background
+                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        AppHeader(
+                            currentRoute = currentRoute,
+                            canPop = canPop,
+                            onNavigateBack = { navController.popBackStack() },
+                            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFFFBFBFB))
+                        ) {
+                            NavHostContainer(
+                                navController = navController,
+                                viewModel = viewModel,
+                                modifier = Modifier
+                            )
+                        }
+                    }
                 }
-            ) { innerPadding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
-                    NavHostContainer(
-                        navController = navController,
-                        viewModel = viewModel,
+            } else {
+                // Adaptive portrait layout: Standard Scaffold + Top AppHeader + Bottom Navigation Bar
+                Scaffold(
+                    modifier = modifier.fillMaxSize(),
+                    topBar = {
+                        AppHeader(
+                            currentRoute = currentRoute,
+                            canPop = canPop,
+                            onNavigateBack = { navController.popBackStack() }
+                        )
+                    },
+                    bottomBar = {
+                        NavigationBar {
+                            navigationItems.forEach { item ->
+                                val isSelected = when (item.route) {
+                                    Routes.DASHBOARD -> currentRoute == Routes.DASHBOARD || currentRoute == Routes.WALLETS
+                                    Routes.HISTORY -> currentRoute == Routes.HISTORY
+                                    Routes.ADD_TRANSACTION -> currentRoute == Routes.ADD_TRANSACTION
+                                    Routes.BANK_NOTIFICATION_HISTORY -> currentRoute == Routes.BANK_NOTIFICATION_HISTORY
+                                    Routes.SETTINGS -> currentRoute == Routes.SETTINGS
+                                    else -> false
+                                }
+                                if (item.route == Routes.ADD_TRANSACTION) {
+                                    NavigationBarItem(
+                                        selected = isSelected,
+                                        onClick = {
+                                            if (currentRoute != item.route) {
+                                                navController.navigate(item.route) {
+                                                    popUpTo(navController.graph.startDestinationId)
+                                                    launchSingleTop = true
+                                                }
+                                            }
+                                        },
+                                        icon = {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(52.dp)
+                                                    .background(
+                                                        if (isSelected) MaterialTheme.colorScheme.primary 
+                                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), 
+                                                        shape = CircleShape
+                                                    )
+                                                    .padding(10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Add,
+                                                    contentDescription = item.label,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(28.dp)
+                                                )
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                text = item.label,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = Color.Transparent
+                                        ),
+                                        modifier = Modifier.testTag("nav_bar_item_${item.route}")
+                                    )
+                                } else {
+                                    NavigationBarItem(
+                                        selected = isSelected,
+                                        onClick = {
+                                            if (currentRoute != item.route) {
+                                                navController.navigate(item.route) {
+                                                    popUpTo(navController.graph.startDestinationId)
+                                                    launchSingleTop = true
+                                                }
+                                            }
+                                        },
+                                        icon = {
+                                            if (item.route == Routes.BANK_NOTIFICATION_HISTORY && pendingCount > 0) {
+                                                BadgedBox(
+                                                    badge = {
+                                                        Badge {
+                                                            Text(text = pendingCount.toString(), modifier = Modifier.testTag("notification_badge_count"))
+                                                        }
+                                                    }
+                                                ) {
+                                                    Icon(imageVector = item.icon, contentDescription = item.label)
+                                                }
+                                            } else {
+                                                Icon(imageVector = item.icon, contentDescription = item.label)
+                                            }
+                                        },
+                                        label = { Text(item.label, fontSize = 11.sp, maxLines = 1) },
+                                        modifier = Modifier.testTag("nav_bar_item_${item.route}")
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) { innerPadding ->
+                    Box(
                         modifier = Modifier
-                    )
+                            .fillMaxSize()
+                            .background(Color(0xFFFBFBFB))
+                            .padding(innerPadding)
+                    ) {
+                        NavHostContainer(
+                            navController = navController,
+                            viewModel = viewModel,
+                            modifier = Modifier
+                        )
 
                     // -------------------- POPUPS AND DIALOGS --------------------
                     if (showPermissionErrorPopup) {
@@ -872,3 +902,64 @@ data class MainNavigationItem(
     val label: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 )
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppHeader(
+    currentRoute: String,
+    canPop: Boolean,
+    onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val baseRoute = currentRoute.substringBefore("?")
+    val title = when {
+        baseRoute == Routes.DASHBOARD -> "TỔNG QUAN"
+        baseRoute == Routes.WALLETS -> "QUẢN LÝ VÍ"
+        baseRoute == Routes.HISTORY -> "LỊCH SỬ GIAO DỊCH"
+        baseRoute == Routes.STATS -> "THỐNG KÊ & BÁO CÁO"
+        baseRoute == Routes.BUDGET_GOAL -> "HẠN MỨC CHI TIÊU"
+        baseRoute == Routes.SAVINGS_VAULT -> "SỔ TIẾT KIỆM"
+        baseRoute == Routes.SETTINGS -> "CÀI ĐẶT"
+        baseRoute == Routes.ADD_TRANSACTION -> "THÊM GIAO DỊCH"
+        baseRoute == Routes.BANK_NOTIFICATION_HISTORY -> "THÔNG BÁO NGÂN HÀNG"
+        baseRoute.startsWith(Routes.TIMELINE) -> "DÒNG THỜI GIAN"
+        baseRoute == Routes.EVENTS -> "QUẢN LÝ SỰ KIỆN"
+        baseRoute == Routes.DEBT_BOOK -> "SỔ NỢ"
+        baseRoute == Routes.AI_ADVISOR -> "CỐ VẤN TÀI CHÍNH AI"
+        else -> "QUẢN LÝ THU CHI"
+    }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 3.dp,
+        tonalElevation = 1.dp
+    ) {
+        TopAppBar(
+            title = {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 20.sp,
+                    letterSpacing = 0.5.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            navigationIcon = {
+                if (canPop) {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Quay lại",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        )
+    }
+}
+
