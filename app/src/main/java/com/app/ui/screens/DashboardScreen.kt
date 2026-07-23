@@ -1025,7 +1025,7 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Tỷ lệ\nchi tiêu",
+                        text = "Biểu đồ",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
