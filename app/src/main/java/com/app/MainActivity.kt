@@ -335,7 +335,7 @@ fun MainContent(
 
                     // Screen container with Header and #D9D9D9 background
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && currentRoute != Routes.BUDGET_GOAL) {
+                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && currentRoute != Routes.BUDGET_GOAL && currentRoute != Routes.WALLETS) {
                             AppHeader(
                                 currentRoute = currentRoute,
                                 canPop = canPop,
@@ -372,7 +372,7 @@ fun MainContent(
                     modifier = modifier.fillMaxSize(),
                     contentWindowInsets = WindowInsets(0.dp),
                     topBar = {
-                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && currentRoute != Routes.BUDGET_GOAL) {
+                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && currentRoute != Routes.BUDGET_GOAL && currentRoute != Routes.WALLETS) {
                             AppHeader(
                                 currentRoute = currentRoute,
                                 canPop = canPop,
@@ -829,7 +829,10 @@ fun NavHostContainer(
                 ) + fadeOut(animationSpec = tween(300))
             }
         ) {
-            WalletsScreen(viewModel = viewModel)
+            WalletsScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.HISTORY) {

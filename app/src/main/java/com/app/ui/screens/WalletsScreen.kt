@@ -37,9 +37,11 @@ import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun WalletsScreen(
     viewModel: FinanceViewModel,
+    onNavigateBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val wallets by viewModel.dailyWallets.collectAsState()
@@ -98,46 +100,70 @@ fun WalletsScreen(
         }
     }
 
-    Box(
-        modifier = modifier.fillMaxSize().testTag("wallets_screen_root")
-    ) {
+    Scaffold(
+        modifier = modifier.fillMaxSize().testTag("wallets_screen_root"),
+        topBar = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 3.dp,
+                tonalElevation = 1.dp
+            ) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "DANH SÁCH VÍ",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 20.sp,
+                            letterSpacing = 0.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Quay lại",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    },
+                    actions = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { showSelectWalletDialog = true },
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp))
+                                    .size(36.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Chỉnh số dư", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            }
+
+                            IconButton(
+                                onClick = { showAddDialog = true },
+                                modifier = Modifier
+                                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                                    .size(36.dp)
+                                    .testTag("add_wallet_fab")
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = "Thêm ví", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            }
+        }
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Ví & Tài Khoản",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = { showSelectWalletDialog = true },
-                        modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp)).size(40.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Chỉnh số dư", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    }
-
-                    IconButton(
-                        onClick = { showAddDialog = true },
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                            .size(40.dp)
-                            .testTag("add_wallet_fab")
-                    ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Thêm ví", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
-                    }
-                }
-            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -455,13 +481,13 @@ fun WalletBigCard(
                 if (showDeleteButton) {
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.size(20.dp).testTag("delete_wallet_${wallet.id}")
+                        modifier = Modifier.size(32.dp).testTag("delete_wallet_${wallet.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "Xóa ví",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
-                            modifier = Modifier.size(14.dp)
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -753,7 +779,7 @@ fun AddWalletDialog(
 
 enum class AdjustWalletStep { SELECT_WALLET, EDIT_WALLET }
 
-@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
+@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AdjustWalletFlowDialog(
     wallets: List<Wallet>,
@@ -762,184 +788,201 @@ fun AdjustWalletFlowDialog(
 ) {
     var currentStep by remember { mutableStateOf(AdjustWalletStep.SELECT_WALLET) }
     var selectedWallet by remember { mutableStateOf<Wallet?>(null) }
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenHeight = configuration.screenHeightDp.dp
     
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        androidx.compose.material3.Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().animateContentSize()
-        ) {
-            androidx.compose.animation.AnimatedContent(
-                targetState = currentStep,
-                transitionSpec = {
-                    if (targetState == AdjustWalletStep.EDIT_WALLET) {
-                        (androidx.compose.animation.slideInHorizontally { width -> width } + androidx.compose.animation.fadeIn()).with(androidx.compose.animation.slideOutHorizontally { width -> -width } + androidx.compose.animation.fadeOut())
-                    } else {
-                        (androidx.compose.animation.slideInHorizontally { width -> -width } + androidx.compose.animation.fadeIn()).with(androidx.compose.animation.slideOutHorizontally { width -> width } + androidx.compose.animation.fadeOut())
-                    }
-                },
-                label = "AdjustWalletTransition"
-            ) { step ->
-                when (step) {
-                    AdjustWalletStep.SELECT_WALLET -> {
-                        Column(modifier = Modifier.padding(24.dp)) {
-                            Text("Chọn ví cần điều chỉnh", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            if (wallets.isEmpty()) {
-                                Text("Bạn chưa có ví nào. Vui lòng thêm ví trước.")
-                            } else {
-                                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
-                                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(wallets.size) { index ->
-                                        val wallet = wallets[index]
-                                        WalletBigCard(
-                                            wallet = wallet,
-                                            isSelected = false,
-                                            onSelect = { 
-                                                selectedWallet = wallet
-                                                currentStep = AdjustWalletStep.EDIT_WALLET 
-                                            },
-                                            onDelete = { },
-                                            showDeleteButton = false,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                Button(
-                                    onClick = onDismiss,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                    ),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.defaultMinSize(minWidth = 80.dp)
-                                ) {
-                                    Text("Đóng", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                    AdjustWalletStep.EDIT_WALLET -> {
-                        val wallet = selectedWallet!!
-                        val focusManager = LocalFocusManager.current
-                        var actualBalanceStr by remember { mutableStateOf("") }
-                        var showEmptyConfirmDialog by remember { mutableStateOf(false) }
-
-                        if (showEmptyConfirmDialog) {
-                            AlertDialog(
-                                onDismissRequest = { showEmptyConfirmDialog = false },
-                                title = { Text("Xác nhận số dư 0đ") },
-                                text = { Text("Bạn để trống số dư thực tế. Điều này đồng nghĩa số dư của ví sẽ được điều chỉnh về 0đ. Bạn có chắc chắn không?") },
-                                confirmButton = {
-                                    Button(onClick = {
-                                        showEmptyConfirmDialog = false
-                                        onSave(wallet.id, 0.0)
-                                    }) {
-                                        Text("Chắc chắn (0đ)")
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showEmptyConfirmDialog = false }) {
-                                        Text("Hủy, tôi nhập lại")
-                                    }
-                                }
-                            )
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp)
-                                .pointerInput(Unit) {
-                                    detectTapGestures(onTap = {
-                                        focusManager.clearFocus()
-                                    })
-                                },
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        androidx.compose.animation.AnimatedContent(
+            targetState = currentStep,
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f),
+            transitionSpec = {
+                if (targetState == AdjustWalletStep.EDIT_WALLET) {
+                    (androidx.compose.animation.slideInHorizontally { width -> width } + androidx.compose.animation.fadeIn()).with(androidx.compose.animation.slideOutHorizontally { width -> -width } + androidx.compose.animation.fadeOut())
+                } else {
+                    (androidx.compose.animation.slideInHorizontally { width -> -width } + androidx.compose.animation.fadeIn()).with(androidx.compose.animation.slideOutHorizontally { width -> width } + androidx.compose.animation.fadeOut())
+                }
+            },
+            label = "AdjustWalletTransition"
+        ) { step ->
+            when (step) {
+                AdjustWalletStep.SELECT_WALLET -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { currentStep = AdjustWalletStep.SELECT_WALLET }) {
-                                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở lại")
-                                    }
-                                    Text("ĐIỀU CHỈNH SỐ DƯ", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                                }
-                            }
-
                             Text(
-                                text = "Ví: ${wallet.name}",
+                                text = "Chọn ví cần điều chỉnh",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                modifier = Modifier.padding(horizontal = 12.dp)
+                                fontSize = 18.sp,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            
-                            Text(
-                                text = "Số dư hiện tại: ${FormatHelper.formatVND(wallet.balance)}",
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 12.dp)
-                            )
-
-                            com.app.ui.components.CustomMoneyInputField(
-                                value = actualBalanceStr,
-                                onValueChange = { actualBalanceStr = it },
-                                label = "Số dư thực tế",
-                                testTag = "edit_wallet_balance_input"
-                            )
-
-                            val actualBalance = try {
-                                FormatHelper.evaluateExpression(actualBalanceStr)
-                            } catch (e: Exception) {
-                                0.0
+                            IconButton(onClick = onDismiss) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng")
                             }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
 
-                            val diff = actualBalance - wallet.balance
-                            if (diff != 0.0) {
-                                val diffText = if (diff > 0) "+${FormatHelper.formatVND(diff)}" else "-${FormatHelper.formatVND(Math.abs(diff))}"
-                                val diffColor = if (diff > 0) Color(0xFF4CAF50) else Color(0xFFF44336)
-                                val actionText = if (diff > 0) "Sẽ tạo giao dịch 'Điều chỉnh tăng số dư ví'" else "Sẽ tạo giao dịch 'Điều chỉnh giảm số dư ví'"
-
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 12.dp)) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Chênh lệch:", fontSize = 14.sp)
-                                        Text(diffText, color = diffColor, fontWeight = FontWeight.Bold)
-                                    }
-                                    Text(actionText, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                        if (wallets.isEmpty()) {
+                            Text("Bạn chưa có ví nào. Vui lòng thêm ví trước.")
+                        } else {
+                            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(wallets.size) { index ->
+                                    val wallet = wallets[index]
+                                    WalletBigCard(
+                                        wallet = wallet,
+                                        isSelected = false,
+                                        onSelect = { 
+                                            selectedWallet = wallet
+                                            currentStep = AdjustWalletStep.EDIT_WALLET 
+                                        },
+                                        onDelete = { },
+                                        showDeleteButton = false,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                 }
                             }
+                        }
+                    }
+                }
+                AdjustWalletStep.EDIT_WALLET -> {
+                    val wallet = selectedWallet!!
+                    val focusManager = LocalFocusManager.current
+                    var actualBalanceStr by remember { mutableStateOf("") }
+                    var showEmptyConfirmDialog by remember { mutableStateOf(false) }
 
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(onClick = onDismiss) { Text("Hủy") }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = {
-                                        if (actualBalanceStr.isBlank()) {
-                                            showEmptyConfirmDialog = true
-                                        } else {
-                                            val finalBalance = try {
-                                                FormatHelper.evaluateExpression(actualBalanceStr)
-                                            } catch (e: Exception) {
-                                                0.0
-                                            }
-                                            onSave(wallet.id, finalBalance)
+                    if (showEmptyConfirmDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showEmptyConfirmDialog = false },
+                            title = { Text("Xác nhận số dư 0đ") },
+                            text = { Text("Bạn để trống số dư thực tế. Điều này đồng nghĩa số dư của ví sẽ được điều chỉnh về 0đ. Bạn có chắc chắn không?") },
+                            confirmButton = {
+                                Button(onClick = {
+                                    showEmptyConfirmDialog = false
+                                    onSave(wallet.id, 0.0)
+                                }) {
+                                    Text("Chắc chắn (0đ)")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showEmptyConfirmDialog = false }) {
+                                    Text("Hủy, tôi nhập lại")
+                                }
+                            }
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures(onTap = {
+                                    focusManager.clearFocus()
+                                })
+                            },
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { currentStep = AdjustWalletStep.SELECT_WALLET }) {
+                                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở lại")
+                                }
+                                Text(
+                                    text = "Điều chỉnh số dư",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(onClick = onDismiss) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng")
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
+
+                        Text(
+                            text = "Ví: ${wallet.name}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        
+                        Text(
+                            text = "Số dư hiện tại: ${FormatHelper.formatVND(wallet.balance)}",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        com.app.ui.components.CustomMoneyInputField(
+                            value = actualBalanceStr,
+                            onValueChange = { actualBalanceStr = it },
+                            label = "Số dư thực tế",
+                            testTag = "edit_wallet_balance_input"
+                        )
+
+                        val actualBalance = try {
+                            FormatHelper.evaluateExpression(actualBalanceStr)
+                        } catch (e: Exception) {
+                            0.0
+                        }
+
+                        val diff = actualBalance - wallet.balance
+                        if (diff != 0.0) {
+                            val diffText = if (diff > 0) "+${FormatHelper.formatVND(diff)}" else "-${FormatHelper.formatVND(Math.abs(diff))}"
+                            val diffColor = if (diff > 0) Color(0xFF4CAF50) else Color(0xFFF44336)
+                            val actionText = if (diff > 0) "Sẽ tạo giao dịch 'Điều chỉnh tăng số dư ví'" else "Sẽ tạo giao dịch 'Điều chỉnh giảm số dư ví'"
+
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Chênh lệch:", fontSize = 14.sp)
+                                    Text(diffText, color = diffColor, fontWeight = FontWeight.Bold)
+                                }
+                                Text(actionText, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                            }
+                        }
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = onDismiss) { Text("Hủy") }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    if (actualBalanceStr.isBlank()) {
+                                        showEmptyConfirmDialog = true
+                                    } else {
+                                        val finalBalance = try {
+                                            FormatHelper.evaluateExpression(actualBalanceStr)
+                                        } catch (e: Exception) {
+                                            0.0
                                         }
-                                    },
-                                    modifier = Modifier.testTag("dialog_confirm_edit_wallet")
-                                ) {
-                                    Text("Lưu")
-                                }
+                                        onSave(wallet.id, finalBalance)
+                                    }
+                                },
+                                modifier = Modifier.testTag("dialog_confirm_edit_wallet")
+                            ) {
+                                Text("Lưu")
                             }
                         }
                     }
@@ -947,4 +990,4 @@ fun AdjustWalletFlowDialog(
             }
         }
     }
-}
+    }

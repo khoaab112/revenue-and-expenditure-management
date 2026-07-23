@@ -36,6 +36,7 @@ import com.app.ui.IconMapper
 import com.app.ui.components.StripedProgressIndicator
 import java.util.Calendar
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel: FinanceViewModel,
@@ -1646,73 +1647,99 @@ fun DashboardScreen(
         val limit = event.limitAmount ?: 0.0
         val spent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
         
-        AlertDialog(
+        val configuration = LocalConfiguration.current
+        val screenHeight = configuration.screenHeightDp.dp
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
             onDismissRequest = { eventToView = null },
-            title = { Text(text = event.name, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (event.description.isNotBlank()) {
-                        Text(event.description, fontSize = 14.sp)
-                    }
-                    val startStr = FormatHelper.formatDate(event.startDate)
-                    val endStr = event.endDate?.let { FormatHelper.formatDate(it) } ?: "Không tính"
-                    Text("Thời gian: $startStr - $endStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
-
-                    if (limit > 0) {
-                        Text("Tiến độ chi tiêu:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                        val progress = (spent / limit).toFloat().coerceIn(0f, 1f)
-                        StripedProgressIndicator(
-                            progress = progress,
-                            modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
-                            color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                        Text(
-                            text = "${FormatHelper.formatVND(spent)} / ${FormatHelper.formatVND(limit)}",
-                            fontSize = 12.sp,
-                            modifier = Modifier.align(Alignment.End)
-                        )
-                    } else {
-                        Text("Đã chi: ${FormatHelper.formatVND(spent)}", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                    }
-
-                    if (eventTransactions.isNotEmpty()) {
-                        Text("Lịch sử giao dịch liên quan:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
-                        androidx.compose.foundation.lazy.LazyColumn(
-                            modifier = Modifier.heightIn(max = 200.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            items(eventTransactions.sortedByDescending { it.timestamp }) { tx ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(tx.categoryName, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                        Text(FormatHelper.formatDate(tx.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                                    }
-                                    val isAdjustmentDecrease = tx.type == "ADJUSTMENT" && !tx.note.contains("tăng")
-                                    Text(
-                                        text = "${if (tx.type == "EXPENSE" || isAdjustmentDecrease) "-" else "+"}${FormatHelper.formatVND(tx.amount)}",
-                                        color = if (tx.type == "EXPENSE" || isAdjustmentDecrease) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp
-                                    )
-                                }
-                                androidx.compose.material3.HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            }
-                        }
-                    } else {
-                        Text("Chưa có giao dịch.", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.85f)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Header (System standard - like Image 2)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = event.name,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    IconButton(onClick = { eventToView = null }) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng")
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { eventToView = null }) {
-                    Text("Đóng")
+                
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
+
+                if (event.description.isNotBlank()) {
+                    Text(event.description, fontSize = 14.sp)
+                }
+                val startStr = FormatHelper.formatDate(event.startDate)
+                val endStr = event.endDate?.let { FormatHelper.formatDate(it) } ?: "Không tính"
+                Text("Thời gian: $startStr - $endStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+
+                if (limit > 0) {
+                    Text("Tiến độ chi tiêu:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                    val progress = (spent / limit).toFloat().coerceIn(0f, 1f)
+                    StripedProgressIndicator(
+                        progress = progress,
+                        modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                        color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Text(
+                        text = "${FormatHelper.formatVND(spent)} / ${FormatHelper.formatVND(limit)}",
+                        fontSize = 12.sp,
+                        modifier = Modifier.align(Alignment.End)
+                    )
+                } else {
+                    Text("Đã chi: ${FormatHelper.formatVND(spent)}", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                }
+
+                if (eventTransactions.isNotEmpty()) {
+                    Text("Lịch sử giao dịch liên quan:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(eventTransactions.sortedByDescending { it.timestamp }) { tx ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(tx.categoryName, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text(FormatHelper.formatDate(tx.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                                }
+                                val isAdjustmentDecrease = tx.type == "ADJUSTMENT" && !tx.note.contains("tăng")
+                                Text(
+                                    text = "${if (tx.type == "EXPENSE" || isAdjustmentDecrease) "-" else "+"}${FormatHelper.formatVND(tx.amount)}",
+                                    color = if (tx.type == "EXPENSE" || isAdjustmentDecrease) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        }
+                    }
+                } else {
+                    Text("Chưa có giao dịch.", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
                 }
             }
-        )
+        }
     }
 }
 
