@@ -107,41 +107,11 @@ fun AIAdvisorScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Cố vấn Tài chính AI", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại")
-                    }
-                },
-                actions = {
-                    val result = advisorResult
-                    if (result != null && result.success) {
-                        IconButton(onClick = { speakText() }) {
-                            Icon(
-                                imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                contentDescription = if (isSpeaking) "Dừng đọc" else "Đọc kết quả"
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                )
-            )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
             if (geminiApiKey.isBlank()) {
                 // Friendly error advising user to configure API Key in settings
                 Column(
@@ -442,7 +412,6 @@ fun AIAdvisorScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Phân tích lại")
                         }
-                    }
                 }
             }
         }

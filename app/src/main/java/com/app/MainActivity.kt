@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.*
+import androidx.navigation.navArgument
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
@@ -334,12 +335,15 @@ fun MainContent(
 
                     // Screen container with Header and #D9D9D9 background
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        AppHeader(
-                            currentRoute = currentRoute,
-                            canPop = canPop,
-                            onNavigateBack = { handleBackNavigation() },
-                            viewModel = viewModel
-                        )
+                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && currentRoute != Routes.BUDGET_GOAL) {
+                            AppHeader(
+                                currentRoute = currentRoute,
+                                canPop = canPop,
+                                onNavigateBack = { handleBackNavigation() },
+                                viewModel = viewModel,
+                                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) }
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -368,12 +372,13 @@ fun MainContent(
                     modifier = modifier.fillMaxSize(),
                     contentWindowInsets = WindowInsets(0.dp),
                     topBar = {
-                        if (currentRoute != Routes.CATEGORY_MANAGEMENT) {
+                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && currentRoute != Routes.BUDGET_GOAL) {
                             AppHeader(
                                 currentRoute = currentRoute,
                                 canPop = canPop,
                                 onNavigateBack = { handleBackNavigation() },
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) }
                             )
                         }
                     },
@@ -791,8 +796,9 @@ fun NavHostContainer(
                 onNavigateToBudget = { navController.navigate(Routes.BUDGET_GOAL) },
                 onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
                 onNavigateToBankNotifications = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
-                onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) },
-                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) }
+                onNavigateToDebtBook = { tabIdx -> navController.navigate("${Routes.DEBT_BOOK}?tab=$tabIdx") },
+                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                onNavigateToEvents = { navController.navigate(Routes.EVENTS) }
             )
         }
 
@@ -932,10 +938,16 @@ fun NavHostContainer(
             )
         }
 
-        composable(Routes.DEBT_BOOK) {
+        composable(
+            route = "${Routes.DEBT_BOOK}?tab={tab}",
+            arguments = listOf(navArgument("tab") { defaultValue = "0" })
+        ) { backStackEntry ->
+            val tabStr = backStackEntry.arguments?.getString("tab") ?: "0"
+            val initialTab = tabStr.toIntOrNull() ?: 0
             com.app.ui.screens.DebtBookScreen(
                 viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                initialTab = initialTab
             )
         }
 
@@ -1028,6 +1040,7 @@ fun AppHeader(
     canPop: Boolean,
     onNavigateBack: () -> Unit,
     viewModel: FinanceViewModel? = null,
+    onNavigateToAIAdvisor: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val customTitle = viewModel?.customTopBarTitle?.collectAsState()?.value
@@ -1079,6 +1092,19 @@ fun AppHeader(
                 }
             },
             actions = {
+                if (baseRoute == Routes.DASHBOARD && onNavigateToAIAdvisor != null) {
+                    IconButton(
+                        onClick = onNavigateToAIAdvisor,
+                        modifier = Modifier.testTag("app_header_ai_advisor_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Trợ lý AI",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
                 if ((baseRoute == Routes.STATS || baseRoute == Routes.HISTORY) && viewModel != null) {
                     val exportContext = androidx.compose.ui.platform.LocalContext.current
                     val activeMonth by viewModel.activeMonth.collectAsState()

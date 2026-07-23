@@ -39,6 +39,7 @@ import com.app.ui.IconMapper
 import com.app.ui.components.StripedProgressIndicator
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import androidx.compose.ui.text.withStyle
 
 @Composable
 fun BudgetGoalScreen(
@@ -56,6 +57,7 @@ private fun isTimestampInMonth(timestamp: Long, monthStr: String): Boolean {
 }
 
 // =================== BUDGETS SECTION ===================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BudgetsSection(
     viewModel: FinanceViewModel,
@@ -143,60 +145,79 @@ fun BudgetsSection(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            // Header Row (Back Button + Add Button)
-            Row(
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 3.dp,
+                tonalElevation = 1.dp
             ) {
-                IconButton(
-                    onClick = onNavigateBack,
-                    modifier = Modifier.testTag("budget_back_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Quay lại"
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "HẠN MỨC CHI TIÊU",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 20.sp,
+                            letterSpacing = 0.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Quay lại",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    },
+                    actions = {
+                        Button(
+                            onClick = { showAddDialog = true },
+                            modifier = Modifier
+                                .testTag("add_budget_btn")
+                                .height(32.dp)
+                                .padding(end = 8.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Thêm ngân sách", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Thêm", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
                     )
-                }
-
-                Button(
-                    onClick = { showAddDialog = true },
-                    modifier = Modifier
-                        .testTag("add_budget_btn")
-                        .height(40.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Thêm ngân sách")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Thêm", fontSize = 13.sp)
-                }
+                )
             }
+        }
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp) // Removed 16.dp vertical padding to fix bottom whitespace
+            ) {
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Month Navigation Control Bar (< Ngân Sách: Tháng MM/YYYY >)
+            // Month Navigation Control Bar (< Tháng 07/2026 >)
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -207,7 +228,7 @@ fun BudgetsSection(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Tháng trước",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -221,20 +242,21 @@ fun BudgetsSection(
                         Icon(
                             imageVector = Icons.Default.CalendarMonth,
                             contentDescription = "Chọn tháng",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Ngân Sách: $displayBudgetMonth",
+                            text = displayBudgetMonth,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             imageVector = Icons.Default.ArrowDropDown,
                             contentDescription = "Dropdown",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -245,7 +267,7 @@ fun BudgetsSection(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = "Tháng sau",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -404,6 +426,7 @@ fun BudgetsSection(
                 onDismiss = { selectedCategoryForHistory = null }
             )
         }
+        }
     }
 }
 
@@ -493,12 +516,14 @@ fun BudgetItemCard(
     modifier: Modifier = Modifier
 ) {
     val ratio = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat() else 0f
+    val percentage = (ratio * 100).toInt()
+    val isOverBudget = ratio >= 1.0f
     
     val catColor = FormatHelper.parseColor(budget.categoryColor)
 
     // Choose progress color depending on danger ratios
     val progressColor = when {
-        ratio >= 1.0f -> Color(0xFFF44336) // Red (overspent)
+        isOverBudget -> Color(0xFFF44336) // Red (overspent)
         ratio >= 0.8f -> Color(0xFFFF9800) // Orange (danger)
         else -> catColor // Category color
     }
@@ -507,11 +532,11 @@ fun BudgetItemCard(
         modifier = modifier.fillMaxWidth().testTag("budget_card_${budget.id}").clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(16.dp)
         ) {
             // Row 1: Header (Icon, Name, Delete)
             Row(
@@ -520,7 +545,7 @@ fun BudgetItemCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(catColor),
                     contentAlignment = Alignment.Center
@@ -529,10 +554,10 @@ fun BudgetItemCard(
                         imageVector = IconMapper.getIconByName(budget.categoryIcon),
                         contentDescription = budget.categoryName,
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = budget.categoryName,
                     fontSize = 16.sp,
@@ -540,18 +565,25 @@ fun BudgetItemCard(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(24.dp).testTag("delete_budget_btn_${budget.id}")
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .clickable { onDelete() }
+                        .testTag("delete_budget_btn_${budget.id}"),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                 }
             }
+            
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Row 2: Recurring Switch & Amount display
             Row(
@@ -566,39 +598,104 @@ fun BudgetItemCard(
                     Switch(
                         checked = budget.isRecurring,
                         onCheckedChange = { onToggleRecurring() },
-                        modifier = Modifier.scale(0.75f)
+                        modifier = Modifier.scale(0.8f)
                     )
-                    Spacer(modifier = Modifier.width(2.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Tự động",
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                Text(
-                    text = "${FormatHelper.formatVND(budget.spentAmount)} / ${FormatHelper.formatVND(budget.limitAmount)}",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                androidx.compose.material3.Text(
+                    text = androidx.compose.ui.text.buildAnnotatedString {
+                        withStyle(
+                            style = androidx.compose.ui.text.SpanStyle(
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        ) {
+                            append(FormatHelper.formatVND(budget.spentAmount))
+                        }
+                        withStyle(
+                            style = androidx.compose.ui.text.SpanStyle(
+                                fontWeight = FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            append(" / ${FormatHelper.formatVND(budget.limitAmount)}")
+                        }
+                    },
+                    fontSize = 14.sp
                 )
             }
+            
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Row 3: Striped Progress Bar
             StripedProgressIndicator(
                 progress = ratio.coerceAtMost(1.0f),
                 color = progressColor,
-                modifier = Modifier.fillMaxWidth().height(10.dp)
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
             )
+            
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Row 4: Percent and Remaining
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "$percentage%",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = progressColor
+                )
+                
+                val diff = budget.limitAmount - budget.spentAmount
+                if (diff >= 0) {
+                    Text(
+                        text = "Còn lại ${FormatHelper.formatVND(diff)}",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = "Vượt quá ${FormatHelper.formatVND(-diff)}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFF44336)
+                    )
+                }
+            }
 
             // Overlimit alert warning
-            if (ratio >= 1.0f) {
-                Text(
-                    text = "VƯỢT QUÁ HẠN MỨC!",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFFF44336)
-                )
+            if (isOverBudget) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFFEBEE), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Warning",
+                        tint = Color(0xFFD32F2F),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Vượt quá hạn mức!",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFD32F2F)
+                    )
+                }
             }
         }
     }

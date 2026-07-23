@@ -20,6 +20,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.animateContentSize
@@ -41,8 +45,9 @@ fun DashboardScreen(
     onNavigateToBudget: () -> Unit,
     onNavigateToSavings: () -> Unit = {},
     onNavigateToBankNotifications: () -> Unit = {},
-    onNavigateToDebtBook: () -> Unit = {},
+    onNavigateToDebtBook: (Int) -> Unit = {},
     onNavigateToAIAdvisor: () -> Unit = {},
+    onNavigateToEvents: () -> Unit = {},
     onNavigateBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -80,6 +85,10 @@ fun DashboardScreen(
     val totalExpense = financialSummary.realExpense
     val totalNetSavings = financialSummary.netSavings
 
+    var isBalanceVisible by remember { mutableStateOf(true) }
+    val incomeCount = remember(currentMonthTransactions) { currentMonthTransactions.count { it.type == "INCOME" } }
+    val expenseCount = remember(currentMonthTransactions) { currentMonthTransactions.count { it.type == "EXPENSE" } }
+
     val displayMonth = remember(activeMonth) {
         if (activeMonth.length >= 7) {
             "Tháng ${activeMonth.substring(5)}/${activeMonth.substring(0, 4)}"
@@ -109,97 +118,160 @@ fun DashboardScreen(
     ) {
         // --- Total Balance Section ---
         Card(
-            modifier = Modifier.fillMaxWidth().testTag("total_balance_card"),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onNavigateToStats() }
+                .testTag("total_balance_card"),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF4564ED)),
+            shape = RoundedCornerShape(20.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column {
-                        Text(
-                            text = "Tổng số dư khả dụng",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                            colors = listOf(Color(0xFF4A68F0), Color(0xFF3B54DC))
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = FormatHelper.formatVND(totalBalance),
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.TrendingUp,
-                        contentDescription = "Trending Up",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
                     )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.08f))
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                    .padding(18.dp)
+            ) {
+                Column {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowDownward,
-                            contentDescription = "Income",
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text(
-                                text = "Thu nhập ($displayMonthShort)",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                                text = "Tổng số dư khả dụng",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.85f)
                             )
-                            Text(
-                                text = FormatHelper.formatVND(totalIncome),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4CAF50)
+                            Icon(
+                                imageVector = if (isBalanceVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = "Ẩn/Hiện số dư",
+                                tint = Color.White.copy(alpha = 0.85f),
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable { isBalanceVisible = !isBalanceVisible }
+                            )
+                        }
+
+                        // Right Badge (Trending Icon)
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.18f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                                contentDescription = "Báo cáo",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowUpward,
-                            contentDescription = "Expense",
-                            tint = Color(0xFFF44336),
-                            modifier = Modifier.size(14.dp)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Balance Display
+                    if (isBalanceVisible) {
+                        FormattedVndText(
+                            amount = totalBalance,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
                         )
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "Chi tiêu ($displayMonthShort)",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    } else {
+                        Text(
+                            text = "•••••••• đ",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.2f), thickness = 0.8.dp)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Bottom Income and Expense Breakdown
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Max),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Thu nhập
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowDownward,
+                                contentDescription = "Income",
+                                tint = Color(0xFF00E676),
+                                modifier = Modifier.size(18.dp)
                             )
-                            Text(
-                                text = FormatHelper.formatVND(totalExpense),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFF44336)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Thu nhập ($incomeCount)",
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                FormattedVndText(
+                                    amount = totalIncome,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF00E676)
+                                )
+                            }
+                        }
+
+                        // Vertical Divider
+                        VerticalDivider(
+                            color = Color.White.copy(alpha = 0.25f),
+                            thickness = 0.8.dp,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+
+                        // Chi tiêu
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowUpward,
+                                contentDescription = "Expense",
+                                tint = Color(0xFFFF5252),
+                                modifier = Modifier.size(18.dp)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Chi tiêu ($expenseCount)",
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                FormattedVndText(
+                                    amount = totalExpense,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF5252)
+                                )
+                            }
                         }
                     }
                 }
@@ -268,157 +340,468 @@ fun DashboardScreen(
 
         // --- Active Debts Alert Banner ---
         val allDebts by viewModel.allDebts.collectAsState()
-        val activeDebts = remember(allDebts) { allDebts.filter { it.status == "ACTIVE" && it.remainingAmount > 0 } }
-        if (activeDebts.isNotEmpty()) {
-            val totalDebt = activeDebts.filter { it.type == "DEBT" }.sumOf { it.remainingAmount }
-            val totalLoan = activeDebts.filter { it.type == "LOAN" }.sumOf { it.remainingAmount }
+        val activeDebtsList = remember(allDebts) { allDebts.filter { it.status == "ACTIVE" && it.remainingAmount > 0 } }
+        if (activeDebtsList.isNotEmpty()) {
+            val now = System.currentTimeMillis()
+            val debtItems = remember(activeDebtsList) { activeDebtsList.filter { it.type == "DEBT" } }
+            val loanItems = remember(activeDebtsList) { activeDebtsList.filter { it.type == "LOAN" } }
             
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToDebtBook() }
-                    .testTag("dashboard_active_debts_banner"),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFBE9E7)),
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, Color(0xFFD84315).copy(alpha = 0.4f))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(0xFFFFCCBC), shape = CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountBalanceWallet,
-                            contentDescription = "Active Debts",
-                            tint = Color(0xFFD84315),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Bạn có khoản nợ chưa hoàn thành!",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFD84315)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Đi vay: ${FormatHelper.formatVND(totalDebt)} - Cho vay: ${FormatHelper.formatVND(totalLoan)}",
-                            fontSize = 12.sp,
-                            color = Color(0xFF5D4037)
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- AI Financial Advisor Banner ---
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onNavigateToAIAdvisor() }
-                .testTag("dashboard_ai_advisor_banner"),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), shape = CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "Cố vấn AI",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                // KHOẢN NỢ CARD (Left)
+                if (debtItems.isNotEmpty()) {
+                    val count = debtItems.size
+                    val overdueCount = debtItems.count { it.dueDate != null && it.dueDate < now }
+                    val nearestDays = debtItems
+                        .filter { it.dueDate != null && it.dueDate >= now }
+                        .minOfOrNull { Math.max(0, ((it.dueDate!! - now) / (1000 * 60 * 60 * 24)).toInt()) }
+
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { onNavigateToDebtBook(0) }
+                            .testTag("dashboard_debt_summary_card"),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7F7)),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color(0xFFFFEBEE))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp).fillMaxHeight(),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .background(Color(0xFFFFEBEE), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowUpward,
+                                                contentDescription = null,
+                                                tint = Color(0xFFE53935),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Nợ",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFE53935)
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(Color(0xFFE53935), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = count.toString(),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "$count khoản nợ phải trả",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF4A5568)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Event,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (nearestDays != null) "Gần nhất: sau $nearestDays ngày" else "Gần nhất: Chưa chọn ngày",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF4A5568)
+                                    )
+                                }
+                            }
+
+                            Column {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                HorizontalDivider(color = Color(0xFFFFEBEE), thickness = 1.dp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFFFEBEE),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Notifications,
+                                            contentDescription = null,
+                                            tint = Color(0xFFE53935),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Quá hạn: $overdueCount khoản",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFE53935)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Trợ lý AI",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+
+                // KHOẢN CHO VAY CARD (Right)
+                if (loanItems.isNotEmpty()) {
+                    val count = loanItems.size
+                    val overdueCount = loanItems.count { it.dueDate != null && it.dueDate < now }
+                    val nearestDays = loanItems
+                        .filter { it.dueDate != null && it.dueDate >= now }
+                        .minOfOrNull { Math.max(0, ((it.dueDate!! - now) / (1000 * 60 * 60 * 24)).toInt()) }
+
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { onNavigateToDebtBook(1) }
+                            .testTag("dashboard_loan_summary_card"),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F8FF)),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE3F2FD))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp).fillMaxHeight(),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .background(Color(0xFFE3F2FD), CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowDownward,
+                                                contentDescription = null,
+                                                tint = Color(0xFF1E88E5),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Vay",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1E88E5)
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(Color(0xFF1E88E5), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = count.toString(),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "$count khoản chưa thu",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF4A5568)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Event,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (nearestDays != null) "Gần nhất: sau $nearestDays ngày" else "Gần nhất: Chưa chọn ngày",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF4A5568)
+                                    )
+                                }
+                            }
+
+                            Column {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                HorizontalDivider(color = Color(0xFFE3F2FD), thickness = 1.dp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFE3F2FD),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Notifications,
+                                            contentDescription = null,
+                                            tint = Color(0xFF1E88E5),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Quá hạn: $overdueCount khoản",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1E88E5)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
             }
         }
 
         // --- Events Widget ---
-        val ongoingEvents = events.filter {
-            val now = System.currentTimeMillis()
-            now >= it.startDate && (it.endDate == null || now <= it.endDate + 86400000L - 1)
+        val nowMs = System.currentTimeMillis()
+        val threeDaysMs = 3 * 86400000L
+        val activeOrUpcomingEvents = remember(events, nowMs) {
+            events
+                .filter { event ->
+                    val isOngoing = nowMs >= event.startDate && (event.endDate == null || nowMs <= event.endDate + 86400000L - 1)
+                    val isUpcomingIn3Days = event.startDate > nowMs && (event.startDate - nowMs) <= threeDaysMs
+                    isOngoing || isUpcomingIn3Days
+                }
+                .sortedWith(
+                    Comparator { e1, e2 ->
+                        val isOngoing1 = nowMs >= e1.startDate && (e1.endDate == null || nowMs <= e1.endDate + 86400000L - 1)
+                        val isOngoing2 = nowMs >= e2.startDate && (e2.endDate == null || nowMs <= e2.endDate + 86400000L - 1)
+
+                        when {
+                            // 1. Ongoing events always take precedence over upcoming events
+                            isOngoing1 && !isOngoing2 -> -1
+                            !isOngoing1 && isOngoing2 -> 1
+                            
+                            // 2. Both Ongoing: sort by endDate ascending (events ending soonest appear first)
+                            isOngoing1 && isOngoing2 -> {
+                                val end1 = e1.endDate ?: Long.MAX_VALUE
+                                val end2 = e2.endDate ?: Long.MAX_VALUE
+                                end1.compareTo(end2)
+                            }
+
+                            // 3. Both Upcoming: sort by startDate ascending (events starting soonest appear first)
+                            else -> {
+                                e1.startDate.compareTo(e2.startDate)
+                            }
+                        }
+                    }
+                )
         }
-        if (ongoingEvents.isNotEmpty()) {
+
+        if (activeOrUpcomingEvents.isNotEmpty()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Sự kiện đang diễn ra",
+                    text = "Sự kiện",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
+                Text(
+                    text = "Xem tất cả",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF5C79FF),
+                    modifier = Modifier.clickable { onNavigateToEvents() }
+                )
             }
-            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(ongoingEvents) { event ->
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                activeOrUpcomingEvents.take(2).forEach { event ->
                     val eventTransactions = viewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
                     val spentAmount = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-                    val progress = if ((event.limitAmount ?: 0.0) > 0.0) {
-                        (spentAmount / event.limitAmount!!).toFloat().coerceIn(0f, 1f)
-                    } else 0f
-                    
+                    val limitAmount = event.limitAmount ?: 0.0
+                    val progress = if (limitAmount > 0.0) {
+                        (spentAmount / limitAmount).toFloat().coerceIn(0f, 1f)
+                    } else 0.5f
+
+                    val isOngoing = nowMs >= event.startDate && (event.endDate == null || nowMs <= event.endDate + 86400000L - 1)
+                    val daysText = if (isOngoing) {
+                        if (event.endDate != null) {
+                            val daysLeft = Math.max(1, ((event.endDate - nowMs) / 86400000L).toInt())
+                            "Còn $daysLeft ngày"
+                        } else "Đang diễn ra"
+                    } else {
+                        val daysStart = Math.max(1, ((event.startDate - nowMs) / 86400000L).toInt())
+                        "Sắp diễn ra sau $daysStart ngày"
+                    }
+
+                    val baseEventColor = try {
+                        FormatHelper.parseColor(event.colorHex)
+                    } catch (e: Exception) {
+                        if (isOngoing) Color(0xFF4CAF50) else Color(0xFFF57C00)
+                    }
+
+                    val cardBg = baseEventColor.copy(alpha = 0.08f)
+                    val iconBg = baseEventColor.copy(alpha = 0.16f)
+                    val primaryColor = baseEventColor
+                    val trackBg = baseEventColor.copy(alpha = 0.25f)
+
+                    val pillBg = Color(0xFFFFF3E0)
+                    val pillIconColor = Color(0xFFEF6C00)
+                    val pillTextColor = Color(0xFFEF6C00)
+                    val pillText = if (isOngoing) daysText else "Chuẩn bị bắt đầu"
+
                     Card(
                         modifier = Modifier
-                            .width(280.dp)
+                            .weight(1f)
                             .clickable { eventToView = event }
                             .testTag("dashboard_event_card_${event.id}"),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(16.dp)
+                        colors = CardDefaults.cardColors(containerColor = cardBg),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, iconBg)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                val eventColor = try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary }
-                                Icon(Icons.Default.Event, contentDescription = null, tint = eventColor)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(event.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = eventColor)
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .background(iconBg, RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Event,
+                                        contentDescription = null,
+                                        tint = primaryColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        event.name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = primaryColor
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    // Status Pill Badge (with calendar icon)
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = pillBg
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Event,
+                                                contentDescription = null,
+                                                tint = pillIconColor,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = pillText,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = pillTextColor
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            if ((event.limitAmount ?: 0.0) > 0.0) {
-                                Text("Đã chi: ${FormatHelper.formatVND(spentAmount)} / ${FormatHelper.formatVND(event.limitAmount!!)}", fontSize = 12.sp)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                StripedProgressIndicator(
-                                    progress = progress,
-                                    modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
-                                    color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Chi tiêu / Hạn mức
+                            if (limitAmount > 0.0) {
+                                Text(
+                                    text = buildAnnotatedString {
+                                        withStyle(
+                                            style = SpanStyle(
+                                                color = Color(0xFF616161)
+                                            )
+                                        ) {
+                                            append(FormatHelper.formatVND(spentAmount))
+                                        }
+                                        withStyle(
+                                            style = SpanStyle(
+                                                color = Color(0xFF9E9E9E)
+                                            )
+                                        ) {
+                                            append(" / ${FormatHelper.formatVND(limitAmount)}")
+                                        }
+                                    },
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             } else {
-                                Text("Đã chi: ${FormatHelper.formatVND(spentAmount)}", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text(
+                                    text = FormatHelper.formatVND(spentAmount),
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF616161),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Clean Progress Bar (Custom Box layout: NO DOT AT END!)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(trackBg)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(primaryColor)
+                                )
                             }
                         }
                     }
@@ -427,44 +810,43 @@ fun DashboardScreen(
         }
 
         // --- Wallets Section ---
+        val walletUsageMap = remember(transactions) {
+            transactions.groupingBy { it.walletId }.eachCount()
+        }
+        val sortedWallets = remember(wallets, walletUsageMap) {
+            wallets.sortedWith(
+                compareByDescending<Wallet> { walletUsageMap[it.id] ?: 0 }
+                    .thenByDescending { it.balance }
+            )
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "Tài khoản của tôi",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                if (wallets.size > 4) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Vuốt ngang để xem thêm ví",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            Text(
+                text = "Tài khoản của tôi",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
             Text(
                 text = "Xem tất cả",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
+                color = Color(0xFF5C79FF),
                 modifier = Modifier
                     .clickable { onNavigateToWallets(null) }
                     .testTag("view_all_wallets_button")
             )
         }
 
-        if (wallets.isEmpty()) {
+        if (sortedWallets.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp)
+                    .height(90.dp)
                     .background(
                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                         RoundedCornerShape(16.dp)
@@ -478,91 +860,108 @@ fun DashboardScreen(
                 )
             }
         } else {
-            val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-            val chunkWidth = if (wallets.size > 4) (screenWidth - 48.dp) / 2 else (screenWidth - 32.dp) / 2
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                sortedWallets.forEach { wallet ->
+                    val walletColor = try {
+                        FormatHelper.parseColor(wallet.colorHex)
+                    } catch (e: Exception) {
+                        Color(0xFF5C79FF)
+                    }
 
-            val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-            
-            val pagesCount = remember(wallets) {
-                if (wallets.size <= 4) 1
-                else {
-                    val totalCols = (wallets.size + 1) / 2
-                    totalCols - 1
-                }
-            }
+                    val subtitleText = when (wallet.type.uppercase()) {
+                        "CASH" -> "Tiền mặt"
+                        "BANK" -> "Tài khoản ngân hàng"
+                        "WALLET" -> "Ví điện tử"
+                        "SAVINGS" -> "Tiết kiệm"
+                        "CREDIT" -> "Thẻ tín dụng"
+                        else -> wallet.type
+                    }
 
-            val currentColumn by remember {
-                derivedStateOf {
-                    val layoutInfo = gridState.layoutInfo
-                    val visibleItemsInfo = layoutInfo.visibleItemsInfo
-                    if (visibleItemsInfo.isEmpty()) 0
-                    else {
-                        val firstItem = visibleItemsInfo.first()
-                        val lastItem = visibleItemsInfo.last()
-                        val totalItems = layoutInfo.totalItemsCount
-                        val totalCols = (totalItems + 1) / 2
-                        
-                        val isAtStart = gridState.firstVisibleItemIndex == 0
-                        val isAtEnd = lastItem.index >= totalItems - 1
-                        
-                        if (isAtStart) 0
-                        else if (isAtEnd) {
-                            if (totalCols - 2 >= 0) totalCols - 2 else 0
-                        } else {
-                            val firstVisibleCol = gridState.firstVisibleItemIndex / 2
-                            val firstItemOffset = firstItem.offset.x
-                            if (Math.abs(firstItemOffset) > firstItem.size.width / 2) {
-                                val target = firstVisibleCol + 1
-                                if (target <= totalCols - 2) target else firstVisibleCol
-                            } else {
-                                firstVisibleCol
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToWallets(wallet) }
+                            .testTag("dashboard_wallet_card_${wallet.id}"),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFFEEEEEE)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(walletColor.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = IconMapper.getIconByName(wallet.iconName),
+                                        contentDescription = wallet.name,
+                                        tint = walletColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = wallet.name,
+                                        fontSize = 14.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E293B),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(1.dp))
+                                    Text(
+                                        text = subtitleText,
+                                        fontSize = 11.5.sp,
+                                        color = Color(0xFF64748B),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "Số dư",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    FormattedVndText(
+                                        amount = wallet.balance,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E293B)
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = "Chi tiết ví",
+                                    tint = Color(0xFF94A3B8),
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
-                    }
-                }
-            }
-
-            androidx.compose.foundation.lazy.grid.LazyHorizontalGrid(
-                rows = androidx.compose.foundation.lazy.grid.GridCells.Fixed(if (wallets.size > 2) 2 else 1),
-                state = gridState,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 0.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(if (wallets.size > 2) 228.dp else 110.dp) // Exact height: 110dp per card + 8dp spacing
-                    .testTag("dashboard_wallets_row")
-            ) {
-                items(wallets) { wallet ->
-                    WalletMiniCard(
-                        wallet = wallet,
-                        onClick = onNavigateToWallets,
-                        modifier = Modifier.width(chunkWidth)
-                    )
-                }
-            }
-
-            if (pagesCount > 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    repeat(pagesCount) { index ->
-                        val isSelected = currentColumn == index
-                        val size = if (isSelected) 8.dp else 5.dp
-                        val color = if (isSelected) MaterialTheme.colorScheme.primary 
-                                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 3.dp)
-                                .size(size)
-                                .clip(CircleShape)
-                                .background(color)
-                                .animateContentSize()
-                        )
                     }
                 }
             }
@@ -1430,6 +1829,32 @@ private fun InsightRow(ins: SmartSpendingInsight) {
             )
         }
     }
+}
+
+@Composable
+private fun FormattedVndText(
+    amount: Double,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    fontWeight: FontWeight,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val rawStr = FormatHelper.formatVND(amount)
+    val baseAmountStr = rawStr.replace("₫", "").replace("đ", "").trim()
+    val annotatedString = buildAnnotatedString {
+        append(baseAmountStr)
+        append(" ")
+        withStyle(style = SpanStyle(textDecoration = TextDecoration.Underline)) {
+            append("đ")
+        }
+    }
+    Text(
+        text = annotatedString,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        color = color,
+        modifier = modifier
+    )
 }
 
 

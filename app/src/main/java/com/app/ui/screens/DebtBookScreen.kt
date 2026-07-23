@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,13 +43,14 @@ import java.util.Locale
 @Composable
 fun DebtBookScreen(
     viewModel: FinanceViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    initialTab: Int = 0
 ) {
     val debts by viewModel.allDebts.collectAsState()
     val wallets by viewModel.allWallets.collectAsState()
     val dailyTransactions by viewModel.dailyTransactions.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableStateOf(initialTab) }
     val tabs = listOf("Đi Vay", "Cho Vay")
     
     var showAddDialog by remember { mutableStateOf(false) }
@@ -204,6 +206,45 @@ fun DebtBookScreen(
 }
 
 @Composable
+fun StripedProgressIndicator(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    color: Color = Color(0xFF5CAE34),
+    trackColor: Color = Color(0xFFF3F4F6)
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier.clip(RoundedCornerShape(50))) {
+        // Draw track
+        drawRect(color = trackColor, size = size)
+        
+        // Draw progress
+        val progressWidth = size.width * progress.coerceIn(0f, 1f)
+        drawRect(
+            color = color,
+            size = size.copy(width = progressWidth)
+        )
+        
+        // Draw stripes inside progress area
+        clipRect(right = progressWidth) {
+            val stripeWidth = 6.dp.toPx()
+            val spacing = 6.dp.toPx()
+            val totalStripes = (size.width / (stripeWidth + spacing)).toInt() * 2
+            
+            for (i in -totalStripes..totalStripes) {
+                val startX = i * (stripeWidth + spacing)
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(startX, size.height)
+                    lineTo(startX + stripeWidth, size.height)
+                    lineTo(startX + stripeWidth + size.height, 0f)
+                    lineTo(startX + size.height, 0f)
+                    close()
+                }
+                drawPath(path, color = Color.White.copy(alpha = 0.25f))
+            }
+        }
+    }
+}
+
+@Composable
 fun DebtItemCard(
     debt: Debt,
     onPayClick: (Debt) -> Unit,
@@ -238,242 +279,255 @@ fun DebtItemCard(
         Math.max(1, (diff / (1000 * 60 * 60 * 24)).toInt())
     } else null
 
-    // Muted alpha for content when completed (but history button stays full opacity)
-    val contentAlpha = if (isCompleted) 0.45f else 1.0f
+    val contentAlpha = if (isCompleted) 0.5f else 1.0f
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFEBF1FD)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        modifier = Modifier.fillMaxWidth().alpha(contentAlpha),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            // TOP ROW: AVATAR + NAME + TYPE | METRICS (dimmed when completed)
+        Column(modifier = Modifier.padding(14.dp)) {
+            // TOP ROW: Avatar + Name + Type and Amounts
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(contentAlpha),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                // LEFT: AVATAR + NAME + TYPE
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                // LEFT: Avatar + Info
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(52.dp)
-                            .border(2.dp, Color(0xFF2196F3), CircleShape)
-                            .background(Color.White, CircleShape),
+                            .size(44.dp)
+                            .background(Color(0xFF5C79FF), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Person,
                             contentDescription = null,
-                            tint = Color(0xFF1E88E5),
-                            modifier = Modifier.size(32.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
                         )
                     }
-
                     Spacer(modifier = Modifier.width(10.dp))
-
-                    Column {
+                    Column(verticalArrangement = Arrangement.Center) {
                         Text(
                             text = debt.personName,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            color = Color(0xFF1F2937),
+                            fontSize = 18.sp,
+                            color = Color(0xFF2B2B43),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        val repaymentText = when (debt.repaymentType) {
-                            "ONE_TIME" -> "Trả 1 lần"
-                            "INSTALLMENT" -> "Trả nhiều kỳ"
-                            "FLEXIBLE" -> "Linh hoạt"
-                            "PERIODIC_FLEXIBLE" -> "Định kỳ"
-                            "ACCUMULATING" -> "Nợ cộng dồn"
-                            else -> "Linh hoạt"
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row {
+                            Text(
+                                text = "Hình thức: ",
+                                fontSize = 13.sp,
+                                color = Color.Gray
+                            )
+                            val repaymentText = when (debt.repaymentType) {
+                                "ONE_TIME" -> "Trả 1 lần"
+                                "INSTALLMENT" -> "Trả nhiều kỳ"
+                                "FLEXIBLE" -> "Linh hoạt"
+                                "PERIODIC_FLEXIBLE" -> "Định kỳ"
+                                "ACCUMULATING" -> "Nợ cộng dồn"
+                                else -> "Linh hoạt"
+                            }
+                            Text(
+                                text = repaymentText,
+                                fontSize = 13.sp,
+                                color = Color(0xFF5C79FF),
+                                fontWeight = FontWeight.Medium
+                            )
                         }
-                        Text(
-                            text = "Hình thức : $repaymentText",
-                            fontSize = 12.sp,
-                            color = Color(0xFF4B5563)
-                        )
                     }
                 }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // RIGHT: METRICS ONLY (no donut here - it's on progress bar row)
+                
+                // RIGHT: Amounts aligned
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = FormatHelper.formatVND(debt.totalAmount),
-                        fontWeight = FontWeight.Black,
-                        fontSize = 16.sp,
-                        color = Color(0xFF1E88E5)
-                    )
-                    Text(
-                        text = "đã trả : ${FormatHelper.formatVND(paidAmount)}",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        color = Color(0xFF4CAF50)
-                    )
-                    Text(
-                        text = "còn : ${FormatHelper.formatVND(debt.remainingAmount)}",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = Color(0xFFE53935)
+                        fontSize = 18.sp,
+                        color = Color(0xFF5C79FF),
+                        modifier = Modifier.padding(bottom = 6.dp)
                     )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // MIDDLE ROW: START DATE (Green icon) & DUE DATE (Red icon) (dimmed when completed)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(contentAlpha),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // START DATE BOX (Green icon mờ)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color(0xFFE8F5E9), RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Start Date",
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Column {
-                        Text("bắt đầu", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+                    Row(modifier = Modifier.width(130.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Đã trả:", fontSize = 12.sp, color = Color.Gray)
                         Text(
-                            dateFormatter.format(debt.creationDate),
-                            fontSize = 11.sp,
-                            color = Color(0xFF4B5563)
-                        )
-                    }
-                }
-
-                // DUE DATE BOX (Red icon mờ)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color(0xFFFFEBEE), RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Due Date",
-                            tint = Color(0xFFE53935),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Column {
-                        Text("hạn", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
-                        Text(
-                            text = if (debt.dueDate != null) dateFormatter.format(debt.dueDate) else "",
-                            fontSize = 11.sp,
-                            color = Color(0xFF4B5563)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // LINEAR PROGRESS ROW: 75% TIME LINE + DONUT CIRCLE AT THE END (arrow position!)
-            // (dimmed when completed)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(contentAlpha),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // 75% width: Progress bar + time percent text
-                Row(
-                    modifier = Modifier.weight(0.75f),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    LinearProgressIndicator(
-                        progress = { dateProgress },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = Color(0xFF7C4DFF),
-                        trackColor = Color(0xFFEDE7F6)
-                    )
-                    Text(
-                        text = datePercentText,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF7C4DFF)
-                    )
-                }
-
-                // 25% width: Donut Circle showing paid percentage (arrow points HERE!)
-                Box(
-                    modifier = Modifier
-                        .weight(0.25f)
-                        .wrapContentSize(Alignment.CenterEnd),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Box(
-                        modifier = Modifier.size(42.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            progress = { paidPercent / 100f },
-                            modifier = Modifier.fillMaxSize(),
-                            color = Color(0xFF00C853),
-                            strokeWidth = 4.dp,
-                            trackColor = Color(0xFFEEEEEE)
-                        )
-                        Text(
-                            text = "$paidPercent%",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
+                            FormatHelper.formatVND(paidAmount),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
                             color = Color(0xFF00C853)
                         )
                     }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(modifier = Modifier.width(130.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Còn lại:", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            FormatHelper.formatVND(debt.remainingAmount),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
+                            color = Color(0xFFE53935)
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // BOTTOM ROW: STATUS BADGE (LEFT) + HISTORY & ACTION BUTTONS (RIGHT)
+            // MIDDLE ROW: Start Date & Due Date boxes
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // START DATE
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFE8F5E9), RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Event,
+                            contentDescription = "Start Date",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Column {
+                        Text("Bắt đầu", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B43))
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Text(
+                            dateFormatter.format(debt.creationDate),
+                            fontSize = 11.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                }
+
+                // DUE DATE
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFFFEBEE), RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Event,
+                            contentDescription = "Due Date",
+                            tint = Color(0xFFE53935),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Column {
+                        Text("Kết thúc", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B43))
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Text(
+                            text = if (debt.dueDate != null) dateFormatter.format(debt.dueDate) else "Không có",
+                            fontSize = 11.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // PROGRESS ROW: Label + Linear progress (left) | Donut progress (right)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Left Column: Label + Progress Bar
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Tiến độ thanh toán",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = Color(0xFF2B2B43)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        StripedProgressIndicator(
+                            progress = dateProgress,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(8.dp),
+                            color = Color(0xFF5CAE34),
+                            trackColor = Color(0xFFF3F4F6)
+                        )
+                        Text(
+                            text = datePercentText,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF5CAE34)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(20.dp))
+
+                // Right Column: Donut Chart
+                Box(
+                    modifier = Modifier.size(54.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        progress = { paidPercent / 100f },
+                        modifier = Modifier.fillMaxSize(),
+                        color = Color(0xFF00C853),
+                        strokeWidth = 6.dp,
+                        trackColor = Color(0xFFF3F4F6),
+                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                    )
+                    Text(
+                        text = "$paidPercent%",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00C853)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // BOTTOM ROW: Status Badge (Left) + Actions (Right)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // LEFT SIDE: STATUS BADGE (always full opacity)
+                // LEFT: STATUS BADGE
                 Box {
                     if (isCompleted) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = Color(0xFFE8F5E9)
                         ) {
                             Text(
-                                text = "ĐÃ HOÀN THÀNH",
+                                text = "Đã hoàn thành",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF2E7D32),
@@ -482,11 +536,11 @@ fun DebtItemCard(
                         }
                     } else if (isOverdue) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFFFEBEE)
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFFF0F0)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
@@ -495,93 +549,77 @@ fun DebtItemCard(
                                     tint = Color(0xFFE53935),
                                     modifier = Modifier.size(14.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Quá hạn $overdueDays ngày",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFE53935)
                                 )
                             }
                         }
                     } else if (daysRemaining != null) {
-                        val badgeColor = if (daysRemaining <= 1) Color(0xFF2196F3) else Color(0xFF2E7D32)
-                        val badgeBg = if (daysRemaining <= 1) Color(0xFFE3F2FD) else Color(0xFFE8F5E9)
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = badgeBg
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF0FDF4)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Event,
                                     contentDescription = null,
-                                    tint = badgeColor,
+                                    tint = Color(0xFF22C55E),
                                     modifier = Modifier.size(14.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Còn $daysRemaining ngày",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = badgeColor
+                                    color = Color(0xFF16A34A)
                                 )
                             }
                         }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
                     }
                 }
 
-                // RIGHT SIDE: HISTORY BUTTON (ALWAYS FULL OPACITY!) + ACTION BUTTONS
+                // RIGHT: ACTIONS
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // History Button: ALWAYS full opacity, prominent even when card is dimmed
-                    Surface(
+                    // History Button (Outlined)
+                    OutlinedButton(
                         onClick = { onHistoryClick(debt) },
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isCompleted) Color(0xFF78909C) else Color(0xFFB0BEC5),
-                        tonalElevation = if (isCompleted) 4.dp else 2.dp,
-                        shadowElevation = if (isCompleted) 3.dp else 1.dp,
-                        modifier = Modifier.height(40.dp)
+                        modifier = Modifier.height(40.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE5E7EB)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4B5563))
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "Lịch sử",
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "Lịch sử",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Lịch sử", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    // Action Buttons (HIDDEN if completed, dimmed with content)
+                    // Pay Button (Solid)
                     if (!isCompleted) {
-                        if (debt.repaymentType == "ACCUMULATING") {
-                            OutlinedButton(
-                                onClick = { onIncreaseClick(debt) },
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.height(38.dp),
-                                contentPadding = PaddingValues(horizontal = 14.dp)
-                            ) {
-                                Text("Ghi Thêm", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
                         Button(
                             onClick = { onPayClick(debt) },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
-                            modifier = Modifier.height(38.dp),
-                            contentPadding = PaddingValues(horizontal = 20.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(40.dp).defaultMinSize(minWidth = 70.dp),
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5C79FF))
                         ) {
-                            Text(if (debt.type == "DEBT") "Trả" else "Thu", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(if (debt.type == "DEBT") "Trả" else "Thu", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
