@@ -338,8 +338,7 @@ fun MainContent(
                             currentRoute = currentRoute,
                             canPop = canPop,
                             onNavigateBack = { handleBackNavigation() },
-                            viewModel = viewModel,
-                            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                            viewModel = viewModel
                         )
                         Box(
                             modifier = Modifier
@@ -367,6 +366,7 @@ fun MainContent(
                 // Adaptive portrait layout: Standard Scaffold + Top AppHeader + Bottom Navigation Bar
                 Scaffold(
                     modifier = modifier.fillMaxSize(),
+                    contentWindowInsets = WindowInsets(0.dp),
                     topBar = {
                         if (currentRoute != Routes.CATEGORY_MANAGEMENT) {
                             AppHeader(
@@ -1074,6 +1074,36 @@ fun AppHeader(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Quay lại",
                             tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            },
+            actions = {
+                if (baseRoute == Routes.STATS && viewModel != null) {
+                    val exportContext = androidx.compose.ui.platform.LocalContext.current
+                    val activeMonth by viewModel.activeMonth.collectAsState()
+                    val transactions by viewModel.dailyTransactions.collectAsState()
+                    
+                    IconButton(
+                        onClick = {
+                            val monthTxs = transactions.filter { tx ->
+                                val cal = java.util.Calendar.getInstance().apply { timeInMillis = tx.timestamp }
+                                val txMonth = String.format("%04d-%02d", cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH) + 1)
+                                txMonth == activeMonth
+                            }
+                            com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
+                                context = exportContext,
+                                transactions = monthTxs,
+                                onWarning = { viewModel.showWarningNotification(it) },
+                                onError = { viewModel.showErrorNotification(it) }
+                            )
+                        },
+                        modifier = Modifier.testTag("report_export_csv_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Xuất Excel",
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }

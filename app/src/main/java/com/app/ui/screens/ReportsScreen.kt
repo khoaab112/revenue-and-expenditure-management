@@ -157,60 +157,13 @@ fun ReportsScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            if (onNavigateBack != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testTag("report_back_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Quay lại"
-                        )
-                    }
-                    Text(
-                        text = "Thống kê & Báo cáo",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    val exportContext = androidx.compose.ui.platform.LocalContext.current
-                    IconButton(
-                        onClick = {
-                            com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
-                                context = exportContext,
-                                transactions = monthTransactions,
-                                onWarning = { viewModel.showWarningNotification(it) },
-                                onError = { viewModel.showErrorNotification(it) }
-                            )
-                        },
-                        modifier = Modifier.testTag("report_export_csv_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Xuất Excel"
-                        )
-                    }
-                }
-            }
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         // Timeline month selector box
         Row(
             modifier = Modifier
@@ -591,7 +544,6 @@ fun ReportsScreen(
         }
         
         Spacer(modifier = Modifier.height(24.dp))
-        }
     }
 }
 
