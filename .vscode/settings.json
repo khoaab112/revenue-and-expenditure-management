@@ -1,10 +1,10 @@
 {
-  "java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.3.9-hotspot",
-  "java.jdt.ls.java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.3.9-hotspot",
+  "java.home": "K:\\android\\jbr",
+  "java.jdt.ls.java.home": "K:\\android\\jbr",
   "java.configuration.runtimes": [
     {
       "name": "JavaSE-21",
-      "path": "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.3.9-hotspot",
+      "path": "K:\\android\\jbr",
       "default": true
     }
   ]

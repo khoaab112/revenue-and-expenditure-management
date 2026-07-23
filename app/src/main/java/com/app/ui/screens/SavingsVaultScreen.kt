@@ -35,7 +35,6 @@ import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.CustomMoneyInputField
-import com.app.ui.components.WalletBigCard
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -246,7 +245,7 @@ fun SavingsVaultScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         colorOptions.forEach { hex ->
-                            val colorVal = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color.Purple }
+                            val colorVal = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color(0xFF9C27B0) }
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
