@@ -32,7 +32,8 @@ data class Transaction(
     val isRecurring: Boolean = false,
     val recurrencePeriod: String = "NONE", // NONE, DAILY, WEEKLY, MONTHLY
     val eventId: Int? = null,
-    val destinationWalletId: Int? = null
+    val destinationWalletId: Int? = null,
+    val debtId: Int? = null
 )
 
 @Entity(tableName = "events")

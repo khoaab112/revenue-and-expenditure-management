@@ -1727,7 +1727,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 isRecurring = false,
                 recurrencePeriod = "NONE",
                 eventId = null,
-                destinationWalletId = null
+                destinationWalletId = null,
+                debtId = debtId.toInt()
             )
             repository.insertTransaction(tx)
             
@@ -1764,7 +1765,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 isRecurring = false,
                 recurrencePeriod = "NONE",
                 eventId = null,
-                destinationWalletId = null
+                destinationWalletId = null,
+                debtId = debt.id
             )
             repository.insertTransaction(tx)
             showSuccessNotification("Đã ghi nhận phát sinh nợ thành công!")
@@ -1775,9 +1777,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val wallet = repository.getWalletById(walletId) ?: return@launch
             val newRemaining = Math.max(0.0, debt.remainingAmount - amount)
-            val newStatus = if (newRemaining == 0.0) "COMPLETED" else "ACTIVE"
+            val newStatus = if (newRemaining <= 0.01) "COMPLETED" else "ACTIVE"
+            val finalRemaining = if (newStatus == "COMPLETED") 0.0 else newRemaining
             
-            repository.updateDebt(debt.copy(remainingAmount = newRemaining, status = newStatus))
+            repository.updateDebt(debt.copy(remainingAmount = finalRemaining, status = newStatus))
             
             // Create transaction for repayment
             val cat = getCategoryByName(if (debt.type == "DEBT") "Trả nợ" else "Thu nợ")
@@ -1796,10 +1799,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 isRecurring = false,
                 recurrencePeriod = "NONE",
                 eventId = null,
-                destinationWalletId = null
+                destinationWalletId = null,
+                debtId = debt.id
             )
             repository.insertTransaction(tx)
-            showSuccessNotification("Ghi nhận trả nợ thành công!")
+            showSuccessNotification(if (debt.type == "DEBT") "Ghi nhận trả nợ thành công!" else "Ghi nhận thu nợ thành công!")
         }
     }
 
