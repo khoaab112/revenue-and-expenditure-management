@@ -88,39 +88,68 @@ data class EventStatusStyle(
     val textColor: Color
 )
 
-fun getEventStatusStyle(event: Event, totalSpent: Double, now: Long = System.currentTimeMillis()): EventStatusStyle {
+fun getEventPriority(event: Event, totalSpent: Double, now: Long = System.currentTimeMillis()): Int {
     val isUpcoming = now < event.startDate
-    val isEnded = event.endDate != null && now > (event.endDate + 86400000L - 1)
+    val actualEndTime = event.endDate?.let { it + 86400000L - 1 }
+    val isEnded = actualEndTime != null && now > actualEndTime
     val limit = event.limitAmount ?: 0.0
     val isEndingSoon = !isEnded && !isUpcoming && (
-        (event.endDate != null && (event.endDate - now) <= 3 * 86400000L) ||
+        (actualEndTime != null && (actualEndTime - now) <= 3 * 86400000L) ||
         (limit > 0 && (totalSpent / limit) >= 0.8)
     )
+    val isStartingSoon = isUpcoming && (event.startDate - now <= 7 * 86400000L)
 
     return when {
-        isEnded -> EventStatusStyle(
-            text = "Đã qua",
-            dotColor = Color.White,
-            backgroundColor = Color(0xFF757575),
-            textColor = Color.White
+        // Priority 1: Sự kiện đang diễn ra
+        !isEnded && !isUpcoming && !isEndingSoon -> 1
+        
+        // Priority 2: Sự kiện sắp kết thúc
+        !isEnded && !isUpcoming && isEndingSoon -> 2
+        
+        // Priority 3: Sự kiện chuẩn bị bắt đầu (trong vòng 7 ngày)
+        isStartingSoon -> 3
+        
+        // Priority 4: Sự kiện chưa đến hạn bắt đầu (thời điểm xa hơn > 7 ngày)
+        isUpcoming -> 4
+        
+        // Priority 5: Sự kiện đã kết thúc
+        else -> 5
+    }
+}
+
+fun getEventStatusStyle(event: Event, totalSpent: Double, now: Long = System.currentTimeMillis()): EventStatusStyle {
+    val priority = getEventPriority(event, totalSpent, now)
+
+    return when (priority) {
+        1 -> EventStatusStyle(
+            text = "Đang diễn ra",
+            dotColor = Color(0xFF4CAF50),
+            backgroundColor = Color(0xFFE8F5E9),
+            textColor = Color(0xFF2E7D32)
         )
-        isUpcoming -> EventStatusStyle(
-            text = "Chưa diễn ra",
-            dotColor = Color.White,
-            backgroundColor = Color(0xFFE0E0E0),
-            textColor = Color(0xFF616161)
-        )
-        isEndingSoon -> EventStatusStyle(
+        2 -> EventStatusStyle(
             text = "Sắp kết thúc",
             dotColor = Color(0xFFFF9800),
             backgroundColor = Color(0xFFFFF3E0),
             textColor = Color(0xFFE65100)
         )
+        3 -> EventStatusStyle(
+            text = "Chuẩn bị bắt đầu",
+            dotColor = Color(0xFF2196F3),
+            backgroundColor = Color(0xFFE3F2FD),
+            textColor = Color(0xFF1565C0)
+        )
+        4 -> EventStatusStyle(
+            text = "Chưa đến hạn",
+            dotColor = Color(0xFF9C27B0),
+            backgroundColor = Color(0xFFF3E5F5),
+            textColor = Color(0xFF7B1FA2)
+        )
         else -> EventStatusStyle(
-            text = "Đang diễn ra",
-            dotColor = Color(0xFF4CAF50),
-            backgroundColor = Color(0xFFE8F5E9),
-            textColor = Color(0xFF2E7D32)
+            text = "Đã kết thúc",
+            dotColor = Color.White,
+            backgroundColor = Color(0xFF757575),
+            textColor = Color.White
         )
     }
 }
@@ -165,6 +194,19 @@ fun EventManagementScreen(
     var eventToView by remember { mutableStateOf<Event?>(null) }
     var showBottomSheetEvent by remember { mutableStateOf<Event?>(null) }
 
+    val sortedEvents = remember(events, transactions) {
+        val now = System.currentTimeMillis()
+        events.sortedWith(
+            compareBy<Event> { event ->
+                val eventTxs = transactions.filter { it.eventId == event.id }
+                val totalSpent = eventTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                getEventPriority(event, totalSpent, now)
+            }.thenBy { event ->
+                event.startDate
+            }
+        )
+    }
+
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
@@ -187,14 +229,14 @@ fun EventManagementScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(events) { event ->
+                    items(sortedEvents) { event ->
                         val eventTransactions = transactions.filter { it.eventId == event.id }
                         val totalSpent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
                         val statusStyle = getEventStatusStyle(event, totalSpent)
                         val limit = event.limitAmount ?: 0.0
                         val eventColor = try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
                         val now = System.currentTimeMillis()
-                        val isPast = statusStyle.text == "Đã qua" || (event.endDate != null && now > event.endDate)
+                        val isPast = getEventPriority(event, totalSpent, now) == 5
 
                         Card(
                             modifier = Modifier
@@ -259,20 +301,19 @@ fun EventManagementScreen(
                                         val remainingText = if (event.endDate == null) {
                                             "Vô thời hạn"
                                         } else if (now < event.startDate) {
-                                            val diffMillis = event.endDate - now
+                                            val diffMillis = (event.endDate + 86400000L - 1) - now
                                             val diffDays = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diffMillis)
                                             if (diffDays > 0) "Còn $diffDays ngày" else "Chưa diễn ra"
                                         } else {
-                                            val diffMillis = event.endDate - now
+                                            val actualEndTime = event.endDate + 86400000L - 1
+                                            val diffMillis = actualEndTime - now
                                             val diffDays = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diffMillis)
-                                            if (diffMillis > 0 && diffDays == 0L) {
-                                                "Còn 1 ngày"
-                                            } else if (diffDays > 0) {
-                                                "Còn $diffDays ngày"
+                                            if (diffMillis < 0) {
+                                                "Đã hết hạn"
                                             } else if (diffDays == 0L) {
                                                 "Hôm nay hết hạn"
                                             } else {
-                                                "Đã hết hạn"
+                                                "Còn $diffDays ngày"
                                             }
                                         }
 
@@ -304,15 +345,16 @@ fun EventManagementScreen(
 
                                     Spacer(modifier = Modifier.height(8.dp))
 
-                                    // Thanh line ngang: Thời gian hết hạn (Nếu chưa diễn ra -> 0f, vô thời hạn -> 0.4f, đã qua -> 1f)
-                                    val timeProgress = if (event.endDate == null) {
+                                    // Thanh line ngang: Thời gian hết hạn
+                                    val actualEndTime = event.endDate?.let { it + 86400000L - 1 }
+                                    val timeProgress = if (actualEndTime == null) {
                                         0.4f
                                     } else if (now < event.startDate) {
                                         0f
-                                    } else if (now >= event.endDate) {
+                                    } else if (now >= actualEndTime) {
                                         1f
                                     } else {
-                                        val totalDuration = (event.endDate - event.startDate).toFloat()
+                                        val totalDuration = (actualEndTime - event.startDate).toFloat()
                                         val elapsed = (now - event.startDate).toFloat()
                                         if (totalDuration > 0) (elapsed / totalDuration).coerceIn(0f, 1f) else 0f
                                     }

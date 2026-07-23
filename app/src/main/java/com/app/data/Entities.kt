@@ -13,7 +13,8 @@ data class Wallet(
     val iconName: String,
     val displayOrder: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
-    val isClosed: Boolean = false
+    val isClosed: Boolean = false,
+    val targetAmount: Double? = null
 )
 
 @Entity(tableName = "transactions")

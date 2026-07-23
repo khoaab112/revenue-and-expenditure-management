@@ -1488,7 +1488,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // --- WALLETS SERVICES ---
-    fun addWallet(name: String, type: String, initialBalance: Double, colorHex: String, iconName: String) {
+    fun addWallet(name: String, type: String, initialBalance: Double, colorHex: String, iconName: String, targetAmount: Double? = null) {
         viewModelScope.launch {
             val list = allWallets.value
             val maxOrder = list.maxOfOrNull { it.displayOrder } ?: -1
@@ -1499,7 +1499,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     balance = initialBalance,
                     colorHex = colorHex,
                     iconName = iconName,
-                    displayOrder = maxOrder + 1
+                    displayOrder = maxOrder + 1,
+                    targetAmount = targetAmount
                 )
             )
         }
