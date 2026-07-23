@@ -588,47 +588,6 @@ fun HistoryScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Lịch Sử Giao Dịch",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.weight(1f)
-            )
-            
-            val exportContext = androidx.compose.ui.platform.LocalContext.current
-            FilledTonalButton(
-                onClick = {
-                    com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
-                        context = exportContext,
-                        transactions = filteredTransactions,
-                        onWarning = { viewModel.showWarningNotification(it) },
-                        onError = { viewModel.showErrorNotification(it) }
-                    )
-                },
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                modifier = Modifier.testTag("export_csv_button"),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Share, 
-                    contentDescription = "Xuất Excel",
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Xuất Excel", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-
         // Mode Switcher (Danh sách / Lịch)
         Row(
             modifier = Modifier
@@ -638,7 +597,7 @@ fun HistoryScreen(
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            listOf("LIST" to "Danh sách", "CALENDAR" to "Lịch").forEach { (mode, label) ->
+            listOf("CALENDAR" to "Lịch", "LIST" to "Danh sách").forEach { (mode, label) ->
                 val isSelected = displayMode == mode
                 val bgColors = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
                 val textColors = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -2048,12 +2007,13 @@ fun CalendarHeaderRow(
             Box {
                 Row(
                     modifier = Modifier
+                        .width(64.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.White.copy(alpha = 0.9f))
                         .clickable { monthDropdownShow = true }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
                         text = "${selectedMonth + 1}",
@@ -2088,12 +2048,13 @@ fun CalendarHeaderRow(
             Box {
                 Row(
                     modifier = Modifier
+                        .width(72.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.White.copy(alpha = 0.9f))
                         .clickable { yearDropdownShow = true }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
                         text = selectedYear.toString(),

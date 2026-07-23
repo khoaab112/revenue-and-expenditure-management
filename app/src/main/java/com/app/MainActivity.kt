@@ -1079,24 +1079,34 @@ fun AppHeader(
                 }
             },
             actions = {
-                if (baseRoute == Routes.STATS && viewModel != null) {
+                if ((baseRoute == Routes.STATS || baseRoute == Routes.HISTORY) && viewModel != null) {
                     val exportContext = androidx.compose.ui.platform.LocalContext.current
                     val activeMonth by viewModel.activeMonth.collectAsState()
                     val transactions by viewModel.dailyTransactions.collectAsState()
+                    val historyFilteredTransactions by viewModel.filteredTransactions.collectAsState()
                     
                     IconButton(
                         onClick = {
-                            val monthTxs = transactions.filter { tx ->
-                                val cal = java.util.Calendar.getInstance().apply { timeInMillis = tx.timestamp }
-                                val txMonth = String.format("%04d-%02d", cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH) + 1)
-                                txMonth == activeMonth
+                            if (baseRoute == Routes.STATS) {
+                                val monthTxs = transactions.filter { tx ->
+                                    val cal = java.util.Calendar.getInstance().apply { timeInMillis = tx.timestamp }
+                                    val txMonth = String.format("%04d-%02d", cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH) + 1)
+                                    txMonth == activeMonth
+                                }
+                                com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
+                                    context = exportContext,
+                                    transactions = monthTxs,
+                                    onWarning = { viewModel.showWarningNotification(it) },
+                                    onError = { viewModel.showErrorNotification(it) }
+                                )
+                            } else {
+                                com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
+                                    context = exportContext,
+                                    transactions = historyFilteredTransactions,
+                                    onWarning = { viewModel.showWarningNotification(it) },
+                                    onError = { viewModel.showErrorNotification(it) }
+                                )
                             }
-                            com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
-                                context = exportContext,
-                                transactions = monthTxs,
-                                onWarning = { viewModel.showWarningNotification(it) },
-                                onError = { viewModel.showErrorNotification(it) }
-                            )
                         },
                         modifier = Modifier.testTag("report_export_csv_button")
                     ) {
