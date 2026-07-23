@@ -88,6 +88,7 @@ fun CategoryManagementScreen(
     // Dialog States
     var categoryToDelete by remember { mutableStateOf<FinanceCategory?>(null) }
     var categoryToEdit by remember { mutableStateOf<FinanceCategory?>(null) }
+    var showTreeDialog by remember { mutableStateOf(false) }
 
     // Scroll state for list view
     val scrollState = rememberScrollState()
@@ -161,6 +162,13 @@ fun CategoryManagementScreen(
         )
     }
 
+    if (showTreeDialog) {
+        CategoryTreeDialog(
+            categoriesList = categoriesList,
+            onDismiss = { showTreeDialog = false }
+        )
+    }
+
     Scaffold(
         topBar = {
             Surface(
@@ -227,8 +235,13 @@ fun CategoryManagementScreen(
                                     Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Tùy chọn")
                                 }
                             } else {
-                                IconButton(onClick = { isReorderMode = true }) {
-                                    Icon(imageVector = Icons.Default.SwapVert, contentDescription = "Sắp xếp")
+                                Row {
+                                    IconButton(onClick = { showTreeDialog = true }) {
+                                        Icon(imageVector = Icons.Default.AccountTree, contentDescription = "Sơ đồ")
+                                    }
+                                    IconButton(onClick = { isReorderMode = true }) {
+                                        Icon(imageVector = Icons.Default.SwapVert, contentDescription = "Sắp xếp")
+                                    }
                                 }
                             }
                         }
@@ -1110,6 +1123,171 @@ fun CategoryManagementScreen(
                 ) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = null, tint = Color(0xFFF44336))
                     Text("Xóa danh mục", color = Color(0xFFF44336), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryTreeDialog(
+    categoriesList: List<FinanceCategory>,
+    onDismiss: () -> Unit
+) {
+    var selectedTab by remember { mutableStateOf("EXPENSE") }
+    
+    val filteredCategories = categoriesList.filter { it.type == selectedTab || it.type == "BOTH" }
+    val parentCats = filteredCategories.filter { it.parentName == null }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Sơ đồ Danh mục", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                IconButton(onClick = onDismiss) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng")
+                }
+            }
+
+            // Tabs
+            TabRow(
+                selectedTabIndex = if (selectedTab == "EXPENSE") 0 else 1,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ) {
+                Tab(
+                    selected = selectedTab == "EXPENSE",
+                    onClick = { selectedTab = "EXPENSE" },
+                    text = { Text("Khoản chi", fontWeight = FontWeight.Bold) },
+                    selectedContentColor = Color(0xFFF44336),
+                    unselectedContentColor = Color.Gray
+                )
+                Tab(
+                    selected = selectedTab == "INCOME",
+                    onClick = { selectedTab = "INCOME" },
+                    text = { Text("Khoản thu", fontWeight = FontWeight.Bold) },
+                    selectedContentColor = Color(0xFF4CAF50),
+                    unselectedContentColor = Color.Gray
+                )
+            }
+
+            // Tree Content
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                parentCats.forEach { parentCat ->
+                    val childCats = filteredCategories.filter { it.parentName == parentCat.name }
+                    CategoryTreeItem(parentCat = parentCat, childCats = childCats)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                Spacer(modifier = Modifier.height(40.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryTreeItem(parentCat: FinanceCategory, childCats: List<FinanceCategory>) {
+    val parentColor = try { FormatHelper.parseColor(parentCat.colorHex) } catch(e: Exception) { Color.Gray }
+    
+    Column {
+        // Parent Node
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(parentColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = IconMapper.getIconByName(parentCat.iconName), 
+                    contentDescription = null,
+                    tint = Color.White, 
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(parentCat.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+        
+        // Children Nodes
+        if (childCats.isNotEmpty()) {
+            Column(
+                modifier = Modifier.padding(start = 15.dp) // 16dp center of 32dp circle minus 1dp line half-width
+            ) {
+                childCats.forEachIndexed { index, childCat ->
+                    val isLast = index == childCats.size - 1
+                    val childColor = try { FormatHelper.parseColor(childCat.colorHex) } catch(e: Exception) { Color.Gray }
+                    
+                    Row(
+                        modifier = Modifier.height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Lines Canvas
+                        androidx.compose.foundation.Canvas(
+                            modifier = Modifier
+                                .width(30.dp)
+                                .fillMaxHeight()
+                        ) {
+                            val strokeWidth = 2.dp.toPx()
+                            val lineColor = parentColor.copy(alpha = 0.5f)
+                            
+                            val startX = 1.dp.toPx()
+                            val endX = size.width
+                            val centerY = size.height / 2
+                            val bottomY = if (isLast) centerY else size.height
+                            
+                            // Vertical Line
+                            drawLine(
+                                color = lineColor,
+                                start = androidx.compose.ui.geometry.Offset(startX, 0f),
+                                end = androidx.compose.ui.geometry.Offset(startX, bottomY),
+                                strokeWidth = strokeWidth
+                            )
+                            
+                            // Horizontal Line
+                            drawLine(
+                                color = lineColor,
+                                start = androidx.compose.ui.geometry.Offset(startX, centerY),
+                                end = androidx.compose.ui.geometry.Offset(endX, centerY),
+                                strokeWidth = strokeWidth
+                            )
+                        }
+                        
+                        // Child Node
+                        Box(
+                            modifier = Modifier
+                                .padding(vertical = 10.dp)
+                                .size(28.dp)
+                                .background(childColor, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = IconMapper.getIconByName(childCat.iconName), 
+                                contentDescription = null,
+                                tint = Color.White, 
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(childCat.name, fontSize = 15.sp)
+                    }
                 }
             }
         }
