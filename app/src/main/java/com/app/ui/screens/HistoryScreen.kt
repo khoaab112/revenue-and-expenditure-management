@@ -1436,9 +1436,11 @@ fun EditTransactionDialog(
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
     var walletDropdownExpanded by remember { mutableStateOf(false) }
     
-    // Filter categories depending on selectedType
+    // Filter categories depending on selectedType. Only leaf categories (no children) are shown.
     val filteredCategories = remember(categoriesList, selectedType) {
-        categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+        val typeFiltered = categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+        val parentNames = categoriesList.mapNotNull { it.parentName }.toSet()
+        typeFiltered.filter { it.name !in parentNames }
     }
     
     // Ensure the category chosen is kept valid
@@ -2540,9 +2542,11 @@ fun QuickAddTransactionDialog(
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
     var walletDropdownExpanded by remember { mutableStateOf(false) }
     
-    // Filter categories depending on selectedType
+    // Filter categories depending on selectedType. Only leaf categories (no children) are shown.
     val filteredCategories = remember(categoriesList, selectedType) {
-        categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+        val typeFiltered = categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+        val parentNames = categoriesList.mapNotNull { it.parentName }.toSet()
+        typeFiltered.filter { it.name !in parentNames }
     }
     
     // Ensure the category chosen is kept valid

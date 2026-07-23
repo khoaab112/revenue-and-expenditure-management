@@ -134,9 +134,11 @@ fun AddTransactionScreen(
         }
     }
 
-    // Filter categories depending on type
+    // Filter categories depending on type. Only leaf categories (no children) are shown.
     val filteredCategories = remember(categoriesList, selectedType) {
-        categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+        val typeFiltered = categoriesList.filter { it.type == selectedType || it.type == "BOTH" }
+        val parentNames = categoriesList.mapNotNull { it.parentName }.toSet()
+        typeFiltered.filter { it.name !in parentNames }
     }
 
     val currentAmount = remember(rawExpression) {

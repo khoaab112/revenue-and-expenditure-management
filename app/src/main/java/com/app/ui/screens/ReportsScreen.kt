@@ -85,8 +85,24 @@ fun ReportsScreen(
     val totalExpenses = financialSummary.realExpense
     val totalIncome = financialSummary.realIncome
 
+    val categoriesList by viewModel.categoriesList.collectAsState()
+
+    // Helper to find root category
+    fun getRootCategory(catName: String): com.app.data.FinanceCategory {
+        var currentCat = categoriesList.find { it.name.equals(catName, ignoreCase = true) }
+        while (currentCat?.parentName != null) {
+            val parent = categoriesList.find { it.name.equals(currentCat!!.parentName, ignoreCase = true) }
+            if (parent != null) {
+                currentCat = parent
+            } else {
+                break
+            }
+        }
+        return currentCat ?: com.app.data.FinanceCategory(catName, "Category", "#607D8B", "BOTH")
+    }
+
     // Group expenses by category
-    val categoryExpenses = remember(monthTransactions, savingsWalletIds, totalExpenses) {
+    val categoryExpenses = remember(monthTransactions, savingsWalletIds, totalExpenses, categoriesList) {
         monthTransactions
             .filter { tx ->
                 val catName = tx.categoryName.trim()
@@ -95,21 +111,22 @@ fun ReportsScreen(
                 val isSavingsDeposit = catName.contains("Gửi tiết kiệm", ignoreCase = true) || catName.contains("Cất quỹ", ignoreCase = true) || (tx.destinationWalletId != null && tx.destinationWalletId in savingsWalletIds)
                 tx.type == "EXPENSE" && !isAdjustment && !isInternalTransfer && !isSavingsDeposit
             }
-            .groupBy { it.categoryName }
+            .groupBy { tx -> getRootCategory(tx.categoryName.trim()).name }
             .map { (catName, txs) ->
                 val sum = txs.sumOf { it.amount }
+                val rootCat = getRootCategory(catName)
                 CategorySpend(
-                    name = catName,
+                    name = rootCat.name,
                     amount = sum,
-                    colorHex = txs.first().categoryColor,
-                    iconName = txs.first().categoryIcon,
+                    colorHex = rootCat.colorHex,
+                    iconName = rootCat.iconName,
                     percentage = if (totalExpenses > 0) (sum / totalExpenses * 100).toFloat() else 0f
                 )
             }.sortedByDescending { it.amount }
     }
 
     // Group incomes by category
-    val categoryIncomes = remember(monthTransactions, savingsWalletIds, totalIncome) {
+    val categoryIncomes = remember(monthTransactions, savingsWalletIds, totalIncome, categoriesList) {
         monthTransactions
             .filter { tx ->
                 val catName = tx.categoryName.trim()
@@ -118,14 +135,15 @@ fun ReportsScreen(
                 val isSavingsWithdraw = catName.contains("Đóng hũ", ignoreCase = true) || catName.contains("Rút từ tiết kiệm", ignoreCase = true) || catName.contains("Hoàn quỹ", ignoreCase = true) || (tx.walletId in savingsWalletIds)
                 tx.type == "INCOME" && !isAdjustment && !isInternalTransfer && !isSavingsWithdraw
             }
-            .groupBy { it.categoryName }
+            .groupBy { tx -> getRootCategory(tx.categoryName.trim()).name }
             .map { (catName, txs) ->
                 val sum = txs.sumOf { it.amount }
+                val rootCat = getRootCategory(catName)
                 CategorySpend(
-                    name = catName,
+                    name = rootCat.name,
                     amount = sum,
-                    colorHex = txs.first().categoryColor,
-                    iconName = txs.first().categoryIcon,
+                    colorHex = rootCat.colorHex,
+                    iconName = rootCat.iconName,
                     percentage = if (totalIncome > 0) (sum / totalIncome * 100).toFloat() else 0f
                 )
             }.sortedByDescending { it.amount }
