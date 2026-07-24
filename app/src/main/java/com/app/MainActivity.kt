@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.*
@@ -372,7 +373,10 @@ fun MainContent(
                     modifier = modifier.fillMaxSize(),
                     contentWindowInsets = WindowInsets(0.dp),
                     topBar = {
-                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && currentRoute != Routes.BUDGET_GOAL && currentRoute != Routes.WALLETS) {
+                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && 
+                            currentRoute != Routes.BUDGET_GOAL && 
+                            currentRoute != Routes.WALLETS && 
+                            currentRoute != Routes.BANK_NOTIFICATION_HISTORY) {
                             AppHeader(
                                 currentRoute = currentRoute,
                                 canPop = canPop,
@@ -485,53 +489,138 @@ fun MainContent(
 
                     // -------------------- POPUPS AND DIALOGS --------------------
                     if (showPermissionErrorPopup) {
-                        AlertDialog(
-                            onDismissRequest = { showPermissionErrorPopup = false },
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            },
-                            title = {
-                                Text(
-                                    text = "Lỗi cấp quyền đọc thông báo",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
-                                )
-                            },
-                            text = {
-                                Text(
-                                    text = "Tính năng đọc tin nhắn ngân hàng tự động đang bật, nhưng ứng dụng chưa được cấp quyền truy cập thông báo hệ thống. Vui lòng cấp quyền trong cài đặt.",
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp
-                                )
-                            },
-                            confirmButton = {
-                                Button(
-                                    onClick = {
-                                        showPermissionErrorPopup = false
-                                        try {
-                                            val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            viewModel.showErrorNotification("Không thể mở cài đặt")
+                        androidx.compose.ui.window.Dialog(
+                            onDismissRequest = { showPermissionErrorPopup = false }
+                        ) {
+                            androidx.compose.material3.Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(72.dp)
+                                            .background(Color(0xFFFFF0F0), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Security,
+                                            contentDescription = null,
+                                            tint = Color(0xFFD32F2F),
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    Text(
+                                        text = "Cấp quyền đọc thông báo",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 20.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    
+                                    Text(
+                                        text = "Tính năng đọc tin nhắn ngân hàng tự động đang bật, nhưng ứng dụng chưa được cấp quyền truy cập thông báo hệ thống.",
+                                        fontSize = 14.sp,
+                                        lineHeight = 20.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFFFFF0F0), RoundedCornerShape(12.dp))
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lightbulb,
+                                            contentDescription = null,
+                                            tint = Color(0xFFD32F2F)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = "Vui lòng cấp quyền trong cài đặt để sử dụng tính năng này.",
+                                            fontSize = 13.sp,
+                                            color = Color(0xFFD32F2F),
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { showPermissionErrorPopup = false },
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(vertical = 12.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(
+                                                text = "Để sau",
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                ) {
-                                    Text("Cấp quyền")
-                                }
-                            },
-                            dismissButton = {
-                                TextButton(
-                                    onClick = { showPermissionErrorPopup = false }
-                                ) {
-                                    Text("Đóng")
+                                        
+                                        Button(
+                                            onClick = {
+                                                showPermissionErrorPopup = false
+                                                try {
+                                                    val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    viewModel.showErrorNotification("Không thể mở cài đặt")
+                                                }
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(vertical = 12.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(
+                                                text = "Cấp quyền ngay",
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Thông tin của bạn luôn được bảo mật",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
-                        )
+                        }
                     }
 
                     if (showScanResultPopup) {

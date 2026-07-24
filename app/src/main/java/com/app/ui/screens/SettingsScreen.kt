@@ -298,6 +298,8 @@ fun SettingsScreen(
                                 viewModel.toggleCloudSync(false)
                                 val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN).build()
                                 com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso).signOut()
+                                viewModel.clearAllData(context)
+                                viewModel.setHasSeenOnboarding(false)
                                 viewModel.showSuccessNotification("Đã đăng xuất tài khoản Google")
                             }
                         ) {
