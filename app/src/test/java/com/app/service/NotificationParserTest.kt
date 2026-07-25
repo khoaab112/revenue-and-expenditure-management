@@ -68,4 +68,38 @@ class NotificationParserTest {
         assertEquals("MB Bank", result.bankName)
         assertEquals("Tien mung sinh nhat", result.note)
     }
+
+    @Test
+    fun rejectForeignCurrencyUntilCurrencySupportIsImplemented() {
+        val result = NotificationParser.parse(
+            title = "Bank alert",
+            text = "Account credited +100 USD. Balance changed.",
+            packageName = "com.example.bank"
+        )
+
+        assertTrue(!result.success)
+    }
+
+    @Test
+    fun rejectOtpAndPromotionalNotifications() {
+        val otp = NotificationParser.parse("Vietcombank", "Ma OTP cua Quy khach la 123456", "com.vietcombank.restyle")
+        val promotion = NotificationParser.parse("MoMo", "Nhan voucher giam gia 50% khi thanh toan", "com.mservice.momo")
+
+        assertTrue(!otp.success)
+        assertTrue(!promotion.success)
+    }
+
+    @Test
+    fun parseBIDVIncomeFromPackageName() {
+        val result = NotificationParser.parse(
+            title = "Thong bao giao dich",
+            text = "TK vua nhan +1,250,000 VND. ND: Hoan tien",
+            packageName = "com.bidv.smartbanking"
+        )
+
+        assertTrue(result.success)
+        assertEquals("BIDV", result.bankName)
+        assertEquals("INCOME", result.type)
+        assertEquals(1_250_000.0, result.amount, 0.0)
+    }
 }

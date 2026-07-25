@@ -31,6 +31,9 @@ interface FinanceDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getTransactionById(id: Int): Transaction?
 
+    @Query("SELECT EXISTS(SELECT 1 FROM transactions WHERE notificationKey = :notificationKey)")
+    suspend fun hasTransactionForNotificationKey(notificationKey: String): Boolean
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(transaction: Transaction): Long
 
@@ -85,6 +88,9 @@ interface FinanceDao {
 
     @Update
     suspend fun updateEvent(event: Event)
+
+    @Query("UPDATE transactions SET eventId = NULL WHERE eventId = :eventId")
+    suspend fun clearEventFromTransactions(eventId: Int)
 
     @Delete
     suspend fun deleteEvent(event: Event)

@@ -77,6 +77,8 @@ class BankNotificationListenerService : NotificationListenerService() {
 
         val context = applicationContext
         val packageName = sbn.packageName ?: ""
+        val notificationKey = sbn.key
+        val postedAt = sbn.postTime
         
         // Ignore notifications posted by our own app to prevent infinite loops
         if (packageName == context.packageName) {
@@ -92,7 +94,7 @@ class BankNotificationListenerService : NotificationListenerService() {
         serviceScope.launch {
             try {
                 val db = AppDatabase.getDatabase(context)
-                val repository = FinanceRepository(db.financeDao())
+                val repository = FinanceRepository(db.financeDao(), db)
 
                 // 1. Check if notification reader is enabled in settings
                 val isEnabled = repository.getSetting("notification_reader_enabled")?.value == "true"
@@ -116,7 +118,7 @@ class BankNotificationListenerService : NotificationListenerService() {
                 val walletNameInput = matchedWallet?.name ?: parsed.detectedWalletName
 
                 // 4. Save as PENDING so that user can review and confirm with complete certainty
-                saveLog(repository, title, text, parsed, "PENDING", walletNameInput)
+                saveLog(repository, title, text, parsed, "PENDING", walletNameInput, notificationKey, postedAt)
 
                 // 5. Fire system notification
                 sendLocalNotification(context, parsed.amount, parsed.type)
@@ -204,13 +206,22 @@ private fun selectCategory(type: String, note: String): String {
         text: String,
         parsed: NotificationParser.ParsedNotification,
         status: String,
-        walletName: String?
+        walletName: String?,
+        notificationKey: String,
+        postedAt: Long
     ) {
         val logsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
         val jsonArray = try { JSONArray(logsSetting) } catch (e: Exception) { JSONArray() }
 
+        if ((0 until jsonArray.length()).any { index ->
+                jsonArray.getJSONObject(index).optString("notificationKey") == notificationKey
+            }) {
+            return
+        }
+
         val logObj = JSONObject()
-        logObj.put("timestamp", System.currentTimeMillis())
+        logObj.put("timestamp", postedAt)
+        logObj.put("notificationKey", notificationKey)
         logObj.put("title", title)
         logObj.put("text", text)
         logObj.put("bankName", parsed.bankName)

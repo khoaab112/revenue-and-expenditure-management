@@ -1,6 +1,7 @@
 package com.app.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "wallets")
@@ -17,7 +18,10 @@ data class Wallet(
     val targetAmount: Double? = null
 )
 
-@Entity(tableName = "transactions")
+@Entity(
+    tableName = "transactions",
+    indices = [Index(value = ["notificationKey"], unique = true)]
+)
 data class Transaction(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val walletId: Int,
@@ -33,7 +37,8 @@ data class Transaction(
     val recurrencePeriod: String = "NONE", // NONE, DAILY, WEEKLY, MONTHLY
     val eventId: Int? = null,
     val destinationWalletId: Int? = null,
-    val debtId: Int? = null
+    val debtId: Int? = null,
+    val notificationKey: String? = null
 )
 
 @Entity(tableName = "events")

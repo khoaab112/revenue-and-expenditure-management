@@ -56,6 +56,39 @@ data class PendingGroup(
     val log2: NotificationLog? = null
 )
 
+fun groupPendingNotifications(pendingLogs: List<NotificationLog>): List<PendingGroup> {
+    val groups = mutableListOf<PendingGroup>()
+    val processedKeys = mutableSetOf<String>()
+    fun keyOf(log: NotificationLog) = log.notificationKey.takeIf { it.isNotBlank() } ?: "${log.timestamp}|${log.text}"
+
+    for (i in pendingLogs.indices) {
+        val logA = pendingLogs[i]
+        if (keyOf(logA) in processedKeys) continue
+
+        val pair = pendingLogs.drop(i + 1).firstOrNull { logB ->
+            keyOf(logB) !in processedKeys &&
+                Math.abs(logA.timestamp - logB.timestamp) <= 120_000 &&
+                Math.abs(logA.amount - logB.amount) < 0.01 &&
+                logA.type != logB.type &&
+                logA.walletName.isNotBlank() &&
+                logB.walletName.isNotBlank() &&
+                !logA.walletName.equals(logB.walletName, ignoreCase = true)
+        }
+
+        if (pair != null) {
+            val expenseLog = if (logA.type == "EXPENSE") logA else pair
+            val incomeLog = if (logA.type == "INCOME") logA else pair
+            groups.add(PendingGroup(type = "TRANSFER_PAIR", log1 = expenseLog, log2 = incomeLog))
+            processedKeys.add(keyOf(logA))
+            processedKeys.add(keyOf(pair))
+        } else {
+            groups.add(PendingGroup(type = "SINGLE", log1 = logA))
+            processedKeys.add(keyOf(logA))
+        }
+    }
+    return groups
+}
+
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun BankNotificationHistoryScreen(
@@ -114,43 +147,7 @@ fun BankNotificationHistoryScreen(
         notificationLogs.filter { it.status == "PENDING" }
     }
 
-    val pendingGroups = remember(pendingLogs) {
-        val groups = mutableListOf<PendingGroup>()
-        val processedTimestamps = mutableSetOf<Long>()
-        
-        for (i in pendingLogs.indices) {
-            val logA = pendingLogs[i]
-            if (processedTimestamps.contains(logA.timestamp)) continue
-            
-            var foundPair = false
-            for (j in i + 1 until pendingLogs.size) {
-                val logB = pendingLogs[j]
-                if (processedTimestamps.contains(logB.timestamp)) continue
-                
-                val timeDiff = Math.abs(logA.timestamp - logB.timestamp)
-                val sameAmount = Math.abs(logA.amount - logB.amount) < 0.01
-                val oppositeType = (logA.type == "EXPENSE" && logB.type == "INCOME") || 
-                                   (logA.type == "INCOME" && logB.type == "EXPENSE")
-                
-                if (timeDiff <= 120_000 && sameAmount && oppositeType) {
-                    val expenseLog = if (logA.type == "EXPENSE") logA else logB
-                    val incomeLog = if (logA.type == "EXPENSE") logB else logA
-                    
-                    groups.add(PendingGroup(type = "TRANSFER_PAIR", log1 = expenseLog, log2 = incomeLog))
-                    processedTimestamps.add(logA.timestamp)
-                    processedTimestamps.add(logB.timestamp)
-                    foundPair = true
-                    break
-                }
-            }
-            
-            if (!foundPair) {
-                groups.add(PendingGroup(type = "SINGLE", log1 = logA))
-                processedTimestamps.add(logA.timestamp)
-            }
-        }
-        groups
-    }
+    val pendingGroups = remember(pendingLogs) { groupPendingNotifications(pendingLogs) }
     
     val processedLogs = remember(notificationLogs, selectedFilterStatus, searchQuery) {
         notificationLogs.filter { log ->

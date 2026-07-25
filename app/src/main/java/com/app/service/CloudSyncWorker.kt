@@ -42,7 +42,7 @@ class CloudSyncWorker(
 
             // Read database (assuming we'll need to export everything to a JSON)
             val database = com.app.data.AppDatabase.getDatabase(applicationContext)
-            val repository = com.app.data.FinanceRepository(database.financeDao())
+            val repository = com.app.data.FinanceRepository(database.financeDao(), database)
             val exportedData = repository.exportAllDataAsJson()
 
 val folderName = "[APP_FINANCE]"

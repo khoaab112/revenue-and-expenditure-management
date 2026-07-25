@@ -120,6 +120,19 @@ object NotificationParser {
             )
         }
 
+        // The financial model currently stores VND only. Reject foreign-currency
+        // notifications instead of recording their numeric amount as VND.
+        if (listOf("usd", "eur", "gbp").any { combinedText.contains(it) }) {
+            return ParsedNotification(
+                amount = 0.0,
+                type = "EXPENSE",
+                bankName = bankName,
+                detectedWalletName = detectedWalletName,
+                note = "Chưa hỗ trợ tự động ghi nhận giao dịch ngoại tệ",
+                success = false
+            )
+        }
+
         // 3. Check for transaction indicators in any balance changes or payments
         val transactionKeywords = listOf(
             "số dư", "biến động", "bđsd", "sotien", "soduthaydoi", "sd tk", "so du tk", "tk sd", "gd:", "nd:", "nội dung gd",

@@ -6,8 +6,15 @@ import java.util.Calendar
 
 import kotlinx.coroutines.flow.first
 import org.json.JSONObject
+import androidx.room.withTransaction
 
-class FinanceRepository(private val dao: FinanceDao) {
+class FinanceRepository(
+    private val dao: FinanceDao,
+    private val database: AppDatabase? = null
+) {
+
+    private suspend fun <T> runAtomically(block: suspend () -> T): T =
+        database?.withTransaction { block() } ?: block()
 
     // --- Wallets ---
     val allWallets: Flow<List<Wallet>> = dao.getAllWallets()
@@ -18,7 +25,13 @@ class FinanceRepository(private val dao: FinanceDao) {
 
     suspend fun updateWallet(wallet: Wallet) = dao.updateWallet(wallet)
 
-    suspend fun deleteWallet(wallet: Wallet) = dao.deleteWallet(wallet)
+    suspend fun deleteWallet(wallet: Wallet): Boolean {
+        if (dao.getTransactionsByWallet(wallet.id).firstOrNull().orEmpty().isNotEmpty()) {
+            return false
+        }
+        dao.deleteWallet(wallet)
+        return true
+    }
 
     // --- Transactions ---
     val allTransactions: Flow<List<Transaction>> = dao.getAllTransactions()
@@ -28,7 +41,20 @@ class FinanceRepository(private val dao: FinanceDao) {
 
     suspend fun getTransactionById(id: Int): Transaction? = dao.getTransactionById(id)
 
-    suspend fun insertTransaction(transaction: Transaction): Long {
+    suspend fun insertTransaction(transaction: Transaction): Long = runAtomically {
+        require(transaction.amount > 0) { "Transaction amount must be positive" }
+        require(
+            transaction.type != "TRANSFER" ||
+                transaction.destinationWalletId == null ||
+                transaction.destinationWalletId != transaction.walletId
+        ) { "Transfer source and destination wallets must differ" }
+        if (!transaction.notificationKey.isNullOrBlank() && dao.hasTransactionForNotificationKey(transaction.notificationKey)) {
+            return@runAtomically -1L
+        }
+        insertTransactionInternal(transaction)
+    }
+
+    private suspend fun insertTransactionInternal(transaction: Transaction): Long {
         // 1. Save Transaction
         val id = dao.insertTransaction(transaction)
         
@@ -67,7 +93,11 @@ class FinanceRepository(private val dao: FinanceDao) {
         return id
     }
 
-    suspend fun deleteTransaction(transaction: Transaction) {
+    suspend fun deleteTransaction(transaction: Transaction) = runAtomically {
+        deleteTransactionInternal(transaction)
+    }
+
+    private suspend fun deleteTransactionInternal(transaction: Transaction) {
         // 1. Revert Wallet Balance
         val wallet = dao.getWalletById(transaction.walletId)
         if (wallet != null) {
@@ -104,7 +134,17 @@ class FinanceRepository(private val dao: FinanceDao) {
         dao.deleteTransaction(transaction)
     }
 
-    suspend fun updateTransaction(newTransaction: Transaction) {
+    suspend fun updateTransaction(newTransaction: Transaction) = runAtomically {
+        require(newTransaction.amount > 0) { "Transaction amount must be positive" }
+        require(
+            newTransaction.type != "TRANSFER" ||
+                newTransaction.destinationWalletId == null ||
+                newTransaction.destinationWalletId != newTransaction.walletId
+        ) { "Transfer source and destination wallets must differ" }
+        updateTransactionInternal(newTransaction)
+    }
+
+    private suspend fun updateTransactionInternal(newTransaction: Transaction) {
         val oldTransaction = dao.getTransactionById(newTransaction.id) ?: return
 
         // 1. Revert old transaction wallet balance
@@ -287,7 +327,10 @@ class FinanceRepository(private val dao: FinanceDao) {
     val allEvents: Flow<List<Event>> = dao.getAllEvents()
     suspend fun insertEvent(event: Event): Long = dao.insertEvent(event)
     suspend fun updateEvent(event: Event) = dao.updateEvent(event)
-    suspend fun deleteEvent(event: Event) = dao.deleteEvent(event)
+    suspend fun deleteEvent(event: Event) = runAtomically {
+        dao.clearEventFromTransactions(event.id)
+        dao.deleteEvent(event)
+    }
 
     // --- Debts ---
     val allDebts: Flow<List<Debt>> = dao.getAllDebts()

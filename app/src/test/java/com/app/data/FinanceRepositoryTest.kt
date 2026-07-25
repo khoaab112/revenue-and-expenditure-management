@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,7 +32,7 @@ class FinanceRepositoryTest {
             AppDatabase::class.java
         ).allowMainThreadQueries().build()
         dao = database.financeDao()
-        repository = FinanceRepository(dao)
+        repository = FinanceRepository(dao, database)
     }
 
     @After
@@ -282,5 +284,96 @@ class FinanceRepositoryTest {
 
         wallet = repository.getWalletById(walletId)
         assertEquals(1300.0, wallet!!.balance, 0.0)
+    }
+
+    @Test
+    fun `transfer updates both wallets and cannot target its source`() = runTest {
+        val sourceId = repository.insertWallet(Wallet(name = "Source", type = "BANK", balance = 1_000.0, colorHex = "#FFF", iconName = "AccountBalance")).toInt()
+        val destinationId = repository.insertWallet(Wallet(name = "Destination", type = "CASH", balance = 200.0, colorHex = "#FFF", iconName = "Payments")).toInt()
+
+        repository.insertTransaction(Transaction(walletId = sourceId, walletName = "Source", type = "TRANSFER", amount = 300.0, categoryName = "Transfer", categoryIcon = "Swap", categoryColor = "#FFF", note = "Transfer", timestamp = System.currentTimeMillis(), destinationWalletId = destinationId))
+
+        assertEquals(700.0, repository.getWalletById(sourceId)!!.balance, 0.0)
+        assertEquals(500.0, repository.getWalletById(destinationId)!!.balance, 0.0)
+    }
+
+    @Test
+    fun `duplicate notification key creates one transaction only`() = runTest {
+        val walletId = repository.insertWallet(Wallet(name = "Wallet", type = "BANK", balance = 1_000.0, colorHex = "#FFF", iconName = "AccountBalance")).toInt()
+        val transaction = Transaction(walletId = walletId, walletName = "Wallet", type = "INCOME", amount = 100.0, categoryName = "Other", categoryIcon = "Category", categoryColor = "#FFF", note = "Bank alert", timestamp = System.currentTimeMillis(), notificationKey = "bank-notification-1")
+
+        assertTrue(repository.insertTransaction(transaction) > 0)
+        assertEquals(-1L, repository.insertTransaction(transaction))
+        assertEquals(1_100.0, repository.getWalletById(walletId)!!.balance, 0.0)
+    }
+
+    @Test
+    fun `editing a transaction can move it to another wallet and change its type`() = runTest {
+        val sourceId = repository.insertWallet(Wallet(name = "Source", type = "BANK", balance = 1_000.0, colorHex = "#FFF", iconName = "AccountBalance")).toInt()
+        val destinationId = repository.insertWallet(Wallet(name = "Destination", type = "CASH", balance = 500.0, colorHex = "#FFF", iconName = "Payments")).toInt()
+        val txId = repository.insertTransaction(Transaction(walletId = sourceId, walletName = "Source", type = "EXPENSE", amount = 200.0, categoryName = "Food", categoryIcon = "Restaurant", categoryColor = "#FFF", note = "Lunch", timestamp = System.currentTimeMillis()))
+
+        repository.updateTransaction(repository.getTransactionById(txId.toInt())!!.copy(walletId = destinationId, walletName = "Destination", type = "INCOME", amount = 300.0))
+
+        assertEquals(1_000.0, repository.getWalletById(sourceId)!!.balance, 0.0)
+        assertEquals(800.0, repository.getWalletById(destinationId)!!.balance, 0.0)
+    }
+
+    @Test
+    fun `updating and deleting an expense keeps its budget accurate`() = runTest {
+        val month = String.format("%04d-%02d", Calendar.getInstance().get(Calendar.YEAR), Calendar.getInstance().get(Calendar.MONTH) + 1)
+        repository.insertBudget(Budget(categoryName = "Food", categoryIcon = "Restaurant", categoryColor = "#FFF", limitAmount = 1_000.0, month = month))
+        val walletId = repository.insertWallet(Wallet(name = "Wallet", type = "CASH", balance = 2_000.0, colorHex = "#FFF", iconName = "Payments")).toInt()
+        val txId = repository.insertTransaction(Transaction(walletId = walletId, walletName = "Wallet", type = "EXPENSE", amount = 200.0, categoryName = "Food", categoryIcon = "Restaurant", categoryColor = "#FFF", note = "Food", timestamp = System.currentTimeMillis()))
+
+        var transaction = repository.getTransactionById(txId.toInt())!!
+        repository.updateTransaction(transaction.copy(amount = 350.0))
+        assertEquals(350.0, dao.getBudgetsByMonth(month).first().single().spentAmount, 0.0)
+
+        transaction = repository.getTransactionById(txId.toInt())!!
+        repository.deleteTransaction(transaction)
+        assertEquals(0.0, dao.getBudgetsByMonth(month).first().single().spentAmount, 0.0)
+    }
+
+    @Test
+    fun `wallet with transaction history cannot be deleted`() = runTest {
+        val wallet = Wallet(name = "Wallet", type = "CASH", balance = 1_000.0, colorHex = "#FFF", iconName = "Payments")
+        val walletId = repository.insertWallet(wallet).toInt()
+        val persistedWallet = repository.getWalletById(walletId)!!
+        repository.insertTransaction(Transaction(walletId = walletId, walletName = "Wallet", type = "EXPENSE", amount = 100.0, categoryName = "Food", categoryIcon = "Restaurant", categoryColor = "#FFF", note = "Food", timestamp = System.currentTimeMillis()))
+
+        assertFalse(repository.deleteWallet(persistedWallet))
+        assertTrue(repository.getWalletById(walletId) != null)
+    }
+
+    @Test
+    fun `deleting an event preserves its transactions but unassigns the event`() = runTest {
+        val walletId = repository.insertWallet(Wallet(name = "Wallet", type = "CASH", balance = 1_000.0, colorHex = "#FFF", iconName = "Payments")).toInt()
+        val eventId = repository.insertEvent(Event(name = "Trip", description = "", startDate = System.currentTimeMillis())).toInt()
+        val txId = repository.insertTransaction(Transaction(walletId = walletId, walletName = "Wallet", type = "EXPENSE", amount = 100.0, categoryName = "Food", categoryIcon = "Restaurant", categoryColor = "#FFF", note = "Food", timestamp = System.currentTimeMillis(), eventId = eventId))
+
+        repository.deleteEvent(repository.allEvents.first().single())
+
+        assertEquals(null, repository.getTransactionById(txId.toInt())!!.eventId)
+        assertTrue(repository.allTransactions.first().any { it.id == txId.toInt() })
+    }
+
+    @Test
+    fun `renaming a category updates its transaction history and budget`() = runTest {
+        val month = String.format("%04d-%02d", Calendar.getInstance().get(Calendar.YEAR), Calendar.getInstance().get(Calendar.MONTH) + 1)
+        val walletId = repository.insertWallet(Wallet(name = "Wallet", type = "CASH", balance = 1_000.0, colorHex = "#FFF", iconName = "Payments")).toInt()
+        repository.insertBudget(Budget(categoryName = "Food", categoryIcon = "Restaurant", categoryColor = "#AAA", limitAmount = 1_000.0, month = month))
+        val txId = repository.insertTransaction(Transaction(walletId = walletId, walletName = "Wallet", type = "EXPENSE", amount = 100.0, categoryName = "Food", categoryIcon = "Restaurant", categoryColor = "#AAA", note = "Food", timestamp = System.currentTimeMillis()))
+
+        repository.updateCategoryInRelatedData("Food", "Dining", "LocalDining", "#BBB")
+
+        val transaction = repository.getTransactionById(txId.toInt())!!
+        val budget = dao.getBudgetsByMonth(month).first().single()
+        assertEquals("Dining", transaction.categoryName)
+        assertEquals("LocalDining", transaction.categoryIcon)
+        assertEquals("#BBB", transaction.categoryColor)
+        assertEquals("Dining", budget.categoryName)
+        assertEquals("LocalDining", budget.categoryIcon)
+        assertEquals("#BBB", budget.categoryColor)
     }
 }

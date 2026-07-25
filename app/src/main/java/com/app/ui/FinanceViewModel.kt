@@ -32,7 +32,8 @@ data class NotificationLog(
     val type: String,
     val note: String,
     val walletName: String,
-    val status: String // "AUTO_ADDED", "FAILED_PARSE", "NO_WALLET"
+    val status: String, // "AUTO_ADDED", "FAILED_PARSE", "NO_WALLET"
+    val notificationKey: String = ""
 )
 
 data class SmartWalletMapping(
@@ -244,7 +245,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     init {
         val database = AppDatabase.getDatabase(application)
         val dao = database.financeDao()
-        repository = FinanceRepository(dao)
+        repository = FinanceRepository(dao, database)
 
         // Base states
         allWallets = repository.allWallets
@@ -537,7 +538,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                                 type = obj.optString("type", "EXPENSE"),
                                 note = obj.optString("note", ""),
                                 walletName = obj.optString("walletName", ""),
-                                status = status
+                                status = status,
+                                notificationKey = obj.optString("notificationKey", "")
                             )
                         )
                     }
@@ -819,7 +821,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 categoryColor = catDetails.colorHex,
                 note = overrideNote?.takeIf { it.isNotBlank() } ?: log.note.takeIf { it.isNotBlank() } ?: "Ghi từ thông báo",
                 timestamp = log.timestamp,
-                eventId = resolvedEventId
+                eventId = resolvedEventId,
+                notificationKey = log.notificationKey.takeIf { it.isNotBlank() }
             )
             repository.insertTransaction(tx)
             updateLogStatus(log, "AUTO_ADDED", wallet.name)
@@ -947,7 +950,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     categoryColor = categoryColor,
                     note = log.note.ifEmpty { "Ghi từ thông báo hàng loạt" },
                     timestamp = log.timestamp,
-                    eventId = matchedEventId
+                    eventId = matchedEventId,
+                    notificationKey = log.notificationKey.takeIf { it.isNotBlank() }
                 )
                 repository.insertTransaction(tx)
             }
@@ -1037,7 +1041,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 categoryColor = cat.colorHex,
                 note = log.note.ifEmpty { "Ghi từ thông báo" },
                 timestamp = log.timestamp,
-                eventId = matchedEventId
+                eventId = matchedEventId,
+                notificationKey = log.notificationKey.takeIf { it.isNotBlank() }
             )
             repository.insertTransaction(tx)
         }
@@ -1577,7 +1582,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     fun deleteWallet(wallet: Wallet) {
         viewModelScope.launch {
-            repository.deleteWallet(wallet)
+            val deleted = repository.deleteWallet(wallet)
+            if (!deleted) {
+                showWarningNotification("Không thể xóa ví đang có lịch sử giao dịch. Hãy đóng ví để lưu trữ lịch sử.")
+            }
         }
     }
 
