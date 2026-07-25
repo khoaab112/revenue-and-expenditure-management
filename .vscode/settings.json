@@ -1,0 +1,11 @@
+{
+  "java.home": "K:\\android\\jbr",
+  "java.jdt.ls.java.home": "K:\\android\\jbr",
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-21",
+      "path": "K:\\android\\jbr",
+      "default": true
+    }
+  ]
+}

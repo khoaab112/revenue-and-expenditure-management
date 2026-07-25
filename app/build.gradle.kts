@@ -7,15 +7,15 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.app"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
     applicationId = "com.aistudio.ghichepthuchi.pfmkt"
     minSdk = 24
     targetSdk = 36
-    versionCode = 4
-    versionName = "2.0.0"
+    versionCode = 5
+    versionName = "3.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
