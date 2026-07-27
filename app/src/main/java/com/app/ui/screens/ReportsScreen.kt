@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -113,6 +115,7 @@ fun ReportsScreen(
 // ==========================================
 // TAB 1: XU HƯỚNG (TREND REPORT CONTENT)
 // ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrendReportContent(viewModel: FinanceViewModel) {
     var selectedPeriod by remember { mutableStateOf("WEEK") } // "WEEK", "MONTH", "YEAR", "5YEARS"
@@ -126,15 +129,15 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
     val (startDate, endDate, dateLabel) = remember(selectedPeriod, periodOffset) {
         val cal = Calendar.getInstance()
         cal.firstDayOfWeek = Calendar.MONDAY
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
 
         when (selectedPeriod) {
             "WEEK" -> {
                 cal.add(Calendar.WEEK_OF_YEAR, periodOffset)
                 cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
 
                 cal.add(Calendar.DAY_OF_WEEK, 6)
@@ -150,10 +153,6 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
             "MONTH" -> {
                 cal.add(Calendar.MONTH, periodOffset)
                 cal.set(Calendar.DAY_OF_MONTH, 1)
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
 
                 val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -170,10 +169,6 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
             "YEAR" -> {
                 cal.add(Calendar.YEAR, periodOffset)
                 cal.set(Calendar.DAY_OF_YEAR, 1)
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
 
                 val maxDay = cal.getActualMaximum(Calendar.DAY_OF_YEAR)
@@ -187,16 +182,12 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                 val label = "Năm ${sdf.format(Date(start))}"
                 Triple(start, end, label)
             }
-            else -> { // 5YEARS
-                cal.add(Calendar.YEAR, periodOffset * 5)
-                val currentYear = cal.get(Calendar.YEAR)
+            else -> { // "5YEARS"
+                val currentYear = cal.get(Calendar.YEAR) + (periodOffset * 5)
                 val startYear = currentYear - 4
 
                 cal.set(Calendar.YEAR, startYear)
                 cal.set(Calendar.DAY_OF_YEAR, 1)
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
                 val start = cal.timeInMillis
 
                 cal.set(Calendar.YEAR, currentYear)
@@ -263,7 +254,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
         return currentCat ?: com.app.data.FinanceCategory(catName, "Category", "#607D8B", "BOTH")
     }
 
-    val topExpenseCategories = remember(periodTransactions, savingsWalletIds, totalExpense, categoriesList) {
+    val allExpenseCategories = remember(periodTransactions, savingsWalletIds, totalExpense, categoriesList) {
         periodTransactions
             .filter { tx ->
                 val catName = tx.categoryName.trim()
@@ -285,8 +276,13 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                 )
             }
             .sortedByDescending { it.amount }
-            .take(3)
     }
+
+    val topExpenseCategories = remember(allExpenseCategories) {
+        allExpenseCategories.take(3)
+    }
+
+    var showAllCategoriesSheet by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -472,6 +468,9 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                var selectedChartUnit by remember { mutableStateOf("MILLION") } // MILLION (triệu đ), HUNDRED_THOUSAND (trăm nghìn đ)
+                var isUnitMenuExpanded by remember { mutableStateOf(false) }
+
                 // Header of Chart
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -479,18 +478,52 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Biểu đồ thu chi", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Box {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                            modifier = Modifier.clickable { isUnitMenuExpanded = true }
                         ) {
-                            Text("Đơn vị: triệu đ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val unitLabel = if (selectedChartUnit == "MILLION") "triệu" else "trăm nghìn"
+                                Text(
+                                    text = unitLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = isUnitMenuExpanded,
+                            onDismissRequest = { isUnitMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("triệu", fontSize = 13.sp, fontWeight = if (selectedChartUnit == "MILLION") FontWeight.Bold else FontWeight.Normal) },
+                                onClick = {
+                                    selectedChartUnit = "MILLION"
+                                    isUnitMenuExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("trăm nghìn", fontSize = 13.sp, fontWeight = if (selectedChartUnit == "HUNDRED_THOUSAND") FontWeight.Bold else FontWeight.Normal) },
+                                onClick = {
+                                    selectedChartUnit = "HUNDRED_THOUSAND"
+                                    isUnitMenuExpanded = false
+                                }
+                            )
                         }
                     }
                 }
@@ -519,7 +552,8 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                     selectedPeriod = selectedPeriod,
                     periodTransactions = periodTransactions,
                     startDate = startDate,
-                    endDate = endDate
+                    endDate = endDate,
+                    chartUnit = selectedChartUnit
                 )
             }
         }
@@ -585,7 +619,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Danh mục chi tiêu nhiều nhất", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                Text("Xem tất cả", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), modifier = Modifier.clickable { })
+                Text("Xem tất cả", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), modifier = Modifier.clickable { showAllCategoriesSheet = true })
             }
 
             if (topExpenseCategories.isEmpty()) {
@@ -691,6 +725,123 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
 
         Spacer(modifier = Modifier.height(24.dp))
     }
+
+    if (showAllCategoriesSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showAllCategoriesSheet = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Danh mục chi tiêu",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = dateLabel,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { showAllCategoriesSheet = false }) {
+                        Icon(Icons.Default.Close, contentDescription = "Đóng")
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                if (allExpenseCategories.isEmpty()) {
+                    Text(
+                        text = "Không có dữ liệu chi tiêu trong khoảng thời gian này.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 24.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 450.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(allExpenseCategories) { cat ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFFEBEE)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = IconMapper.getIconByName(cat.iconName),
+                                        contentDescription = cat.name,
+                                        tint = Color(0xFFC62828),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = cat.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    LinearProgressIndicator(
+                                        progress = { cat.percentage / 100f },
+                                        color = Color(0xFFFF7043),
+                                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = FormatHelper.formatVND(cat.amount),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${cat.percentage.toInt()}%",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFC62828)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -743,13 +894,15 @@ fun CombinedTrendCanvasChart(
     selectedPeriod: String,
     periodTransactions: List<Transaction>,
     startDate: Long,
-    endDate: Long
+    endDate: Long,
+    chartUnit: String = "MILLION"
 ) {
     val textMeasurer = rememberTextMeasurer()
 
-    val chartData = remember(selectedPeriod, periodTransactions, startDate, endDate) {
+    val chartData = remember(selectedPeriod, periodTransactions, startDate, endDate, chartUnit) {
         val cal = Calendar.getInstance()
         cal.firstDayOfWeek = Calendar.MONDAY
+        val divisor = if (chartUnit == "HUNDRED_THOUSAND") 100_000.0 else 1_000_000.0
 
         when (selectedPeriod) {
             "WEEK" -> {
@@ -766,8 +919,8 @@ fun CombinedTrendCanvasChart(
                     val dayEnd = cal.timeInMillis
 
                     val dayTxs = periodTransactions.filter { it.timestamp in dayStart..dayEnd }
-                    val inc = dayTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / 1_000_000.0
-                    val exp = dayTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / 1_000_000.0
+                    val inc = dayTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / divisor
+                    val exp = dayTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / divisor
                     val fullLabel = "$dayName\n${dayFormat.format(Date(dayStart))}"
 
                     ChartBucket(fullLabel, inc, exp)
@@ -781,8 +934,8 @@ fun CombinedTrendCanvasChart(
                     val wEnd = if (index == 3) endDate else startDate + (index + 1) * duration - 1
 
                     val wTxs = periodTransactions.filter { it.timestamp in wStart..wEnd }
-                    val inc = wTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / 1_000_000.0
-                    val exp = wTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / 1_000_000.0
+                    val inc = wTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / divisor
+                    val exp = wTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / divisor
 
                     ChartBucket(weekName, inc, exp)
                 }
@@ -798,8 +951,8 @@ fun CombinedTrendCanvasChart(
                     val mEnd = cal.timeInMillis
 
                     val mTxs = periodTransactions.filter { it.timestamp in mStart..mEnd }
-                    val inc = mTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / 1_000_000.0
-                    val exp = mTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / 1_000_000.0
+                    val inc = mTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / divisor
+                    val exp = mTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / divisor
 
                     ChartBucket("T$monthNum", inc, exp)
                 }
@@ -813,8 +966,8 @@ fun CombinedTrendCanvasChart(
                     val yEnd = cal.timeInMillis
 
                     val yTxs = periodTransactions.filter { it.timestamp in yStart..yEnd }
-                    val inc = yTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / 1_000_000.0
-                    val exp = yTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / 1_000_000.0
+                    val inc = yTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / divisor
+                    val exp = yTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / divisor
 
                     val sdf = SimpleDateFormat("yyyy", Locale.getDefault())
                     ChartBucket(sdf.format(Date(yStart)), inc, exp)
@@ -967,13 +1120,18 @@ data class ChartBucket(
 @Composable
 fun DistributionReportContent(viewModel: FinanceViewModel) {
     val transactions by viewModel.dailyTransactions.collectAsState()
-    val activeMonth by viewModel.activeMonth.collectAsState()
-
-    val currentYear = remember(activeMonth) {
-        try { activeMonth.substring(0, 4).toInt() } catch (e: Exception) { Calendar.getInstance().get(Calendar.YEAR) }
+    val currentRealMonthStr = remember {
+        Calendar.getInstance().let { cal ->
+            String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+        }
     }
-    val currentMonth = remember(activeMonth) {
-        try { activeMonth.substring(5, 7).toInt() } catch (e: Exception) { Calendar.getInstance().get(Calendar.MONTH) + 1 }
+    var distributionMonth by remember { mutableStateOf(currentRealMonthStr) }
+
+    val currentYear = remember(distributionMonth) {
+        try { distributionMonth.substring(0, 4).toInt() } catch (e: Exception) { Calendar.getInstance().get(Calendar.YEAR) }
+    }
+    val currentMonth = remember(distributionMonth) {
+        try { distributionMonth.substring(5, 7).toInt() } catch (e: Exception) { Calendar.getInstance().get(Calendar.MONTH) + 1 }
     }
 
     fun adjustMonth(diff: Int) {
@@ -982,15 +1140,15 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
             set(Calendar.MONTH, currentMonth - 1 + diff)
         }
         val formatted = String.format("%04d-%02d", calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1)
-        viewModel.setActiveMonth(formatted)
+        distributionMonth = formatted
     }
 
-    val monthTransactions = remember(transactions, activeMonth) {
+    val monthTransactions = remember(transactions, distributionMonth) {
         val cal = Calendar.getInstance()
         transactions.filter {
             cal.timeInMillis = it.timestamp
             val txMonth = String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
-            txMonth == activeMonth
+            txMonth == distributionMonth
         }
     }
 
@@ -1008,14 +1166,14 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
     fun getRootCategory(catName: String): com.app.data.FinanceCategory {
         var currentCat = categoriesList.find { it.name.equals(catName, ignoreCase = true) }
         while (currentCat?.parentName != null) {
-            val parent = categoriesList.find { it.name.equals(currentCat!!.parentName, ignoreCase = true) }
+            val parent = categoriesList.find { it.name.equals(currentCat?.parentName, ignoreCase = true) }
             if (parent != null) {
                 currentCat = parent
             } else {
                 break
             }
         }
-        return currentCat ?: com.app.data.FinanceCategory(catName, "Category", "#607D8B", "BOTH")
+        return currentCat ?: com.app.data.FinanceCategory(name = catName, type = "EXPENSE", colorHex = "#4CAF50", iconName = "category")
     }
 
     val categoryExpenses = remember(monthTransactions, savingsWalletIds, totalExpenses, categoriesList) {
@@ -1069,7 +1227,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
     var selectedCategoryName by remember { mutableStateOf<String?>(null) }
 
     val animProgress = remember { Animatable(0f) }
-    LaunchedEffect(activeMonth, selectedReportType) {
+    LaunchedEffect(distributionMonth, selectedReportType) {
         selectedCategoryName = null
         animProgress.snapTo(0f)
         animProgress.animateTo(
@@ -1081,7 +1239,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
     if (selectedCategoryForHistory != null) {
         com.app.ui.components.CategoryTransactionsDialog(
             categoryName = selectedCategoryForHistory!!,
-            monthKey = activeMonth,
+            monthKey = distributionMonth,
             viewModel = viewModel,
             onDismiss = { selectedCategoryForHistory = null }
         )

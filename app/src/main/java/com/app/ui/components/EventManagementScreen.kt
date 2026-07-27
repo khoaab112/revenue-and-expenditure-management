@@ -1,14 +1,17 @@
 package com.app.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
@@ -22,6 +25,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -179,7 +183,7 @@ fun EventStatusChip(statusStyle: EventStatusStyle) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EventManagementScreen(
     viewModel: FinanceViewModel,
@@ -714,44 +718,177 @@ fun EventManagementScreen(
             }
         }
 
-        Dialog(
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        var nameError by remember { mutableStateOf<String?>(null) }
+
+        AppModalBottomSheet(
             onDismissRequest = {
                 showAddEventDialog = false
                 eventToEdit = null
+            },
+            title = if (editingEvent != null) "Sửa sự kiện" else "Thêm sự kiện mới",
+            sheetState = sheetState,
+            footer = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            showAddEventDialog = false
+                            eventToEdit = null
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            text = "Hủy",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (name.isBlank()) {
+                                nameError = "Vui lòng nhập tên sự kiện!"
+                                return@Button
+                            }
+                            if (endDate != null && endDate!! < startDate) {
+                                viewModel.showWarningNotification("Ngày kết thúc phải sau ngày bắt đầu!")
+                                return@Button
+                            }
+                            val limit = limitAmountStr.replace(".", "").toDoubleOrNull()
+
+                            if (editingEvent != null) {
+                                viewModel.updateEvent(editingEvent.copy(
+                                    name = name,
+                                    description = description,
+                                    startDate = startDate,
+                                    endDate = endDate,
+                                    limitAmount = limit,
+                                    colorHex = selectedColor
+                                ))
+                                viewModel.showSuccessNotification("Cập nhật sự kiện thành công!")
+                            } else {
+                                viewModel.addEvent(
+                                    name = name,
+                                    description = description,
+                                    startDate = startDate,
+                                    endDate = endDate,
+                                    limitAmount = limit,
+                                    colorHex = selectedColor
+                                )
+                                viewModel.showSuccessNotification("Thêm sự kiện mới thành công!")
+                            }
+                            showAddEventDialog = false
+                            eventToEdit = null
+                        },
+                        modifier = Modifier
+                            .weight(1.4f)
+                            .height(50.dp)
+                            .testTag("confirm_create_event_btn"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF5C54E5),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            text = if (editingEvent != null) "Lưu thay đổi" else "Thêm sự kiện",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         ) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
-            ) {
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                        .heightIn(max = 540.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(
-                        text = if (editingEvent != null) "Sửa sự kiện" else "Thêm sự kiện mới",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
+                    // 1. Tên sự kiện (*) Input with inline validation
                     OutlinedTextField(
                         value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Tên sự kiện (*)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        onValueChange = {
+                            name = it
+                            if (it.isNotBlank()) nameError = null
+                        },
+                        placeholder = { Text("Tên sự kiện (*)", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (nameError != null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Event,
+                                    contentDescription = null,
+                                    tint = if (nameError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
+                        isError = nameError != null,
+                        supportingText = if (nameError != null) {
+                            { Text(text = nameError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                        } else null,
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF5C54E5),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                            errorBorderColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("event_name_input")
                     )
+
+                    // 2. Mô tả Input
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
-                        label = { Text("Mô tả") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        placeholder = { Text("Mô tả", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Notes,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF5C54E5),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("event_desc_input")
                     )
+
+                    // 3. Hạn mức chi tiêu Input
                     OutlinedTextField(
                         value = limitAmountStr,
                         onValueChange = { str ->
@@ -760,225 +897,241 @@ fun EventManagementScreen(
                                 try {
                                     val formatted = String.format(java.util.Locale.US, "%,d", raw.toLong()).replace(',', '.')
                                     limitAmountStr = formatted
-                                } catch (e: Exception) {
-                                    // ignore overflow
-                                }
+                                } catch (e: Exception) { }
                             } else {
                                 limitAmountStr = ""
                             }
                         },
-                        label = { Text("Hạn mức chi tiêu") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        placeholder = { Text("Hạn mức chi tiêu (VNĐ)", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Paid,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Calculate,
+                                contentDescription = "Máy tính",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF5C54E5),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("event_limit_input")
                     )
 
-                    Text("Màu sắc", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // 4. MÀU SẮC Section
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "MÀU SẮC",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-                    // Color selection in Grid Format (7 equal-weight columns per row for 100% uniform spacing)
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        colors.chunked(7).forEach { rowColors ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                for (i in 0 until 7) {
-                                    Box(
-                                        modifier = Modifier.weight(1f),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (i < rowColors.size) {
-                                            val hex = rowColors[i]
-                                            val colorValue = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color.Black }
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(30.dp)
-                                                    .clip(CircleShape)
-                                                    .background(colorValue)
-                                                    .clickable { selectedColor = hex }
-                                                    .border(
-                                                        2.dp,
-                                                        if (selectedColor == hex) MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                                                        CircleShape
-                                                    )
-                                            )
-                                        }
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            colors.forEach { hex ->
+                                val color = FormatHelper.parseColor(hex)
+                                val isSelected = selectedColor == hex
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .then(
+                                            if (isSelected) {
+                                                Modifier.border(2.5.dp, Color(0xFF5C54E5), CircleShape)
+                                            } else Modifier
+                                        )
+                                        .clickable { selectedColor = hex },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Chọn màu",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    // Row Bắt đầu
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showStartDatePicker = true },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DateRange,
-                                    contentDescription = null,
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Bắt đầu", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
+                    // 5. THỜI GIAN ÁP DỤNG Section (Start & End Date)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = FormatHelper.formatDate(startDate),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            text = "THỜI GIAN ÁP DỤNG",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
 
-                    // Row Kết thúc
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showEndDatePicker = true },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            // 1. Start date item (Floating label design)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showStartDatePicker = true }
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.DateRange,
-                                    contentDescription = null,
-                                    tint = Color(0xFFF44336),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Kết thúc", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 10.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.2.dp, Color(0xFF9E95F5))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = FormatHelper.formatDate(startDate),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.DateRange,
+                                            contentDescription = null,
+                                            tint = Color(0xFF9E95F5),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (endDate != null) {
-                                Text(
-                                    text = FormatHelper.formatDate(endDate!!),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                IconButton(
-                                    onClick = { endDate = null },
-                                    modifier = Modifier.size(28.dp)
+                                // Floating Badge Label over top border
+                                Row(
+                                    modifier = Modifier
+                                        .offset(x = 12.dp, y = 0.dp)
+                                        .background(MaterialTheme.colorScheme.surface)
+                                        .padding(horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Icon(
-                                        Icons.Default.Clear,
-                                        contentDescription = "Clear",
-                                        tint = MaterialTheme.colorScheme.outline,
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = null,
+                                        tint = Color(0xFF34C759),
                                         modifier = Modifier.size(16.dp)
                                     )
+                                    Text(
+                                        text = "Bắt đầu",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF34C759)
+                                    )
                                 }
-                            } else {
-                                Text(
-                                    text = "Chọn",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF1E88E5)
-                                )
+                            }
+
+                            // 2. End date item (Floating label design)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showEndDatePicker = true }
+                            ) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 10.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.2.dp, Color(0xFF9E95F5))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (endDate != null) FormatHelper.formatDate(endDate!!) else "Chọn...",
+                                            fontSize = 14.sp,
+                                            fontWeight = if (endDate != null) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (endDate != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+
+                                        if (endDate != null) {
+                                            IconButton(
+                                                onClick = { endDate = null },
+                                                modifier = Modifier.size(20.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Clear,
+                                                    contentDescription = "Xóa",
+                                                    tint = MaterialTheme.colorScheme.outline,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.DateRange,
+                                                contentDescription = null,
+                                                tint = Color(0xFF9E95F5),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Floating Badge Label over top border
+                                Row(
+                                    modifier = Modifier
+                                        .offset(x = 12.dp, y = 0.dp)
+                                        .background(MaterialTheme.colorScheme.surface)
+                                        .padding(horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DateRange,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF3B30),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "Kết thúc",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF3B30)
+                                    )
+                                }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Action buttons: Hủy & Lưu thay đổi
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                showAddEventDialog = false
-                                eventToEdit = null
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        ) {
-                            Text("Hủy", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        }
-
-                        Button(
-                            onClick = {
-                                if (name.isBlank()) {
-                                    viewModel.showWarningNotification("Vui lòng nhập tên sự kiện")
-                                    return@Button
-                                }
-                                if (endDate != null && endDate!! < startDate) {
-                                    viewModel.showWarningNotification("Ngày kết thúc phải sau ngày bắt đầu")
-                                    return@Button
-                                }
-                                val limit = limitAmountStr.replace(".", "").toDoubleOrNull()
-
-                                if (editingEvent != null) {
-                                    viewModel.updateEvent(editingEvent.copy(
-                                        name = name,
-                                        description = description,
-                                        startDate = startDate,
-                                        endDate = endDate,
-                                        limitAmount = limit,
-                                        colorHex = selectedColor
-                                    ))
-                                    viewModel.showSuccessNotification("Cập nhật thành công")
-                                } else {
-                                    viewModel.addEvent(
-                                        name = name,
-                                        description = description,
-                                        startDate = startDate,
-                                        endDate = endDate,
-                                        limitAmount = limit,
-                                        colorHex = selectedColor
-                                    )
-                                    viewModel.showSuccessNotification("Thêm thành công")
-                                }
-                                showAddEventDialog = false
-                                eventToEdit = null
-                            },
-                            modifier = Modifier
-                                .weight(1.5f)
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF6C5CE7),
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Text("Lưu thay đổi", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        }
-                    }
-                }
             }
         }
     }

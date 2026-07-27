@@ -284,148 +284,21 @@ fun SavingsVaultScreen(
 
     // Dialog Thêm sổ tiết kiệm mới
     if (showQuickAddWallet) {
-        val colorOptions = listOf("#9C27B0", "#2196F3", "#009688", "#FF9800", "#E91E63", "#4CAF50")
-        val iconOptions = listOf("Savings", "AccountBalance", "Home", "DirectionsCar", "Flight", "School")
-
-        Dialog(onDismissRequest = { showQuickAddWallet = false }) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Text(
-                        text = "Thêm sổ tiết kiệm mới",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    OutlinedTextField(
-                        value = newSavingsWalletName,
-                        onValueChange = { newSavingsWalletName = it },
-                        label = { Text("Tên sổ tiết kiệm (*)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    CustomMoneyInputField(
-                        value = newSavingsWalletInitialBalanceStr,
-                        onValueChange = { newSavingsWalletInitialBalanceStr = it },
-                        label = "Số tiền gửi ban đầu (đ)",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    CustomMoneyInputField(
-                        value = newSavingsWalletTargetAmountStr,
-                        onValueChange = { newSavingsWalletTargetAmountStr = it },
-                        label = "Mục tiêu tích lũy (đ)",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text("Chọn màu sắc", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        colorOptions.forEach { hex ->
-                            val colorVal = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color(0xFF9C27B0) }
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(colorVal)
-                                    .clickable { selectedAddColor = hex }
-                                    .border(
-                                        2.dp,
-                                        if (selectedAddColor == hex) MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                                        CircleShape
-                                    )
-                            )
-                        }
-                    }
-
-                    Text("Chọn biểu tượng", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        iconOptions.forEach { icName ->
-                            val isSel = selectedAddIcon == icName
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isSel) Color(0xFF6C5CE7).copy(alpha = 0.15f) else Color(0xFFF5F5F7))
-                                    .clickable { selectedAddIcon = icName }
-                                    .border(1.dp, if (isSel) Color(0xFF6C5CE7) else Color.Transparent, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = IconMapper.getIconByName(icName),
-                                    contentDescription = icName,
-                                    tint = if (isSel) Color(0xFF6C5CE7) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = { showQuickAddWallet = false },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFEFEFF4),
-                                contentColor = Color(0xFF555555)
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        ) {
-                            Text("Hủy", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        }
-                        Button(
-                            onClick = {
-                                if (newSavingsWalletName.isNotBlank()) {
-                                    val initialBalance = newSavingsWalletInitialBalanceStr.toDoubleOrNull() ?: 0.0
-                                    val targetAmount = newSavingsWalletTargetAmountStr.toDoubleOrNull()
-                                    viewModel.addWallet(
-                                        name = newSavingsWalletName,
-                                        type = "SAVINGS",
-                                        initialBalance = initialBalance,
-                                        colorHex = selectedAddColor,
-                                        iconName = selectedAddIcon,
-                                        targetAmount = targetAmount
-                                    )
-                                    viewModel.showSuccessNotification("Thêm sổ tiết kiệm thành công!")
-                                    newSavingsWalletName = ""
-                                    newSavingsWalletInitialBalanceStr = ""
-                                    newSavingsWalletTargetAmountStr = ""
-                                    showQuickAddWallet = false
-                                }
-                            },
-                            modifier = Modifier.weight(1.4f).height(48.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF6C5CE7),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        ) {
-                            Text("Khởi tạo sổ", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        }
-                    }
-                }
+        com.app.ui.components.AddSavingsVaultSheet(
+            onDismiss = { showQuickAddWallet = false },
+            onAddSavingsVault = { name, initialBalance, targetAmount, color, icon ->
+                viewModel.addWallet(
+                    name = name,
+                    type = "SAVINGS",
+                    initialBalance = initialBalance,
+                    colorHex = color,
+                    iconName = icon,
+                    targetAmount = targetAmount
+                )
+                viewModel.showSuccessNotification("Thêm sổ tiết kiệm thành công!")
+                showQuickAddWallet = false
             }
-        }
+        )
     }
 
     // Modal Bottom Sheet cho Nút 3 chấm (⋮)

@@ -7,5 +7,7 @@
       "path": "K:\\android\\jbr",
       "default": true
     }
-  ]
+  ],
+  "java.import.gradle.java.home": "K:\\android\\jbr",
+  "snyk.advanced.autoSelectOrganization": true
 }

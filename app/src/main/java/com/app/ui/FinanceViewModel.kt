@@ -328,6 +328,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             loadNotificationSettings()
             processRecurringTransactions()
             processRecurringBudgets()
+            kotlinx.coroutines.delay(600)
             _isLoadingSettings.value = false
 
             // Auto-trigger background cloud sync if enabled on app startup
@@ -662,7 +663,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val parsed = com.app.service.NotificationParser.parse(title, text, packageName)
                 if (parsed.success) {
-                    val wallets = repository.allWallets.firstOrNull() ?: emptyList()
+                    val wallets = (repository.allWallets.firstOrNull() ?: emptyList()).filter { it.type != "SAVINGS" }
                     val matchedWallet = wallets.find { it.name.lowercase().contains(parsed.bankName.lowercase()) }
                         ?: wallets.find { it.name.lowercase().contains(parsed.detectedWalletName.lowercase()) }
                         ?: wallets.find { it.type == "BANK" }
@@ -1016,14 +1017,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             val obj = jsonArray.getJSONObject(i)
             val timestamp = obj.optLong("timestamp", 0L)
             val text = obj.optString("text", "")
-            if (timestamp == log.timestamp && text == log.text) {
+            val title = obj.optString("title", "")
+            if (timestamp == log.timestamp && text == log.text && (title.isEmpty() || log.title.isEmpty() || title == log.title)) {
                 obj.put("status", newStatus)
                 obj.put("walletName", walletName)
             }
             newList.put(obj)
         }
         repository.saveSetting("notification_logs", newList.toString())
-        loadNotificationLogs()
+        loadNotificationLogsSync()
     }
 
     fun addManualTransactionFromLog(log: NotificationLog, walletId: Int, categoryName: String) {
@@ -1826,6 +1828,20 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateDebtDueDate(debt: Debt, newDueDate: Long) {
+        viewModelScope.launch {
+            repository.updateDebt(debt.copy(dueDate = newDueDate))
+            showSuccessNotification("Cập nhật hạn trả nợ thành công!")
+        }
+    }
+
+    fun updateDebtCreationDate(debt: Debt, newCreationDate: Long) {
+        viewModelScope.launch {
+            repository.updateDebt(debt.copy(creationDate = newCreationDate))
+            showSuccessNotification("Cập nhật ngày bắt đầu thành công!")
+        }
+    }
+
 
     // --- BUDGETS SERVICES ---
     fun toggleBudgetRecurring(budget: Budget) {
@@ -2518,6 +2534,237 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }
 
     
+    private suspend fun performMergeFromJsonString(jsonString: String, addLog: (String) -> Unit) {
+        val root = org.json.JSONObject(jsonString)
+        val version = root.optInt("version", 1)
+        addLog("Phân tích file sao lưu để gộp dữ liệu (phiên bản $version)...")
+
+        val existingWallets = repository.allWallets.first()
+        val existingTxs = repository.allTransactions.first()
+        val existingBudgets = repository.getAllBudgets().first()
+        val existingSavings = repository.allSavingsGoals.first()
+        val existingEvents = repository.allEvents.first()
+        val existingDebts = repository.allDebts.first()
+
+        // 1. Wallets
+        val walletsArray = root.optJSONArray("wallets")
+        if (walletsArray != null) {
+            var addedWallets = 0
+            for (i in 0 until walletsArray.length()) {
+                val obj = walletsArray.getJSONObject(i)
+                val name = obj.optString("name", "Ví")
+                val type = obj.optString("type", "CASH")
+                if (existingWallets.none { it.name.equals(name, ignoreCase = true) && it.type == type }) {
+                    val w = com.app.data.Wallet(
+                        name = name,
+                        type = type,
+                        balance = obj.optDouble("balance", 0.0),
+                        colorHex = obj.optString("colorHex", "#9E9E9E"),
+                        iconName = obj.optString("iconName", "AccountBalanceWallet"),
+                        displayOrder = obj.optInt("displayOrder", 0)
+                    )
+                    repository.insertWallet(w)
+                    addedWallets++
+                }
+            }
+            addLog("Đã bổ sung $addedWallets ví mới từ đám mây.")
+        }
+
+        // Refresh wallet list for transaction mapping
+        val currentWallets = repository.allWallets.first()
+        val defaultWalletId = currentWallets.firstOrNull()?.id ?: 1
+        val defaultWalletName = currentWallets.firstOrNull()?.name ?: "Ví chính"
+
+        // 2. Transactions
+        val transactionsArray = root.optJSONArray("transactions")
+        if (transactionsArray != null) {
+            var addedTxs = 0
+            for (i in 0 until transactionsArray.length()) {
+                val obj = transactionsArray.getJSONObject(i)
+                val amount = obj.optDouble("amount", 0.0)
+                val timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                val note = obj.optString("note", "")
+                val categoryName = obj.optString("categoryName", "")
+                val type = obj.optString("type", "EXPENSE")
+
+                // Check duplicate transaction (same timestamp, amount, type, note)
+                val isDuplicate = existingTxs.any { 
+                    it.timestamp == timestamp && it.amount == amount && it.type == type && it.note == note 
+                }
+
+                if (!isDuplicate) {
+                    val targetWallet = currentWallets.find { it.name.equals(obj.optString("walletName", ""), ignoreCase = true) }
+                    val wId = targetWallet?.id ?: defaultWalletId
+                    val wName = targetWallet?.name ?: defaultWalletName
+
+                    val t = com.app.data.Transaction(
+                        walletId = wId,
+                        walletName = wName,
+                        type = type,
+                        amount = amount,
+                        categoryName = categoryName,
+                        categoryIcon = obj.optString("categoryIcon", ""),
+                        categoryColor = obj.optString("categoryColor", ""),
+                        note = note,
+                        timestamp = timestamp,
+                        isRecurring = obj.optBoolean("isRecurring", false),
+                        recurrencePeriod = obj.optString("recurrencePeriod", "NONE")
+                    )
+                    repository.insertTransaction(t)
+                    addedTxs++
+                }
+            }
+            addLog("Đã hợp nhất thành công $addedTxs giao dịch mới!")
+        }
+
+        // 3. Budgets
+        val budgetsArray = root.optJSONArray("budgets")
+        if (budgetsArray != null) {
+            for (i in 0 until budgetsArray.length()) {
+                val obj = budgetsArray.getJSONObject(i)
+                val catName = obj.optString("categoryName", "")
+                val month = obj.optString("month", "")
+                if (catName.isNotEmpty() && existingBudgets.none { it.categoryName == catName && it.month == month }) {
+                    val b = com.app.data.Budget(
+                        categoryName = catName,
+                        categoryIcon = obj.optString("categoryIcon", ""),
+                        categoryColor = obj.optString("categoryColor", ""),
+                        limitAmount = obj.optDouble("limitAmount", 0.0),
+                        spentAmount = obj.optDouble("spentAmount", 0.0),
+                        month = month,
+                        isRecurring = obj.optBoolean("isRecurring", false)
+                    )
+                    repository.insertBudget(b)
+                }
+            }
+        }
+
+        // 4. Savings Goals
+        val savingsGoalsArray = root.optJSONArray("savingsGoals")
+        if (savingsGoalsArray != null) {
+            for (i in 0 until savingsGoalsArray.length()) {
+                val obj = savingsGoalsArray.getJSONObject(i)
+                val name = obj.optString("name", "Mục tiêu")
+                if (existingSavings.none { it.name.equals(name, ignoreCase = true) }) {
+                    val s = com.app.data.SavingsGoal(
+                        name = name,
+                        targetAmount = obj.optDouble("targetAmount", 0.0),
+                        currentAmount = obj.optDouble("currentAmount", 0.0),
+                        targetDate = obj.optLong("targetDate", System.currentTimeMillis()),
+                        note = obj.optString("note", "")
+                    )
+                    repository.insertSavingsGoal(s)
+                }
+            }
+        }
+
+        // Reload settings
+        loadCategories()
+        loadSecuritySettings()
+        loadNotificationSettings()
+
+        addLog("🎉 HỢP NHẤT DỮ LIỆU THÀNH CÔNG!")
+        _syncStatus.value = "SUCCESS"
+        showSuccessNotification("Hợp nhất dữ liệu đám mây thành công!")
+    }
+
+    fun mergeFromDrive(context: android.content.Context) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _syncStatus.value = "SYNCING"
+            val logs = mutableListOf<String>()
+            fun addLog(msg: String) {
+                logs.add("[${java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}] $msg")
+                _syncProgressLogs.value = logs.toList()
+            }
+            try {
+                addLog("Bắt đầu hợp nhất dữ liệu từ Google Drive...")
+                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
+                if (account == null) {
+                    addLog("Lỗi: Bạn chưa đăng nhập tài khoản Google.")
+                    _syncStatus.value = "ERROR"
+                    return@launch
+                }
+                val scope = "oauth2:https://www.googleapis.com/auth/drive.file"
+                val token = com.google.android.gms.auth.GoogleAuthUtil.getToken(context, account, scope)
+                
+                val folderName = "[APP_FINANCE]"
+                val fileName = "finance_backup.json"
+                val client = okhttp3.OkHttpClient()
+                
+                var folderId: String? = null
+                val searchFolderRequest = okhttp3.Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder'&spaces=drive")
+                    .header("Authorization", "Bearer ${token}")
+                    .build()
+                val searchFolderResponse = client.newCall(searchFolderRequest).execute()
+                if (searchFolderResponse.isSuccessful) {
+                    val json = searchFolderResponse.body?.string()
+                    if (json != null) {
+                        val jsonObj = org.json.JSONObject(json)
+                        val files = jsonObj.optJSONArray("files")
+                        if (files != null && files.length() > 0) {
+                            folderId = files.getJSONObject(0).getString("id")
+                        }
+                    }
+                }
+
+                if (folderId == null) {
+                    addLog("Dữ liệu không tồn tại: Thư mục ${folderName} chưa được tạo trên Drive.")
+                    _syncStatus.value = "ERROR"
+                    return@launch
+                }
+                
+                var fileId: String? = null
+                val searchFileRequest = okhttp3.Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files?q=name='${fileName}' and '${folderId}' in parents&spaces=drive")
+                    .header("Authorization", "Bearer ${token}")
+                    .build()
+                
+                val searchResponse = client.newCall(searchFileRequest).execute()
+                if (searchResponse.isSuccessful) {
+                    val json = searchResponse.body?.string()
+                    if (json != null) {
+                        val jsonObj = org.json.JSONObject(json)
+                        val files = jsonObj.optJSONArray("files")
+                        if (files != null && files.length() > 0) {
+                            fileId = files.getJSONObject(0).getString("id")
+                        }
+                    }
+                }
+                
+                if (fileId == null) {
+                    addLog("Dữ liệu không tồn tại: Không có bản sao lưu nào.")
+                    _syncStatus.value = "ERROR"
+                    return@launch
+                }
+                
+                addLog("Đang tải file sao lưu...")
+                val downloadRequest = okhttp3.Request.Builder()
+                    .url("https://www.googleapis.com/drive/v3/files/${fileId}?alt=media")
+                    .header("Authorization", "Bearer ${token}")
+                    .build()
+                    
+                val downloadResponse = client.newCall(downloadRequest).execute()
+                if (downloadResponse.isSuccessful) {
+                    val jsonString = downloadResponse.body?.string()
+                    if (jsonString.isNullOrBlank()) {
+                        addLog("Lỗi: File trống.")
+                        _syncStatus.value = "ERROR"
+                        return@launch
+                    }
+                    performMergeFromJsonString(jsonString, ::addLog)
+                } else {
+                    addLog("Lỗi tải file: ${downloadResponse.code}")
+                    _syncStatus.value = "ERROR"
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                addLog("Lỗi hệ thống: ${e.message}")
+                _syncStatus.value = "ERROR"
+            }
+        }
+    }
+
     private suspend fun performRestoreFromJsonString(jsonString: String, addLog: (String) -> Unit) {
         val root = org.json.JSONObject(jsonString)
                 val version = root.optInt("version", 1)
@@ -2663,7 +2910,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     while (keys.hasNext()) {
                         val key = keys.next()
                         val value = settingsObj.optString(key, "")
-                        if (value.isNotEmpty()) {
+                        // Ticket 4 Fix: Exclude cloud sync state from imported JSON file so local restore doesn't auto-enable sync
+                        if (value.isNotEmpty() && key != "is_cloud_sync_enabled") {
                             repository.saveSetting(key, value)
                         }
                     }
@@ -2679,6 +2927,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                         repository.saveSetting("notification_logs", notificationLogsRestore)
                     }
                 }
+
+                // Explicitly set cloud sync to false when doing local JSON file restore
+                repository.saveSetting("is_cloud_sync_enabled", "false")
+                repository.saveSetting("cloud_sync_enabled", "false")
 
                 // 6. Reload Settings & Cache flows inside memory
                 loadCategories()
@@ -2836,12 +3088,6 @@ val folderName = "[APP_FINANCE]"
     fun checkDriveBackupConflict(context: android.content.Context, callback: (Boolean) -> Unit) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val txs = repository.allTransactions.first()
-                if (txs.isNotEmpty()) {
-                    callback(false)
-                    return@launch
-                }
-
                 val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
                 if (account == null) {
                     callback(false)

@@ -36,6 +36,7 @@ import com.app.data.SavingsGoal
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
+import com.app.ui.components.AppModalBottomSheet
 import com.app.ui.components.StripedProgressIndicator
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
@@ -65,7 +66,12 @@ fun BudgetsSection(
     modifier: Modifier = Modifier
 ) {
     val budgets by viewModel.allBudgets.collectAsState()
-    val activeMonth by viewModel.activeMonth.collectAsState()
+    val currentRealMonthStr = remember {
+        Calendar.getInstance().let { cal ->
+            String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+        }
+    }
+    var selectedBudgetMonth by remember { mutableStateOf(currentRealMonthStr) }
     val categoriesList by viewModel.categoriesList.collectAsState()
     val allTransactions by viewModel.allTransactions.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
@@ -77,23 +83,17 @@ fun BudgetsSection(
     var selectedCategoryForHistory by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
-    val currentRealMonthStr = remember {
-        Calendar.getInstance().let { cal ->
-            String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
-        }
-    }
-
-    val displayBudgetMonth = remember(activeMonth) {
-        if (activeMonth.length >= 7) {
-            "Tháng ${activeMonth.substring(5)}/${activeMonth.substring(0, 4)}"
+    val displayBudgetMonth = remember(selectedBudgetMonth) {
+        if (selectedBudgetMonth.length >= 7) {
+            "Tháng ${selectedBudgetMonth.substring(5)}/${selectedBudgetMonth.substring(0, 4)}"
         } else {
-            activeMonth
+            selectedBudgetMonth
         }
     }
 
     fun navigateMonth(delta: Int) {
         try {
-            val parts = activeMonth.split("-")
+            val parts = selectedBudgetMonth.split("-")
             var year = parts[0].toInt()
             var month = parts[1].toInt()
             month += delta
@@ -104,16 +104,15 @@ fun BudgetsSection(
                 month = 12
                 year--
             }
-            val newMonth = String.format("%04d-%02d", year, month)
-            viewModel.setActiveMonth(newMonth)
+            selectedBudgetMonth = String.format("%04d-%02d", year, month)
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    // Filter budgets for activeMonth & compute live spentAmount based on real non-virtual expenses of that month
-    val filteredBudgets = remember(budgets, activeMonth, allTransactions, categoriesList, savingsWalletIds) {
-        val listForMonth = budgets.filter { it.month == activeMonth }
+    // Filter budgets for selectedBudgetMonth & compute live spentAmount based on real non-virtual expenses of that month
+    val filteredBudgets = remember(budgets, selectedBudgetMonth, allTransactions, categoriesList, savingsWalletIds) {
+        val listForMonth = budgets.filter { it.month == selectedBudgetMonth }
         listForMonth.map { budget ->
             val familyCategories = mutableSetOf(budget.categoryName)
             var added = true
@@ -138,7 +137,7 @@ fun BudgetsSection(
                 !isInternalTransfer &&
                 !isSavingsDeposit &&
                 tx.categoryName in familyCategories &&
-                isTimestampInMonth(tx.timestamp, activeMonth)
+                isTimestampInMonth(tx.timestamp, selectedBudgetMonth)
             }.sumOf { it.amount }
 
             budget.copy(spentAmount = dynamicSpent)
@@ -273,13 +272,13 @@ fun BudgetsSection(
                 }
             }
 
-            if (activeMonth != currentRealMonthStr) {
+            if (selectedBudgetMonth != currentRealMonthStr) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center
                 ) {
                     AssistChip(
-                        onClick = { viewModel.setActiveMonth(currentRealMonthStr) },
+                        onClick = { selectedBudgetMonth = currentRealMonthStr },
                         label = { Text("Về tháng hiện tại", fontSize = 12.sp) },
                         leadingIcon = {
                             Icon(
@@ -326,7 +325,7 @@ fun BudgetsSection(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         OutlinedButton(
-                            onClick = { viewModel.copyBudgetsFromPreviousMonth(activeMonth) },
+                            onClick = { viewModel.copyBudgetsFromPreviousMonth(selectedBudgetMonth) },
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(
@@ -376,7 +375,7 @@ fun BudgetsSection(
                 categoriesList = categoriesList,
                 onDismiss = { showAddDialog = false },
                 onAddBudget = { category, limit, isRecurring ->
-                    viewModel.addBudget(category, limit, activeMonth, isRecurring)
+                    viewModel.addBudget(category, limit, selectedBudgetMonth, isRecurring)
                     showAddDialog = false
                     viewModel.showSuccessNotification("Thêm ngân sách thành công!")
                 }
@@ -385,10 +384,10 @@ fun BudgetsSection(
 
         if (showMonthPickerDialog) {
             BudgetMonthPickerDialog(
-                currentMonthStr = activeMonth,
+                currentMonthStr = selectedBudgetMonth,
                 onDismiss = { showMonthPickerDialog = false },
                 onMonthSelected = { selectedMonthStr ->
-                    viewModel.setActiveMonth(selectedMonthStr)
+                    selectedBudgetMonth = selectedMonthStr
                     showMonthPickerDialog = false
                 }
             )
@@ -421,7 +420,7 @@ fun BudgetsSection(
         if (selectedCategoryForHistory != null) {
             com.app.ui.components.CategoryTransactionsDialog(
                 categoryName = selectedCategoryForHistory!!,
-                monthKey = activeMonth,
+                monthKey = selectedBudgetMonth,
                 viewModel = viewModel,
                 onDismiss = { selectedCategoryForHistory = null }
             )
@@ -701,6 +700,7 @@ fun BudgetItemCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddBudgetDialog(
     categoriesList: List<FinanceCategory>,
@@ -708,9 +708,10 @@ fun AddBudgetDialog(
     onAddBudget: (categoryName: String, limitAmount: Double, isRecurring: Boolean) -> Unit
 ) {
     var selectedCategoryName by remember { mutableStateOf("") }
+    var categoryError by remember { mutableStateOf<String?>(null) }
     var limitInput by remember { mutableStateOf("") }
+    var limitError by remember { mutableStateOf<String?>(null) }
     var isRecurring by remember { mutableStateOf(true) }
-    var categoryDropdownExpanded by remember { mutableStateOf(false) }
 
     val expenseCategories = remember(categoriesList) {
         categoriesList.filter { it.type == "EXPENSE" }
@@ -722,92 +723,259 @@ fun AddBudgetDialog(
         }
     }
 
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Thêm hạn mức Ngân sách", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        title = "Thêm hạn mức Ngân sách",
+        sheetState = sheetState,
+        footer = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Category selection dropdown
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = selectedCategoryName,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Hạng mục chi tiêu") },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Dropdown",
-                                modifier = Modifier.clickable { categoryDropdownExpanded = true }
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "Hủy",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Box(
+                }
+
+                Button(
+                    onClick = {
+                        val limit = FormatHelper.parseInputNumber(limitInput)
+                        var hasError = false
+                        if (selectedCategoryName.isBlank()) {
+                            categoryError = "Vui lòng chọn hạng mục!"
+                            hasError = true
+                        }
+                        if (limit <= 0) {
+                            limitError = "Vui lòng nhập hạn mức hợp lệ (> 0 VNĐ)!"
+                            hasError = true
+                        }
+
+                        if (!hasError) {
+                            onAddBudget(selectedCategoryName, limit, isRecurring)
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .height(50.dp)
+                        .testTag("save_budget_confirm_btn"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF5C54E5),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        text = "Lưu Ngân sách",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 1. Chọn Hạng mục chi tiêu với Icon & Color
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "CHỌN HẠNG MỤC CHI TIÊU (*)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    color = if (categoryError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (expenseCategories.isEmpty()) {
+                    Text("Không tìm thấy hạng mục chi tiêu!", color = MaterialTheme.colorScheme.error)
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
                         modifier = Modifier
-                            .matchParentSize()
-                            .clickable { categoryDropdownExpanded = true }
-                    )
-                    DropdownMenu(
-                        expanded = categoryDropdownExpanded,
-                        onDismissRequest = { categoryDropdownExpanded = false }
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        expenseCategories.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { Text(cat.name) },
-                                onClick = {
-                                    selectedCategoryName = cat.name
-                                    categoryDropdownExpanded = false
+                        items(expenseCategories) { cat ->
+                            val isSelected = cat.name == selectedCategoryName
+                            val color = try { Color(android.graphics.Color.parseColor(cat.colorHex)) } catch (e: Exception) { Color(0xFF5C54E5) }
+
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        selectedCategoryName = cat.name
+                                        categoryError = null
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) color.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                border = BorderStroke(1.5.dp, if (isSelected) color else Color.Transparent)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(color, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = IconMapper.getIconByName(cat.iconName),
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = cat.name,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) color else MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1
+                                    )
                                 }
-                            )
+                            }
                         }
                     }
                 }
 
-                // Amount input
-                OutlinedTextField(
-                    value = limitInput,
-                    onValueChange = { limitInput = FormatHelper.formatInputNumber(it) },
-                    label = { Text("Hạn mức (VNĐ)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("add_budget_limit_input")
+                if (categoryError != null) {
+                    Text(
+                        text = categoryError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+
+            // 2. Số tiền Hạn mức (đ) (* Input with inline error validation)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "SỐ TIỀN HẠN MỨC (VNĐ) (*)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Recurring switch
+                OutlinedTextField(
+                    value = limitInput,
+                    onValueChange = { input ->
+                        limitInput = FormatHelper.formatInputNumber(input)
+                        if (input.isNotBlank()) limitError = null
+                    },
+                    placeholder = { Text("0", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                    leadingIcon = {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (limitError != null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                    else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Paid,
+                                contentDescription = null,
+                                tint = if (limitError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    trailingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Calculate,
+                            contentDescription = "Máy tính",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    },
+                    isError = limitError != null,
+                    supportingText = if (limitError != null) {
+                        { Text(text = limitError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    } else null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF5C54E5),
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                        errorBorderColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.fillMaxWidth().testTag("add_budget_limit_input")
+                )
+            }
+
+            // 3. Tự động lặp lại hàng tháng Option
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Tự động lặp lại hàng tháng", fontSize = 13.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Autorenew,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Tự động lặp lại hàng tháng",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Tự tạo hạn mức này vào đầu tháng sau",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
                     Switch(
                         checked = isRecurring,
                         onCheckedChange = { isRecurring = it }
                     )
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val limit = FormatHelper.parseInputNumber(limitInput)
-                    if (selectedCategoryName.isNotBlank() && limit > 0) {
-                        onAddBudget(selectedCategoryName, limit, isRecurring)
-                    }
-                },
-                modifier = Modifier.testTag("save_budget_confirm_btn")
-            ) {
-                Text("Lưu Ngân sách")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Hủy")
-            }
         }
-    )
+    }
 }

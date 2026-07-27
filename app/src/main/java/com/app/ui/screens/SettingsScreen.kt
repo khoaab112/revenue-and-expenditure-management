@@ -21,6 +21,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
@@ -69,6 +71,7 @@ fun isNotificationServiceEnabled(context: android.content.Context): Boolean {
     return false
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: FinanceViewModel,
@@ -79,6 +82,7 @@ fun SettingsScreen(
     onNavigateToDebtBook: () -> Unit = {},
     onNavigateToWalletManagement: () -> Unit = {},
     onNavigateToCategoryManagement: () -> Unit = {},
+    onNavigateToBudgetGoal: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -243,71 +247,126 @@ fun SettingsScreen(
                     }
                 } else {
                     // TRẠNG THÁI 2: ĐÃ ĐĂNG NHẬP GOOGLE
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    var isAccountDetailsExpanded by remember { mutableStateOf(false) }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { isAccountDetailsExpanded = !isAccountDetailsExpanded }
                     ) {
-                        val photoUrl = googleAccount.photoUrl
-                        if (photoUrl != null) {
-                            coil.compose.AsyncImage(
-                                model = photoUrl,
-                                contentDescription = "Avatar",
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(CircleShape)
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                        } else {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                            ) {
-                                val initial = googleAccount.displayName?.firstOrNull()?.toString()?.uppercase() ?: "G"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            val photoUrl = googleAccount.photoUrl
+                            if (photoUrl != null) {
+                                coil.compose.AsyncImage(
+                                    model = photoUrl,
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                            } else {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                ) {
+                                    val initial = googleAccount.displayName?.firstOrNull()?.toString()?.uppercase() ?: "G"
+                                    Text(
+                                        text = initial,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontSize = 20.sp
+                                    )
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = initial,
+                                    text = googleAccount.displayName ?: "Người dùng Google",
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    fontSize = 20.sp
+                                    fontSize = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = googleAccount.email ?: "",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Icon(
+                                imageVector = if (isAccountDetailsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = "Toggle expand",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    androidx.work.WorkManager.getInstance(context).cancelUniqueWork("CloudSyncService")
+                                    viewModel.toggleCloudSync(false)
+                                    val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+                                    com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso).signOut()
+                                    viewModel.clearAllData(context)
+                                    viewModel.setHasSeenOnboarding(false)
+                                    viewModel.showSuccessNotification("Đã đăng xuất tài khoản Google")
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = "Sign out",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = googleAccount.displayName ?: "Người dùng Google",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = googleAccount.email ?: "",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        IconButton(
-                            onClick = {
-                                androidx.work.WorkManager.getInstance(context).cancelUniqueWork("CloudSyncService")
-                                viewModel.toggleCloudSync(false)
-                                val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN).build()
-                                com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso).signOut()
-                                viewModel.clearAllData(context)
-                                viewModel.setHasSeenOnboarding(false)
-                                viewModel.showSuccessNotification("Đã đăng xuất tài khoản Google")
-                            }
+                        // Collapsible section when clicked
+                        AnimatedVisibility(
+                            visible = isAccountDetailsExpanded,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = "Sign out",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp)
+                            ) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                Spacer(modifier = Modifier.height(10.dp))
+                                OutlinedButton(
+                                    onClick = { viewModel.backupToDriveNow(context) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CloudUpload,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Cưỡng ép đồng bộ lên Google Drive",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -377,7 +436,30 @@ fun SettingsScreen(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                // 3. Sự kiện
+                // 3. Hạn mức
+                ListItem(
+                    headlineContent = { Text("Hạn mức", fontWeight = FontWeight.Bold) },
+                    leadingContent = {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFF00BCD4), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.Tune, contentDescription = "Budget", tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
+                    },
+                    trailingContent = {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    },
+                    modifier = Modifier
+                        .clickable { onNavigateToBudgetGoal() }
+                        .testTag("manage_budget_goal_item")
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // 4. Sự kiện
                 ListItem(
                     headlineContent = { Text("Sự kiện", fontWeight = FontWeight.Bold) },
                     leadingContent = {
@@ -1005,39 +1087,168 @@ fun SettingsScreen(
     }
 
     if (showCloudRestoreDialog) {
-        AlertDialog(
-            onDismissRequest = { 
-                showCloudRestoreDialog = false 
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val googleAccount = remember {
+            com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)
+        }
+        ModalBottomSheet(
+            onDismissRequest = {
+                showCloudRestoreDialog = false
                 viewModel.toggleCloudSync(false)
             },
-            title = { Text("Phát hiện bản sao lưu cũ!") },
-            text = { Text("Chúng tôi phát hiện một bản sao lưu dữ liệu cũ của bạn trên Google Drive. Bạn có muốn khôi phục dữ liệu này vào ứng dụng ngay bây giờ không?\n\nLưu ý: Nếu không khôi phục, bản sao lưu cũ trên Drive sẽ bị ghi đè bởi dữ liệu trống hiện tại khi quá trình đồng bộ hoạt động.") },
-            confirmButton = {
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (googleAccount != null) {
+                    val photoUrl = googleAccount.photoUrl
+                    if (photoUrl != null) {
+                        coil.compose.AsyncImage(
+                            model = photoUrl,
+                            contentDescription = "Avatar",
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    } else {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                val initial = googleAccount.displayName?.firstOrNull()?.toString()?.uppercase() ?: "G"
+                                Text(
+                                    text = initial,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontSize = 24.sp
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = googleAccount.displayName ?: "Người dùng Google",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = googleAccount.email ?: "",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                } else {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.CloudSync,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                Text(
+                    text = "Phát hiện bản sao lưu trên Drive!",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Tài khoản Google của bạn có chứa dữ liệu đã được sao lưu trước đó. Bạn muốn xử lý thế nào với dữ liệu hiện tại trên thiết bị?",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Option 1: Merge Data (Recommended)
                 Button(
+                    onClick = {
+                        showCloudRestoreDialog = false
+                        viewModel.mergeFromDrive(context)
+                        viewModel.toggleCloudSync(true)
+                        com.app.service.CloudSyncWorker.setupPeriodicSync(context)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.MergeType, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Hợp nhất dữ liệu (Khuyên dùng)", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Option 2: Restore & Overwrite local
+                OutlinedButton(
                     onClick = {
                         showCloudRestoreDialog = false
                         viewModel.restoreFromDrive(context)
                         viewModel.toggleCloudSync(true)
                         com.app.service.CloudSyncWorker.setupPeriodicSync(context)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Khôi phục ngay")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Khôi phục (Ghi đè máy)", fontWeight = FontWeight.SemiBold)
+                    }
                 }
-            },
-            dismissButton = {
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Option 3: Overwrite Cloud
                 TextButton(
                     onClick = {
                         showCloudRestoreDialog = false
                         viewModel.toggleCloudSync(true)
                         com.app.service.CloudSyncWorker.setupPeriodicSync(context)
-                        viewModel.showSuccessNotification("Đã bật đồng bộ (Ghi đè dữ liệu)")
-                    }
+                        viewModel.showSuccessNotification("Đã bật đồng bộ (Ghi đè dữ liệu đám mây)")
+                    },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Ghi đè dữ liệu đám mây")
+                    Text(
+                        text = "Ghi đè đám mây bằng dữ liệu máy",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 13.sp
+                    )
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
-        )
+        }
     }
 
     // Secure PIN Setup Dialog
@@ -1166,33 +1377,6 @@ fun WalletManagementDialog(
         )
     }
     
-    val colorPalette = listOf(
-        "#F44336", "#E91E63", "#9C27B0", "#673AB7",
-        "#3F51B5", "#2196F3", "#03A9F4", "#00BCD4",
-        "#009688", "#4CAF50", "#8BC34A", "#FFEB3B",
-        "#FF9800", "#795548", "#607D8B", "#455A64"
-    )
-    val bankIcons = listOf("AccountBalance", "Business", "Domain", "CurrencyExchange", "AssuredWorkload", "SwapHoriz", "CorporateFare", "AccountBalanceWallet")
-    val cashIcons = listOf("Payments", "AccountBalanceWallet", "Money", "AttachMoney", "Wallet", "PriceCheck", "LocalAtm", "PointOfSale")
-    val walletIcons = listOf("PhonelinkRing", "Contactless", "QrCode", "PhoneAndroid", "Security", "TapAndPlay", "Nfc", "MobileScreenShare")
-    val savingsIcons = listOf("Savings", "Inventory", "CurrencyBitcoin", "MonetizationOn", "Star", "WorkspacePremium", "Redeem", "CardGiftcard")
-    val creditIcons = listOf("CreditCard", "CreditScore", "Payment", "Receipt")
-
-    val iconPalette = when (walletType) {
-        "BANK" -> bankIcons
-        "CASH" -> cashIcons
-        "WALLET" -> walletIcons
-        "SAVINGS" -> savingsIcons
-        "CREDIT" -> creditIcons
-        else -> cashIcons
-    }
-    
-    LaunchedEffect(iconPalette) {
-        if (!iconPalette.contains(selectedIcon)) {
-            selectedIcon = iconPalette.first()
-        }
-    }
-
     val typeDisplayName = mapOf("CASH" to "Tiền mặt", "BANK" to "Ngân hàng", "WALLET" to "Ví điện tử", "SAVINGS" to "Tích lũy", "CREDIT" to "Thẻ tín dụng")
 
     AlertDialog(
@@ -1208,32 +1392,20 @@ fun WalletManagementDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (showAddForm) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IconButton(onClick = { showAddForm = false }) {
-                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Trở lại")
-                        }
-                        Text("THÊM VÍ MỚI", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountBalanceWallet,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text("QUẢN LÝ VÍ & TÀI KHOẢN", fontSize = 16.sp, fontWeight = FontWeight.Black)
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AccountBalanceWallet,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text("QUẢN LÝ VÍ & TÀI KHOẢN", fontSize = 16.sp, fontWeight = FontWeight.Black)
                 }
-                IconButton(onClick = { if (showAddForm) showAddForm = false else onDismiss() }) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
+                IconButton(onClick = onDismiss) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng")
                 }
             }
         },
@@ -1241,356 +1413,57 @@ fun WalletManagementDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = {
-                            focusManager.clearFocus()
-                        })
-                    },
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (!showAddForm) {
-                    Button(
-                        onClick = { showAddForm = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .testTag("add_wallet_btn"),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Add", modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Thêm ví tài khoản mới", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "Danh sách ví (Kéo ☰ để sắp xếp thứ tự ưu tiên)",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    
-                    SortableWalletList(
-                        wallets = wallets,
-                        viewModel = viewModel,
-                        typeDisplayName = typeDisplayName,
-                        onDeleteRequest = { walletToDelete = it }
-                    )
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = name,
-                            onValueChange = { name = it },
-                            label = { Text("Tên ví/tài khoản (ví dụ: VCB, Ví ăn uống...)") },
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("wallet_name_input")
-                        )
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Phân loại tài khoản", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            
-                            val types = listOf(
-                                Triple("CASH", "Tiền mặt", Icons.Default.Payments),
-                                Triple("BANK", "Ngân hàng", Icons.Default.AccountBalance),
-                                Triple("WALLET", "Ví điện tử", Icons.Default.AccountBalanceWallet),
-                                Triple("SAVINGS", "Tích lũy", Icons.Default.Savings),
-                                Triple("CREDIT", "Thẻ tín dụng", Icons.Default.CreditCard)
-                            )
-                            
-                            val chunkedTypes = types.chunked(3)
-                            chunkedTypes.forEach { rowTypes ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    rowTypes.forEach { (typeKey, label, icon) ->
-                                        val isSelected = walletType == typeKey
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(72.dp)
-                                                .clickable { walletType = typeKey },
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                            ),
-                                            shape = RoundedCornerShape(12.dp),
-                                            border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
-                                        ) {
-                                            Column(
-                                                modifier = Modifier.fillMaxSize().padding(8.dp),
-                                                verticalArrangement = Arrangement.Center,
-                                                horizontalAlignment = Alignment.CenterHorizontally
-                                            ) {
-                                                Icon(imageVector = icon, contentDescription = label, modifier = Modifier.size(24.dp))
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                                            }
-                                        }
-                                    }
-                                    // Fill the remaining space in the row to maintain consistent sizing
-                                    repeat(3 - rowTypes.size) {
-                                        Spacer(modifier = Modifier.weight(1f))
-                                    }
-                                }
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = initialBalanceStr,
-                                onValueChange = { initialBalanceStr = it },
-                                label = { Text("Số dư khởi tạo (VND)") },
-                                shape = RoundedCornerShape(12.dp),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth().testTag("wallet_balance_input")
-                            )
-                            if (initialBalanceStr.isNotBlank()) {
-                                val formatted = FormatHelper.formatInputNumber(initialBalanceStr)
-                                Text(
-                                    text = "$formatted đ",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                                )
-                            }
-                        }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Màu chủ đạo hiển thị", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    // Row 1: First 8 colors
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        colorPalette.take(8).forEach { colorStr ->
-                                            val isSelected = !isCustomColorActive && selectedColor == colorStr
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(32.dp)
-                                                    .clip(CircleShape)
-                                                    .background(FormatHelper.parseColor(colorStr))
-                                                    .clickable { 
-                                                        isCustomColorActive = false
-                                                        selectedColor = colorStr
-                                                    }
-                                                    .border(
-                                                        BorderStroke(
-                                                            width = if (isSelected) 3.dp else 0.dp,
-                                                            color = MaterialTheme.colorScheme.onSurface
-                                                        ),
-                                                        shape = CircleShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (isSelected) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Check,
-                                                        contentDescription = null,
-                                                        tint = Color.White,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Row 2: Next 7 colors + Custom color circle (8th item)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        colorPalette.drop(8).take(7).forEach { colorStr ->
-                                            val isSelected = !isCustomColorActive && selectedColor == colorStr
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(32.dp)
-                                                    .clip(CircleShape)
-                                                    .background(FormatHelper.parseColor(colorStr))
-                                                    .clickable { 
-                                                        isCustomColorActive = false
-                                                        selectedColor = colorStr
-                                                    }
-                                                    .border(
-                                                        BorderStroke(
-                                                            width = if (isSelected) 3.dp else 0.dp,
-                                                            color = MaterialTheme.colorScheme.onSurface
-                                                        ),
-                                                        shape = CircleShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (isSelected) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Check,
-                                                        contentDescription = null,
-                                                        tint = Color.White,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        val currentCustColor = try {
-                                            FormatHelper.parseColor(customColorHex)
-                                        } catch (e: Exception) {
-                                            Color.Gray
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(CircleShape)
-                                                .background(currentCustColor)
-                                                .clickable { 
-                                                    isCustomColorActive = true
-                                                    selectedColor = customColorHex
-                                                }
-                                                .border(
-                                                    BorderStroke(
-                                                        width = if (isCustomColorActive) 3.dp else 0.dp,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    ),
-                                                    shape = CircleShape
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Palette,
-                                                contentDescription = "Custom color",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-
-                                    if (isCustomColorActive) {
-                                        com.app.ui.components.ColorSliderPicker(
-                                            initialColorHex = selectedColor,
-                                            onColorChanged = { newHex ->
-                                                selectedColor = newHex
-                                                customColorHex = newHex
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Biểu tượng ví", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    iconPalette.chunked(4).forEach { rowIcons ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceEvenly,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            rowIcons.forEach { iconName ->
-                                                val isSelected = selectedIcon == iconName
-                                                IconButton(
-                                                    onClick = { selectedIcon = iconName },
-                                                    modifier = Modifier
-                                                        .size(48.dp)
-                                                        .background(
-                                                            if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                                            shape = CircleShape
-                                                        )
-                                                ) {
-                                                    Icon(
-                                                        imageVector = IconMapper.getIconByName(iconName),
-                                                        contentDescription = iconName,
-                                                        tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        modifier = Modifier.size(24.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            val localContext = androidx.compose.ui.platform.LocalContext.current
-            if (showAddForm) {
                 Button(
-                    onClick = {
-                        if (name.isNotBlank()) {
-                            val balance = initialBalanceStr.toDoubleOrNull() ?: 0.0
-                            viewModel.addWallet(name, walletType, balance, selectedColor, selectedIcon)
-                            viewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
-                            name = ""
-                            initialBalanceStr = ""
-                            showAddForm = false
-                        } else {
-                            viewModel.showWarningNotification("Vui lòng nhập tên ví!")
-                        }
-                    },
+                    onClick = { showAddForm = true },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("save_wallet_confirm"),
+                        .height(52.dp)
+                        .testTag("add_wallet_btn"),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                     ),
-                    shape = RoundedCornerShape(24.dp)
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Add", modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Lưu ví tài khoản", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Thêm ví tài khoản mới", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.DragHandle, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                    Text("Danh sách ví (Kéo ☰ để sắp xếp thứ tự ưu tiên)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                SortableWalletList(
+                    wallets = wallets,
+                    viewModel = viewModel,
+                    typeDisplayName = typeDisplayName,
+                    onDeleteRequest = { walletToDelete = it }
+                )
             }
-        }
+        },
+        confirmButton = {}
     )
+
+    if (showAddForm) {
+        com.app.ui.components.AddWalletSheet(
+            onDismiss = { showAddForm = false },
+            onAddWallet = { walletName, type, startingBalance, color, icon ->
+                viewModel.addWallet(walletName, type, startingBalance, color, icon)
+                viewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
+                showAddForm = false
+            }
+        )
+    }
 }
 
 @Composable
