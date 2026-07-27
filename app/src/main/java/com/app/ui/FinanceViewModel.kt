@@ -328,6 +328,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             loadNotificationSettings()
             processRecurringTransactions()
             processRecurringBudgets()
+            kotlinx.coroutines.delay(600)
             _isLoadingSettings.value = false
 
             // Auto-trigger background cloud sync if enabled on app startup

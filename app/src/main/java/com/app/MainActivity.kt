@@ -195,15 +195,43 @@ fun MainContent(
                 .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Default.AccountBalanceWallet,
-                    contentDescription = "App Logo",
-                    modifier = Modifier.size(80.dp),
-                    tint = MaterialTheme.colorScheme.primary
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                    modifier = Modifier.size(100.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalanceWallet,
+                            contentDescription = "App Logo",
+                            modifier = Modifier.size(56.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "Ghi Chép Thu Chi",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
-                Spacer(modifier = Modifier.height(24.dp))
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Đang tải dữ liệu...",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(28.dp))
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(32.dp)
+                )
             }
         }
     } else if (!isAppUnlocked) {
