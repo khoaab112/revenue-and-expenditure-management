@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -74,208 +73,176 @@ fun CategoryTransactionsDialog(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
+        title = "Chi tiết: $categoryName",
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
+        isScrollableContent = false,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Column(
+        // Subtitle / Total info
+        Text(
+            text = "Tháng: ${String.format("%02d/%04d", month, year)} • Tổng: ${FormatHelper.formatVND(displayTotal)}",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 10.dp)
+        )
+
+        // Highlighted Time Range Banner (Bắt đầu ➔ Kết thúc)
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.90f)
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .padding(bottom = 12.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
         ) {
-            // Header: System format title & close button
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Chi tiết: $categoryName",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Tháng: ${String.format("%02d/%04d", month, year)} • Tổng: ${FormatHelper.formatVND(displayTotal)}",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Đóng",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 10.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                thickness = 1.dp
-            )
-
-            // Highlighted Time Range Banner (Bắt đầu ➔ Kết thúc)
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "Kỳ hạn mức:",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Kỳ hạn mức:",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primary
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Text(
-                                text = startDateStr,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
                         Text(
-                            text = "➔",
+                            text = startDateStr,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Text(
-                                text = endDateStr,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
+                    }
+                    Text(
+                        text = "➔",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    ) {
+                        Text(
+                            text = endDateStr,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
             }
+        }
 
-            // Transaction List Content
-            if (filteredTxs.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Không có giao dịch nào trong kỳ hạn mức này.",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentPadding = PaddingValues(vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(filteredTxs) { tx ->
-                        val cat = categories.find { it.name == tx.categoryName }
-                        val iconName = cat?.iconName ?: "ic_category_other"
-                        val colorHex = cat?.colorHex ?: "#757575"
-                        val color = try { Color(android.graphics.Color.parseColor(colorHex)) } catch (e: Exception) { Color.Gray }
+        // Transaction List Content
+        if (filteredTxs.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Không có giao dịch nào trong kỳ hạn mức này.",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                contentPadding = PaddingValues(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filteredTxs) { tx ->
+                    val cat = categories.find { it.name == tx.categoryName }
+                    val iconName = cat?.iconName ?: "ic_category_other"
+                    val colorHex = cat?.colorHex ?: "#757575"
+                    val color = try { Color(android.graphics.Color.parseColor(colorHex)) } catch (e: Exception) { Color.Gray }
 
-                        Row(
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(color.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(color.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = IconMapper.getIconByName(iconName),
-                                    contentDescription = null,
-                                    tint = color,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = tx.categoryName,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                if (tx.note.isNotBlank()) {
-                                    Text(
-                                        text = tx.note,
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
-                                    )
-                                }
-
-                                val txCal = Calendar.getInstance().apply { timeInMillis = tx.timestamp }
-                                val dateStr = String.format("%02d/%02d/%04d", txCal.get(Calendar.DAY_OF_MONTH), txCal.get(Calendar.MONTH) + 1, txCal.get(Calendar.YEAR))
-                                Text(
-                                    text = dateStr,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-
-                            Text(
-                                text = "${if (tx.type == "EXPENSE") "-" else "+"}${FormatHelper.formatVND(tx.amount)}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = if (tx.type == "EXPENSE") Color(0xFFE53935) else Color(0xFF4CAF50)
+                            Icon(
+                                imageVector = IconMapper.getIconByName(iconName),
+                                contentDescription = null,
+                                tint = color,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = tx.categoryName,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (tx.note.isNotBlank()) {
+                                Text(
+                                    text = tx.note,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+
+                            val txCal = Calendar.getInstance().apply { timeInMillis = tx.timestamp }
+                            val dateStr = String.format("%02d/%02d/%04d", txCal.get(Calendar.DAY_OF_MONTH), txCal.get(Calendar.MONTH) + 1, txCal.get(Calendar.YEAR))
+                            Text(
+                                text = dateStr,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+
+                        Text(
+                            text = "${if (tx.type == "EXPENSE") "-" else "+"}${FormatHelper.formatVND(tx.amount)}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = if (tx.type == "EXPENSE") Color(0xFFE53935) else Color(0xFF4CAF50)
+                        )
                     }
                 }
             }

@@ -35,6 +35,7 @@ import com.app.data.FinanceCategory
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
+import com.app.ui.components.AppModalBottomSheet
 import com.app.ui.components.AppNotificationDialog
 import com.app.ui.components.DialogButtonConfig
 
@@ -1016,62 +1017,43 @@ fun CategoryManagementScreen(
         }
     }
 
-    // --- Modal Bottom Sheet (Image 5) ---
+    // --- Modal Bottom Sheet ---
     if (showBottomSheetCategory != null) {
-        ModalBottomSheet(
+        val cat = showBottomSheetCategory!!
+        AppModalBottomSheet(
             onDismissRequest = { showBottomSheetCategory = null },
-            sheetState = rememberModalBottomSheetState(),
-            containerColor = Color.White
+            title = cat.name,
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
         ) {
-            val cat = showBottomSheetCategory!!
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = cat.name,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    IconButton(onClick = { showBottomSheetCategory = null }) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng")
-                    }
-                }
-                
-                HorizontalDivider(color = Color(0xFFEEEEEE), thickness = 1.dp)
-
                 // 1. Sửa danh mục
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
                         .clickable {
                             showBottomSheetCategory = null
                             categoryToEdit = cat
                         }
-                        .padding(vertical = 12.dp),
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = Color.Gray)
+                    Icon(imageVector = Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Sửa danh mục", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 }
 
                 // Parent-only features
                 if (cat.parentName == null) {
-                    // 2. Thêm mục con (chỉ hiện khi ở ngoài màn hình chính, vì trong màn chi tiết đã có sẵn nút + Thêm mục con)
+                    // 2. Thêm mục con
                     if (detailCategoryName == null) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
                                 .clickable {
                                     showBottomSheetCategory = null
                                     categoryToEdit = null
@@ -1082,11 +1064,11 @@ fun CategoryManagementScreen(
                                     parentName = cat.name
                                     showAddForm = true
                                 }
-                                .padding(vertical = 12.dp),
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.Gray)
+                            Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("Thêm mục con", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                         }
                     }
@@ -1095,16 +1077,17 @@ fun CategoryManagementScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
                             .clickable {
                                 showBottomSheetCategory = null
                                 detailCategoryName = cat.name
                                 isReorderMode = true
                             }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.SwapVert, contentDescription = null, tint = Color.Gray)
+                        Icon(imageVector = Icons.Default.SwapVert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Sắp xếp mục con", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                 }
@@ -1113,16 +1096,17 @@ fun CategoryManagementScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
                         .clickable {
                             showBottomSheetCategory = null
                             categoryToDelete = cat
                         }
-                        .padding(vertical = 12.dp),
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = null, tint = Color(0xFFF44336))
-                    Text("Xóa danh mục", color = Color(0xFFF44336), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("Xóa danh mục", color = Color(0xFFF44336), fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

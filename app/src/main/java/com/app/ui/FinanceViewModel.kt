@@ -1828,6 +1828,20 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun updateDebtDueDate(debt: Debt, newDueDate: Long) {
+        viewModelScope.launch {
+            repository.updateDebt(debt.copy(dueDate = newDueDate))
+            showSuccessNotification("Cập nhật hạn trả nợ thành công!")
+        }
+    }
+
+    fun updateDebtCreationDate(debt: Debt, newCreationDate: Long) {
+        viewModelScope.launch {
+            repository.updateDebt(debt.copy(creationDate = newCreationDate))
+            showSuccessNotification("Cập nhật ngày bắt đầu thành công!")
+        }
+    }
+
 
     // --- BUDGETS SERVICES ---
     fun toggleBudgetRecurring(budget: Budget) {

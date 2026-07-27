@@ -1,15 +1,14 @@
 package com.app.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Savings
@@ -49,296 +48,30 @@ fun AddSavingsVaultSheet(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
+        title = "Thêm sổ tiết kiệm mới",
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = { focusManager.clearFocus() })
-                }
-                .padding(horizontal = 16.dp, vertical = 4.dp)
-        ) {
-            // Header: Title & Close icon button (system format)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Thêm sổ tiết kiệm mới",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Đóng",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(bottom = 12.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                thickness = 1.dp
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // 1. Tên sổ tiết kiệm (*) Input with inline error validation
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = {
-                        name = it
-                        if (it.isNotBlank()) nameError = null
-                    },
-                    placeholder = { Text("Tên sổ tiết kiệm (*)", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
-                    leadingIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (nameError != null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-                                    else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Savings,
-                                contentDescription = null,
-                                tint = if (nameError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    },
-                    isError = nameError != null,
-                    supportingText = if (nameError != null) {
-                        { Text(text = nameError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
-                    } else null,
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF5C54E5),
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                        errorBorderColor = MaterialTheme.colorScheme.error
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("savings_name_input")
-                )
-
-                // 2. Số tiền gửi ban đầu (đ) Input
-                OutlinedTextField(
-                    value = initialBalanceStr,
-                    onValueChange = { input ->
-                        if (input.all { it.isDigit() || it == '.' }) {
-                            initialBalanceStr = input
-                        }
-                    },
-                    placeholder = { Text("Số tiền gửi ban đầu (đ)", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
-                    leadingIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Paid,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    },
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Calculate,
-                            contentDescription = "Máy tính",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF5C54E5),
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("savings_balance_input")
-                )
-
-                // 3. Mục tiêu tích lũy (đ) Input
-                OutlinedTextField(
-                    value = targetAmountStr,
-                    onValueChange = { input ->
-                        if (input.all { it.isDigit() || it == '.' }) {
-                            targetAmountStr = input
-                        }
-                    },
-                    placeholder = { Text("Mục tiêu tích lũy (đ)", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
-                    leadingIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Flag,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    },
-                    trailingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Calculate,
-                            contentDescription = "Máy tính",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF5C54E5),
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("savings_target_input")
-                )
-
-                // 4. MÀU SẮC ĐẠI DIỆN Section
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "MÀU SẮC ĐẠI DIỆN",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        colors.forEach { hex ->
-                            val color = FormatHelper.parseColor(hex)
-                            val isSelected = selectedColor == hex
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .then(
-                                        if (isSelected) {
-                                            Modifier.border(2.5.dp, Color(0xFF5C54E5), CircleShape)
-                                        } else Modifier
-                                    )
-                                    .clickable { selectedColor = hex },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Chọn màu",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 5. BIỂU TƯỢNG Section
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "BIỂU TƯỢNG",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        icons.forEach { iconName ->
-                            val isSelected = selectedIcon == iconName
-                            val iconVec = IconMapper.getIconByName(iconName)
-
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        if (isSelected) Color(0xFF5C54E5).copy(alpha = 0.12f)
-                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                                    )
-                                    .then(
-                                        if (isSelected) {
-                                            Modifier.border(1.5.dp, Color(0xFF5C54E5), RoundedCornerShape(12.dp))
-                                        } else Modifier
-                                    )
-                                    .clickable { selectedIcon = iconName },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = iconVec,
-                                    contentDescription = iconName,
-                                    tint = if (isSelected) Color(0xFF5C54E5) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            // 6. Action Buttons: Hủy & Khởi tạo sổ
+        footer = {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 8.dp),
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Button(
+                OutlinedButton(
                     onClick = onDismiss,
                     modifier = Modifier
                         .weight(1f)
                         .height(50.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 ) {
                     Text(
                         text = "Hủy",
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
 
@@ -347,8 +80,8 @@ fun AddSavingsVaultSheet(
                         if (name.isBlank()) {
                             nameError = "Vui lòng nhập tên sổ tiết kiệm!"
                         } else {
-                            val initialBal = initialBalanceStr.toDoubleOrNull() ?: 0.0
-                            val targetAmt = targetAmountStr.toDoubleOrNull()
+                            val initialBal = FormatHelper.parseInputNumber(initialBalanceStr)
+                            val targetAmt = if (targetAmountStr.isBlank()) null else FormatHelper.parseInputNumber(targetAmountStr)
                             onAddSavingsVault(name, initialBal, targetAmt, selectedColor, selectedIcon)
                             onDismiss()
                         }
@@ -368,6 +101,177 @@ fun AddSavingsVaultSheet(
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
+                }
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                },
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 1. Tên sổ tiết kiệm (*) Input with inline error validation
+            OutlinedTextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    if (it.isNotBlank()) nameError = null
+                },
+                label = { Text("Tên sổ tiết kiệm (*)") },
+                placeholder = { Text("Ví dụ: Quỹ du lịch, Tiền mua xe...") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Savings,
+                        contentDescription = null,
+                        tint = if (nameError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                },
+                singleLine = true,
+                isError = nameError != null,
+                supportingText = nameError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_savings_name"),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            // 2. Số tiền ban đầu (đ)
+            OutlinedTextField(
+                value = initialBalanceStr,
+                onValueChange = { input ->
+                    initialBalanceStr = FormatHelper.formatInputNumber(input)
+                },
+                label = { Text("Số tiền đã gửi sẵn (VNĐ)") },
+                placeholder = { Text("0") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Payments,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_savings_initial_balance"),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            // 3. Mục tiêu cần tích lũy (đ)
+            OutlinedTextField(
+                value = targetAmountStr,
+                onValueChange = { input ->
+                    targetAmountStr = FormatHelper.formatInputNumber(input)
+                },
+                label = { Text("Mục tiêu tiết kiệm (VNĐ) (Không bắt buộc)") },
+                placeholder = { Text("Ví dụ: 50.000.000") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.TrackChanges,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9500)
+                    )
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_savings_target_amount"),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            // 4. Chọn màu nhận diện
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Màu chủ đạo sổ tiết kiệm",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    colors.forEach { hex ->
+                        val color = try { Color(android.graphics.Color.parseColor(hex)) } catch (e: Exception) { Color(0xFF9C27B0) }
+                        val isSelected = hex == selectedColor
+
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                    } else Modifier
+                                )
+                                .clickable { selectedColor = hex },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Chọn Biểu tượng Icon
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Biểu tượng đại diện",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    icons.forEach { iconName ->
+                        val isSelected = iconName == selectedIcon
+                        val iconVec = IconMapper.getIconByName(iconName)
+
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isSelected) Color(0xFF5C54E5).copy(alpha = 0.12f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                )
+                                .then(
+                                    if (isSelected) {
+                                        Modifier.border(1.5.dp, Color(0xFF5C54E5), RoundedCornerShape(12.dp))
+                                    } else Modifier
+                                )
+                                .clickable { selectedIcon = iconName },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = iconVec,
+                                contentDescription = iconName,
+                                tint = if (isSelected) Color(0xFF5C54E5) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

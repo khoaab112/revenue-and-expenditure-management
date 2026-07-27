@@ -2,6 +2,7 @@ package com.app.ui.screens
 
 import android.app.DatePickerDialog
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +35,8 @@ import com.app.data.Debt
 import com.app.data.Wallet
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
+import com.app.ui.IconMapper
+import com.app.ui.components.AppModalBottomSheet
 import com.app.ui.components.CustomMoneyInputField
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -139,7 +142,13 @@ fun DebtBookScreen(
                             debt = debt,
                             onPayClick = { debtToPay = it },
                             onIncreaseClick = { debtToIncrease = it },
-                            onHistoryClick = { debtForHistory = it }
+                            onHistoryClick = { debtForHistory = it },
+                            onUpdateDueDate = { targetDebt, newDueDate ->
+                                viewModel.updateDebtDueDate(targetDebt, newDueDate)
+                            },
+                            onUpdateCreationDate = { targetDebt, newCreationDate ->
+                                viewModel.updateDebtCreationDate(targetDebt, newCreationDate)
+                            }
                         )
                     }
                 }
@@ -249,7 +258,9 @@ fun DebtItemCard(
     debt: Debt,
     onPayClick: (Debt) -> Unit,
     onIncreaseClick: (Debt) -> Unit,
-    onHistoryClick: (Debt) -> Unit
+    onHistoryClick: (Debt) -> Unit,
+    onUpdateDueDate: ((Debt, Long) -> Unit)? = null,
+    onUpdateCreationDate: ((Debt, Long) -> Unit)? = null
 ) {
     val now = System.currentTimeMillis()
     val isCompleted = debt.status == "COMPLETED" || debt.remainingAmount <= 0.01
@@ -378,15 +389,34 @@ fun DebtItemCard(
             Spacer(modifier = Modifier.height(14.dp))
 
             // MIDDLE ROW: Start Date & Due Date boxes
+            val context = LocalContext.current
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // START DATE
+                // START DATE (Clickable to edit start date if active)
                 Row(
                     modifier = Modifier
                         .weight(1f)
-                        .border(1.dp, Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+                        .border(
+                            width = 1.dp,
+                            color = if (!isCompleted) Color(0xFF4CAF50).copy(alpha = 0.35f) else Color(0xFFF3F4F6),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = !isCompleted) {
+                            val cal = Calendar.getInstance().apply { timeInMillis = debt.creationDate }
+                            DatePickerDialog(
+                                context,
+                                { _, y, m, d ->
+                                    val newCal = Calendar.getInstance().apply { set(y, m, d, 0, 0, 0) }
+                                    onUpdateCreationDate?.invoke(debt, newCal.timeInMillis)
+                                },
+                                cal.get(Calendar.YEAR),
+                                cal.get(Calendar.MONTH),
+                                cal.get(Calendar.DAY_OF_MONTH)
+                            ).show()
+                        }
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -404,7 +434,7 @@ fun DebtItemCard(
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text("Bắt đầu", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B43))
                         Spacer(modifier = Modifier.height(1.dp))
                         Text(
@@ -415,11 +445,30 @@ fun DebtItemCard(
                     }
                 }
 
-                // DUE DATE
+                // DUE DATE (Clickable to add/extend due date if active)
                 Row(
                     modifier = Modifier
                         .weight(1f)
-                        .border(1.dp, Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+                        .border(
+                            width = 1.dp,
+                            color = if (!isCompleted) Color(0xFF5C54E5).copy(alpha = 0.35f) else Color(0xFFF3F4F6),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = !isCompleted) {
+                            val cal = Calendar.getInstance()
+                            debt.dueDate?.let { cal.timeInMillis = it }
+                            DatePickerDialog(
+                                context,
+                                { _, y, m, d ->
+                                    val newCal = Calendar.getInstance().apply { set(y, m, d, 23, 59, 59) }
+                                    onUpdateDueDate?.invoke(debt, newCal.timeInMillis)
+                                },
+                                cal.get(Calendar.YEAR),
+                                cal.get(Calendar.MONTH),
+                                cal.get(Calendar.DAY_OF_MONTH)
+                            ).show()
+                        }
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -427,23 +476,24 @@ fun DebtItemCard(
                     Box(
                         modifier = Modifier
                             .size(28.dp)
-                            .background(Color(0xFFFFEBEE), RoundedCornerShape(6.dp)),
+                            .background(if (!isCompleted) Color(0xFFEDEBFD) else Color(0xFFFFEBEE), RoundedCornerShape(6.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Event,
                             contentDescription = "Due Date",
-                            tint = Color(0xFFE53935),
+                            tint = if (!isCompleted) Color(0xFF5C54E5) else Color(0xFFE53935),
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text("Kết thúc", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B2B43))
                         Spacer(modifier = Modifier.height(1.dp))
                         Text(
-                            text = if (debt.dueDate != null) dateFormatter.format(debt.dueDate) else "Không có",
+                            text = if (debt.dueDate != null) dateFormatter.format(debt.dueDate) else "Chạm để đặt",
                             fontSize = 11.sp,
-                            color = Color(0xFF6B7280)
+                            color = if (debt.dueDate != null) Color(0xFF6B7280) else Color(0xFF5C54E5),
+                            fontWeight = if (debt.dueDate != null) FontWeight.Normal else FontWeight.Bold
                         )
                     }
                 }
@@ -766,6 +816,7 @@ fun DebtHistoryBottomSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddDebtDialog(
     viewModel: FinanceViewModel,
@@ -775,19 +826,31 @@ fun AddDebtDialog(
     onAdd: (personName: String, amount: Double, type: String, note: String, dueDate: Long?, walletId: Int, repaymentType: String, periodicAmount: Double?, periodType: String?) -> Unit
 ) {
     val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     var personName by remember { mutableStateOf("") }
+    var nameError by remember { mutableStateOf<String?>(null) }
+
     var rawAmount by remember { mutableStateOf("") }
+    var amountError by remember { mutableStateOf<String?>(null) }
+
     var type by remember { mutableStateOf(defaultType) }
     var note by remember { mutableStateOf("") }
     var dueDateTimestamp by remember { mutableStateOf<Long?>(null) }
+
     var selectedWalletId by remember { mutableStateOf<Int?>(wallets.firstOrNull()?.id) }
+    var walletError by remember { mutableStateOf<String?>(null) }
     
     var repaymentType by remember { mutableStateOf("FLEXIBLE") }
     var rawPeriodicAmount by remember { mutableStateOf("") }
     var periodType by remember { mutableStateOf("MONTHLY") }
     
-    val dateFormatter = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    var showWalletSelectModal by remember { mutableStateOf(false) }
+    var showRepaymentSelectModal by remember { mutableStateOf(false) }
     var showInfoDialog by remember { mutableStateOf(false) }
+
+    val dateFormatter = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    val availableWallets = remember(wallets) { wallets.filter { it.type != "SAVINGS" } }
 
     if (showInfoDialog) {
         AlertDialog(
@@ -810,233 +873,563 @@ fun AddDebtDialog(
         )
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Thêm khoản nợ", fontWeight = FontWeight.Bold)
-                IconButton(onClick = { showInfoDialog = true }) {
-                    Icon(imageVector = Icons.Default.Info, contentDescription = "Thông tin", tint = MaterialTheme.colorScheme.primary)
+    // Wallet Selection Centered Modal
+    if (showWalletSelectModal) {
+        AlertDialog(
+            onDismissRequest = { showWalletSelectModal = false },
+            title = {
+                Text(
+                    text = if (type == "DEBT") "Chọn ví nhận tiền" else "Chọn ví xuất tiền",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (availableWallets.isEmpty()) {
+                        Text("Không có ví hợp lệ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        availableWallets.forEach { wallet ->
+                            val walletColor = remember(wallet.colorHex) {
+                                try { Color(android.graphics.Color.parseColor(wallet.colorHex)) } catch (e: Exception) { Color(0xFF2196F3) }
+                            }
+                            val isSelected = wallet.id == selectedWalletId
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        selectedWalletId = wallet.id
+                                        walletError = null
+                                        showWalletSelectModal = false
+                                    },
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(38.dp)
+                                                .background(walletColor, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = IconMapper.getIconByName(wallet.iconName),
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(wallet.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                            Text(
+                                                FormatHelper.formatVND(wallet.balance),
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = {
+                                            selectedWalletId = wallet.id
+                                            walletError = null
+                                            showWalletSelectModal = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showWalletSelectModal = false }) {
+                    Text("Đóng", fontWeight = FontWeight.Bold)
                 }
             }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Type Switch
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = type == "DEBT",
-                        onClick = { type = "DEBT" },
-                        label = { Text("Đi Vay") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = type == "LOAN",
-                        onClick = { type = "LOAN" },
-                        label = { Text("Cho Vay") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                
-                OutlinedTextField(
-                    value = personName,
-                    onValueChange = { personName = it },
-                    label = { Text(if (type == "DEBT") "Người cho vay" else "Người vay") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                CustomMoneyInputField(
-                    value = rawAmount,
-                    onValueChange = { rawAmount = it },
-                    label = "Số tiền (đ)",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                // Wallet Selector
-                if (wallets.isNotEmpty()) {
-                    var expanded by remember { mutableStateOf(false) }
-                    val selectedWalletName = wallets.find { it.id == selectedWalletId }?.name ?: "Chọn ví"
-                    
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = selectedWalletName,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text(if (type == "DEBT") "Tiền chuyển vào ví" else "Lấy tiền từ ví") },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
+        )
+    }
+
+    // Repayment Type Centered Modal
+    if (showRepaymentSelectModal) {
+        val repaymentOptions = listOf(
+            Triple("FLEXIBLE", "Linh hoạt", "Không có lịch cố định, trả tùy ý khi có tiền"),
+            Triple("ONE_TIME", "Trả 1 lần", "Thanh toán dứt điểm toàn bộ khoản nợ một lần"),
+            Triple("INSTALLMENT", "Trả nhiều kỳ", "Chia khoản nợ thành nhiều kỳ trả định kỳ cố định"),
+            Triple("PERIODIC_FLEXIBLE", "Định kỳ linh hoạt", "Trả theo kỳ hạn nhưng số tiền mỗi kỳ tùy chọn"),
+            Triple("ACCUMULATING", "Nợ cộng dồn", "Khoản nợ tăng dần, có thể ghi phát sinh thêm")
+        )
+        AlertDialog(
+            onDismissRequest = { showRepaymentSelectModal = false },
+            title = {
+                Text("Chọn hình thức trả nợ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    repaymentOptions.forEach { (key, title, desc) ->
+                        val isSelected = repaymentType == key
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { expanded = true }
-                        )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Transparent)
-                                .clickable { expanded = true }
-                        )
-                        
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            wallets.forEach { w ->
-                                DropdownMenuItem(
-                                    text = { Text(w.name) },
-                                    onClick = { selectedWalletId = w.id; expanded = false }
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    repaymentType = key
+                                    showRepaymentSelectModal = false
+                                },
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                    Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = {
+                                        repaymentType = key
+                                        showRepaymentSelectModal = false
+                                    }
                                 )
                             }
                         }
                     }
                 }
-                
-                // Due Date
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = dueDateTimestamp?.let { dateFormatter.format(it) } ?: "Không có",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Hạn trả") },
-                        trailingIcon = {
-                            if (dueDateTimestamp != null) {
-                                IconButton(onClick = { dueDateTimestamp = null }) {
-                                    Icon(Icons.Default.Close, "Xóa")
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .padding(end = 48.dp)
-                            .background(Color.Transparent)
-                            .clickable {
-                                val cal = Calendar.getInstance()
-                                dueDateTimestamp?.let { cal.timeInMillis = it }
-                                DatePickerDialog(context, { _, y, m, d ->
-                                    val newCal = Calendar.getInstance().apply { set(y, m, d) }
-                                    dueDateTimestamp = newCal.timeInMillis
-                                }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
-                            }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRepaymentSelectModal = false }) {
+                    Text("Đóng", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    AppModalBottomSheet(
+        onDismissRequest = onDismiss,
+        title = "Thêm khoản nợ",
+        sheetState = sheetState,
+        headerExtraActions = {
+            IconButton(onClick = { showInfoDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Thông tin",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        footer = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "Hủy",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
-                
-                // Repayment Type Selector
-                var expandedRepayment by remember { mutableStateOf(false) }
-                val repaymentMap = mapOf(
-                    "ONE_TIME" to "Trả 1 lần",
-                    "INSTALLMENT" to "Trả nhiều kỳ",
-                    "FLEXIBLE" to "Linh hoạt",
-                    "PERIODIC_FLEXIBLE" to "Định kỳ linh hoạt",
-                    "ACCUMULATING" to "Nợ cộng dồn"
+
+                Button(
+                    onClick = {
+                        var hasError = false
+                        if (personName.isBlank()) {
+                            nameError = "Vui lòng nhập tên người vay / cho vay!"
+                            hasError = true
+                        }
+                        val amt = FormatHelper.evaluateExpression(rawAmount)
+                        if (rawAmount.isBlank() || amt <= 0) {
+                            amountError = "Vui lòng nhập số tiền nợ hợp lệ!"
+                            hasError = true
+                        }
+                        if (selectedWalletId == null) {
+                            walletError = "Vui lòng chọn ví liên kết!"
+                            hasError = true
+                        }
+
+                        if (!hasError) {
+                            val periodicAmt = if (rawPeriodicAmount.isBlank()) null else FormatHelper.evaluateExpression(rawPeriodicAmount)
+                            onAdd(personName, amt, type, note, dueDateTimestamp, selectedWalletId!!, repaymentType, periodicAmt, periodType)
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF5C54E5),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        text = "Tạo khoản nợ",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Type Selector: Đi Vay / Cho Vay
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { type = "DEBT" },
+                    color = if (type == "DEBT") Color(0xFFFF3B30) else Color.Transparent,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CallMade,
+                            contentDescription = null,
+                            tint = if (type == "DEBT") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Đi Vay",
+                            fontWeight = FontWeight.Bold,
+                            color = if (type == "DEBT") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { type = "LOAN" },
+                    color = if (type == "LOAN") Color(0xFF34C759) else Color.Transparent,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CallReceived,
+                            contentDescription = null,
+                            tint = if (type == "LOAN") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Cho Vay",
+                            fontWeight = FontWeight.Bold,
+                            color = if (type == "LOAN") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+
+            // Person Name Input Field
+            OutlinedTextField(
+                value = personName,
+                onValueChange = {
+                    personName = it
+                    if (it.isNotBlank()) nameError = null
+                },
+                label = { Text(if (type == "DEBT") "Người cho vay (*)" else "Người vay (*)") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = if (nameError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                },
+                singleLine = true,
+                isError = nameError != null,
+                supportingText = nameError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            // Amount Input Field
+            Column(modifier = Modifier.fillMaxWidth()) {
+                CustomMoneyInputField(
+                    value = rawAmount,
+                    onValueChange = {
+                        rawAmount = it
+                        if (it.isNotBlank() && FormatHelper.evaluateExpression(it) > 0) amountError = null
+                    },
+                    label = "Số tiền (đ) (*)",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (amountError != null) {
+                    Text(
+                        text = amountError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    )
+                }
+            }
+
+            // Wallet Selector (Trực quan với Modal Center)
+            val selectedWallet = availableWallets.find { it.id == selectedWalletId }
+            val selectedWalletName = selectedWallet?.name ?: "Chọn ví (*)"
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = selectedWalletName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(if (type == "DEBT") "Tiền nhận vào ví (*)" else "Tiền xuất từ ví (*)") },
+                    leadingIcon = {
+                        if (selectedWallet != null) {
+                            val walletColor = remember(selectedWallet.colorHex) {
+                                try { Color(android.graphics.Color.parseColor(selectedWallet.colorHex)) } catch (e: Exception) { Color(0xFF2196F3) }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(walletColor, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = IconMapper.getIconByName(selectedWallet.iconName),
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                    isError = walletError != null,
+                    supportingText = walletError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showWalletSelectModal = true },
+                    shape = RoundedCornerShape(14.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Transparent)
+                        .clickable { showWalletSelectModal = true }
+                )
+            }
+
+            // Due Date Field (100% standardized OutlinedTextField matching system style)
+            Box(modifier = Modifier.fillMaxWidth()) {
+                val dateText = dueDateTimestamp?.let { dateFormatter.format(it) } ?: "Không có hạn trả"
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Hạn trả nợ") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Event,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingIcon = {
+                        if (dueDateTimestamp != null) {
+                            IconButton(onClick = { dueDateTimestamp = null }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Xóa",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Transparent)
+                        .clickable {
+                            val cal = Calendar.getInstance()
+                            dueDateTimestamp?.let { cal.timeInMillis = it }
+                            DatePickerDialog(context, { _, y, m, d ->
+                                val newCal = Calendar.getInstance().apply { set(y, m, d) }
+                                dueDateTimestamp = newCal.timeInMillis
+                            }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+                        }
+                )
+            }
+
+            // Repayment Type Selector (Trực quan với Modal Center)
+            val repaymentMap = mapOf(
+                "ONE_TIME" to "Trả 1 lần",
+                "INSTALLMENT" to "Trả nhiều kỳ",
+                "FLEXIBLE" to "Linh hoạt",
+                "PERIODIC_FLEXIBLE" to "Định kỳ linh hoạt",
+                "ACCUMULATING" to "Nợ cộng dồn"
+            )
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = repaymentMap[repaymentType] ?: "Linh hoạt",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Loại hình trả nợ") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Repeat,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showRepaymentSelectModal = true },
+                    shape = RoundedCornerShape(14.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Transparent)
+                        .clickable { showRepaymentSelectModal = true }
+                )
+            }
+
+            if (repaymentType == "PERIODIC_FLEXIBLE" || repaymentType == "INSTALLMENT") {
+                CustomMoneyInputField(
+                    value = rawPeriodicAmount,
+                    onValueChange = { rawPeriodicAmount = it },
+                    label = "Số tiền mỗi kỳ (đ)",
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                var expandedPeriod by remember { mutableStateOf(false) }
+                val periodMap = mapOf(
+                    "WEEKLY" to "Hàng tuần",
+                    "MONTHLY" to "Hàng tháng",
+                    "YEARLY" to "Hàng năm"
                 )
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
-                        value = repaymentMap[repaymentType] ?: "Linh hoạt",
+                        value = periodMap[periodType] ?: "Hàng tháng",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Loại hình trả nợ") },
-                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
+                        label = { Text("Kỳ hạn") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { expandedRepayment = true }
+                            .clickable { expandedPeriod = true },
+                        shape = RoundedCornerShape(14.dp)
                     )
                     Box(
                         modifier = Modifier
                             .matchParentSize()
                             .background(Color.Transparent)
-                            .clickable { expandedRepayment = true }
+                            .clickable { expandedPeriod = true }
                     )
-                    
-                    DropdownMenu(expanded = expandedRepayment, onDismissRequest = { expandedRepayment = false }) {
-                        repaymentMap.forEach { (key, value) ->
+                    DropdownMenu(expanded = expandedPeriod, onDismissRequest = { expandedPeriod = false }) {
+                        periodMap.forEach { (key, value) ->
                             DropdownMenuItem(
-                                text = { Text(value) },
-                                onClick = { repaymentType = key; expandedRepayment = false }
+                                text = { Text(value, fontWeight = FontWeight.SemiBold) },
+                                onClick = { periodType = key; expandedPeriod = false }
                             )
                         }
                     }
                 }
-
-                if (repaymentType == "PERIODIC_FLEXIBLE" || repaymentType == "INSTALLMENT") {
-                    CustomMoneyInputField(
-                        value = rawPeriodicAmount,
-                        onValueChange = { rawPeriodicAmount = it },
-                        label = "Số tiền mỗi kỳ (đ)",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    var expandedPeriod by remember { mutableStateOf(false) }
-                    val periodMap = mapOf(
-                        "WEEKLY" to "Hàng tuần",
-                        "MONTHLY" to "Hàng tháng",
-                        "YEARLY" to "Hàng năm"
-                    )
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = periodMap[periodType] ?: "Hàng tháng",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Kỳ hạn") },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { expandedPeriod = true }
-                        )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Transparent)
-                                .clickable { expandedPeriod = true }
-                        )
-                        DropdownMenu(expanded = expandedPeriod, onDismissRequest = { expandedPeriod = false }) {
-                            periodMap.forEach { (key, value) ->
-                                DropdownMenuItem(
-                                    text = { Text(value) },
-                                    onClick = { periodType = key; expandedPeriod = false }
-                                )
-                            }
-                        }
-                    }
-                }
-                
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val amt = FormatHelper.evaluateExpression(rawAmount)
-                    val periodicAmt = if (rawPeriodicAmount.isBlank()) null else FormatHelper.evaluateExpression(rawPeriodicAmount)
-                    if (personName.isNotBlank() && amt > 0 && selectedWalletId != null) {
-                        onAdd(personName, amt, type, note, dueDateTimestamp, selectedWalletId!!, repaymentType, periodicAmt, periodType)
-                    } else {
-                        viewModel.showWarningNotification("Vui lòng điền đủ tên, số tiền và chọn ví")
-                    }
-                }
-            ) {
-                Text("Lưu")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
+
+            // Note Input Field (Textarea format for multi-line notes)
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                label = { Text("Ghi chú") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Notes,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                singleLine = false,
+                minLines = 3,
+                maxLines = 5,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
-    )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PayDebtDialog(
     debt: Debt,
@@ -1045,139 +1438,308 @@ fun PayDebtDialog(
     onPay: (amount: Double, walletId: Int, note: String) -> Unit
 ) {
     var rawAmount by remember { mutableStateOf("") }
-    var selectedWalletId by remember { mutableStateOf<Int?>(wallets.firstOrNull()?.id) }
+    val availableWallets = remember(wallets) { wallets.filter { it.type != "SAVINGS" } }
+    var selectedWalletId by remember { mutableStateOf<Int?>(availableWallets.firstOrNull()?.id) }
     var note by remember { mutableStateOf("") }
+    var amountError by remember { mutableStateOf<String?>(null) }
+    var walletError by remember { mutableStateOf<String?>(null) }
+    var showWalletModal by remember { mutableStateOf(false) }
 
     val now = System.currentTimeMillis()
     val isOverdue = debt.dueDate != null && debt.dueDate < now && debt.status != "COMPLETED"
     val overdueDays = if (isOverdue) Math.max(1, ((now - debt.dueDate!!) / (1000 * 60 * 60 * 24)).toInt()) else 0
 
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(if (debt.type == "DEBT") "Trả nợ cho ${debt.personName}" else "Thu nợ từ ${debt.personName}", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
+        title = if (debt.type == "DEBT") "Trả nợ cho ${debt.personName}" else "Thu nợ từ ${debt.personName}",
+        sheetState = sheetState,
+        footer = {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (isOverdue) {
-                    Surface(
-                        color = Color(0xFFFFEBEE),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE53935), modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Khoản nợ này đã quá hạn $overdueDays ngày!",
-                                color = Color(0xFFE53935),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "Hủy",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
 
-                Text(
-                    text = "Dư nợ hiện tại: ${FormatHelper.formatVND(debt.remainingAmount)}",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 14.sp
-                )
-                
+                Button(
+                    onClick = {
+                        val evaluated = FormatHelper.evaluateExpression(rawAmount)
+                        val amt = if (rawAmount.isBlank()) debt.remainingAmount else evaluated
+                        var hasError = false
+                        if (amt <= 0) {
+                            amountError = "Vui lòng nhập số tiền hợp lệ!"
+                            hasError = true
+                        }
+                        if (selectedWalletId == null) {
+                            walletError = "Vui lòng chọn ví!"
+                            hasError = true
+                        }
+
+                        if (!hasError) {
+                            onPay(amt, selectedWalletId!!, note)
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF5C54E5),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        text = "Xác nhận",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (isOverdue) {
+                Surface(
+                    color = Color(0xFFFFEBEE),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE53935), modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Khoản nợ này đã quá hạn $overdueDays ngày!",
+                            color = Color(0xFFE53935),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
+            // Banner Dư nợ hiện tại
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Dư nợ hiện tại",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = FormatHelper.formatVND(debt.remainingAmount),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF5C54E5)
+                    )
+                }
+            }
+
+            // Input Số tiền trả
+            Column(modifier = Modifier.fillMaxWidth()) {
                 CustomMoneyInputField(
                     value = rawAmount,
-                    onValueChange = { rawAmount = it },
-                    label = if (debt.type == "DEBT") "Số tiền trả (đ)" else "Số tiền thu (đ)",
+                    onValueChange = {
+                        rawAmount = it
+                        if (it.isNotBlank() && FormatHelper.evaluateExpression(it) > 0) amountError = null
+                    },
+                    label = if (debt.type == "DEBT") "Số tiền trả (VNĐ) (*)" else "Số tiền thu (VNĐ) (*)",
                     placeholder = debt.remainingAmount.toLong().toString(),
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(
-                        onClick = { rawAmount = debt.remainingAmount.toLong().toString() },
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                    ) {
-                        Text(
-                            text = "Trả hết dư nợ (${FormatHelper.formatVND(debt.remainingAmount)})",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                if (amountError != null) {
+                    Text(
+                        text = amountError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    )
                 }
-                
-                // Wallet Selector
-                if (wallets.isNotEmpty()) {
-                    var expanded by remember { mutableStateOf(false) }
-                    val selectedWalletName = wallets.find { it.id == selectedWalletId }?.name ?: "Chọn ví"
-                    
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = selectedWalletName,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text(if (debt.type == "DEBT") "Trừ tiền từ ví" else "Cộng tiền vào ví") },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { expanded = true }
-                        )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                val currentAmount = FormatHelper.evaluateExpression(rawAmount)
+                val isFullPaid = currentAmount > 0 && Math.abs(currentAmount - debt.remainingAmount) < 0.01
+
+                val activeColor = Color(0xFF5C54E5)
+                val inactiveBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                val inactiveBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                val inactiveText = MaterialTheme.colorScheme.onSurfaceVariant
+
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable {
+                            if (isFullPaid) {
+                                rawAmount = ""
+                            } else {
+                                rawAmount = debt.remainingAmount.toLong().toString()
+                                amountError = null
+                            }
+                        },
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isFullPaid) activeColor.copy(alpha = 0.12f) else inactiveBg,
+                    border = BorderStroke(1.5.dp, if (isFullPaid) activeColor else inactiveBorder)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Transparent)
-                                .clickable { expanded = true }
-                        )
-                        
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            wallets.forEach { w ->
-                                DropdownMenuItem(
-                                    text = { Text(w.name) },
-                                    onClick = { selectedWalletId = w.id; expanded = false }
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(if (isFullPaid) activeColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                .border(1.dp, if (isFullPaid) Color.Transparent else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isFullPaid) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (debt.type == "DEBT") "Trả hết dư nợ: ${FormatHelper.formatVND(debt.remainingAmount)}" else "Thu hết dư nợ: ${FormatHelper.formatVND(debt.remainingAmount)}",
+                            fontSize = 14.sp,
+                            fontWeight = if (isFullPaid) FontWeight.ExtraBold else FontWeight.SemiBold,
+                            color = if (isFullPaid) activeColor else inactiveText
+                        )
                     }
                 }
-                
+            }
+
+            // Wallet Selector Dropdown
+            val selectedWallet = availableWallets.find { it.id == selectedWalletId }
+            val selectedWalletName = selectedWallet?.name ?: "Chọn ví (*)"
+            var expandedWallet by remember { mutableStateOf(false) }
+
+            Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    value = selectedWalletName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(if (debt.type == "DEBT") "Trừ tiền từ ví (*)" else "Cộng tiền vào ví (*)") },
+                    leadingIcon = {
+                        if (selectedWallet != null) {
+                            val walletColor = remember(selectedWallet.colorHex) {
+                                try { Color(android.graphics.Color.parseColor(selectedWallet.colorHex)) } catch (e: Exception) { Color(0xFF2196F3) }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(walletColor, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = IconMapper.getIconByName(selectedWallet.iconName),
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                    isError = walletError != null,
+                    supportingText = walletError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expandedWallet = true },
+                    shape = RoundedCornerShape(14.dp)
                 )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val evaluated = FormatHelper.evaluateExpression(rawAmount)
-                    val amt = if (rawAmount.isBlank()) debt.remainingAmount else evaluated
-                    if (amt > 0 && selectedWalletId != null) {
-                        onPay(amt, selectedWalletId!!, note)
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Transparent)
+                        .clickable { expandedWallet = true }
+                )
+
+                DropdownMenu(expanded = expandedWallet, onDismissRequest = { expandedWallet = false }) {
+                    availableWallets.forEach { w ->
+                        DropdownMenuItem(
+                            text = { Text(w.name, fontWeight = FontWeight.SemiBold) },
+                            onClick = {
+                                selectedWalletId = w.id
+                                walletError = null
+                                expandedWallet = false
+                            }
+                        )
                     }
                 }
-            ) {
-                Text("Xác nhận")
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
+
+            // Note Textarea
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                label = { Text("Ghi chú") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Notes,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                singleLine = false,
+                minLines = 2,
+                maxLines = 4,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            )
         }
-    )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IncreaseDebtDialog(
     debt: Debt,
@@ -1186,89 +1748,214 @@ fun IncreaseDebtDialog(
     onIncrease: (amount: Double, walletId: Int, note: String) -> Unit
 ) {
     var rawAmount by remember { mutableStateOf("") }
-    var selectedWalletId by remember { mutableStateOf<Int?>(wallets.firstOrNull()?.id) }
+    val availableWallets = remember(wallets) { wallets.filter { it.type != "SAVINGS" } }
+    var selectedWalletId by remember { mutableStateOf<Int?>(availableWallets.firstOrNull()?.id) }
     var note by remember { mutableStateOf("") }
+    var amountError by remember { mutableStateOf<String?>(null) }
+    var walletError by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(if (debt.type == "DEBT") "Ghi thêm nợ từ ${debt.personName}" else "Cho ${debt.personName} vay thêm", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
+        title = if (debt.type == "DEBT") "Vay thêm từ ${debt.personName}" else "Cho ${debt.personName} vay thêm",
+        sheetState = sheetState,
+        footer = {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Dư nợ hiện tại: ${FormatHelper.formatVND(debt.remainingAmount)}",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 14.sp
-                )
-                
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "Hủy",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        val amt = FormatHelper.evaluateExpression(rawAmount)
+                        var hasError = false
+                        if (amt <= 0) {
+                            amountError = "Vui lòng nhập số tiền phát sinh hợp lệ!"
+                            hasError = true
+                        }
+                        if (selectedWalletId == null) {
+                            walletError = "Vui lòng chọn ví!"
+                            hasError = true
+                        }
+
+                        if (!hasError) {
+                            onIncrease(amt, selectedWalletId!!, note)
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF5C54E5),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        text = "Ghi Thêm",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Banner Dư nợ hiện tại
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Dư nợ hiện tại",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = FormatHelper.formatVND(debt.remainingAmount),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF5C54E5)
+                    )
+                }
+            }
+
+            // Input Số tiền phát sinh
+            Column(modifier = Modifier.fillMaxWidth()) {
                 CustomMoneyInputField(
                     value = rawAmount,
-                    onValueChange = { rawAmount = it },
-                    label = "Số tiền phát sinh (đ)",
+                    onValueChange = {
+                        rawAmount = it
+                        if (it.isNotBlank() && FormatHelper.evaluateExpression(it) > 0) amountError = null
+                    },
+                    label = "Số tiền phát sinh (VNĐ) (*)",
                     modifier = Modifier.fillMaxWidth()
                 )
-                
-                if (wallets.isNotEmpty()) {
-                    var expanded by remember { mutableStateOf(false) }
-                    val selectedWalletName = wallets.find { it.id == selectedWalletId }?.name ?: "Chọn ví"
-                    
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = selectedWalletName,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text(if (debt.type == "DEBT") "Tiền được chuyển vào ví" else "Trích tiền từ ví") },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { expanded = true }
-                        )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Transparent)
-                                .clickable { expanded = true }
-                        )
-                        
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            wallets.forEach { w ->
-                                DropdownMenuItem(
-                                    text = { Text(w.name) },
-                                    onClick = { selectedWalletId = w.id; expanded = false }
+                if (amountError != null) {
+                    Text(
+                        text = amountError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                    )
+                }
+            }
+
+            // Wallet Selector Dropdown
+            val selectedWallet = availableWallets.find { it.id == selectedWalletId }
+            val selectedWalletName = selectedWallet?.name ?: "Chọn ví (*)"
+            var expandedWallet by remember { mutableStateOf(false) }
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = selectedWalletName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(if (debt.type == "DEBT") "Tiền được chuyển vào ví (*)" else "Trích tiền từ ví (*)") },
+                    leadingIcon = {
+                        if (selectedWallet != null) {
+                            val walletColor = remember(selectedWallet.colorHex) {
+                                try { Color(android.graphics.Color.parseColor(selectedWallet.colorHex)) } catch (e: Exception) { Color(0xFF2196F3) }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(walletColor, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = IconMapper.getIconByName(selectedWallet.iconName),
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
-                    }
-                }
-                
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Ghi chú") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    },
+                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                    isError = walletError != null,
+                    supportingText = walletError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expandedWallet = true },
+                    shape = RoundedCornerShape(14.dp)
                 )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val amt = FormatHelper.evaluateExpression(rawAmount)
-                    if (amt > 0 && selectedWalletId != null) {
-                        onIncrease(amt, selectedWalletId!!, note)
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Transparent)
+                        .clickable { expandedWallet = true }
+                )
+
+                DropdownMenu(expanded = expandedWallet, onDismissRequest = { expandedWallet = false }) {
+                    availableWallets.forEach { w ->
+                        DropdownMenuItem(
+                            text = { Text(w.name, fontWeight = FontWeight.SemiBold) },
+                            onClick = {
+                                selectedWalletId = w.id
+                                walletError = null
+                                expandedWallet = false
+                            }
+                        )
                     }
                 }
-            ) {
-                Text("Ghi Thêm")
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
+
+            // Note Textarea
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                label = { Text("Ghi chú") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Notes,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                singleLine = false,
+                minLines = 2,
+                maxLines = 4,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            )
         }
-    )
+    }
 }

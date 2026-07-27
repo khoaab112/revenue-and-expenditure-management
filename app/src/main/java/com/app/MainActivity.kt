@@ -988,7 +988,8 @@ fun NavHostContainer(
                 onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
                 onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) },
                 onNavigateToWalletManagement = { navController.navigate(Routes.WALLET_MANAGEMENT) },
-                onNavigateToCategoryManagement = { navController.navigate(Routes.CATEGORY_MANAGEMENT) }
+                onNavigateToCategoryManagement = { navController.navigate(Routes.CATEGORY_MANAGEMENT) },
+                onNavigateToBudgetGoal = { navController.navigate(Routes.BUDGET_GOAL) }
             )
         }
 

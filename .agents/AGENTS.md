@@ -13,7 +13,11 @@ Các quy tắc dưới đây chỉ có tác dụng trong phạm vi dự án này
 - **Tái sử dụng Component**: Bắt buộc ưu tiên sử dụng lại các hàm, UI component và widget đã được xây dựng sẵn trong dự án (ví dụ: các thẻ Card, button, dialog dùng chung) thay vì tạo mới hoàn toàn để đảm bảo tính đồng nhất.
 
 ## 3. Quy tắc Component cụ thể
-- **ModalBottomSheet**: Khi sử dụng `ModalBottomSheet`, luôn khởi tạo state với tham số `skipPartiallyExpanded = true` (ví dụ: `rememberModalBottomSheetState(skipPartiallyExpanded = true)`) để BottomSheet mở rộng hoàn toàn, tránh tình trạng bị kẹt ở giữa màn hình gây khó chịu cho người dùng.
+- **ModalBottomSheet**: Bắt buộc 100% tất cả các màn hình khi hiển thị ModalBottomSheet phải sử dụng duy nhất component khung chung `AppModalBottomSheet` (`com.app.ui.components.AppModalBottomSheet`). Cấu trúc luôn chia làm 3 phần chuẩn:
+  - **Header**: Tiêu đề (Title `20.sp`, `FontWeight.Black`), Action đóng `(X)` cố định + Action mở rộng tùy chọn (ví dụ icon Info `i`), đường kẻ phân cách `HorizontalDivider`.
+  - **Content**: Phần nội dung cuộn linh hoạt tùy theo nhu cầu từng màn hình.
+  - **Footer**: Khu vực chứa nhóm Action chính (Button Hủy / Thực thi), bỏ trống hoặc chứa mô tả phụ tùy theo màn hình.
+  - Luôn khởi tạo `sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)`.
 
 ## 4. Quy tắc Validation Form (Form Validation Rules)
 - Khi thực hiện kiểm tra tính hợp lệ (validation) trên các ô nhập liệu (Input Form):

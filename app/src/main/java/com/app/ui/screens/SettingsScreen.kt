@@ -82,6 +82,7 @@ fun SettingsScreen(
     onNavigateToDebtBook: () -> Unit = {},
     onNavigateToWalletManagement: () -> Unit = {},
     onNavigateToCategoryManagement: () -> Unit = {},
+    onNavigateToBudgetGoal: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -435,7 +436,30 @@ fun SettingsScreen(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                // 3. Sự kiện
+                // 3. Hạn mức
+                ListItem(
+                    headlineContent = { Text("Hạn mức", fontWeight = FontWeight.Bold) },
+                    leadingContent = {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFF00BCD4), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.Tune, contentDescription = "Budget", tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
+                    },
+                    trailingContent = {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    },
+                    modifier = Modifier
+                        .clickable { onNavigateToBudgetGoal() }
+                        .testTag("manage_budget_goal_item")
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // 4. Sự kiện
                 ListItem(
                     headlineContent = { Text("Sự kiện", fontWeight = FontWeight.Bold) },
                     leadingContent = {
