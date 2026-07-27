@@ -65,7 +65,12 @@ fun BudgetsSection(
     modifier: Modifier = Modifier
 ) {
     val budgets by viewModel.allBudgets.collectAsState()
-    val activeMonth by viewModel.activeMonth.collectAsState()
+    val currentRealMonthStr = remember {
+        Calendar.getInstance().let { cal ->
+            String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+        }
+    }
+    var selectedBudgetMonth by remember { mutableStateOf(currentRealMonthStr) }
     val categoriesList by viewModel.categoriesList.collectAsState()
     val allTransactions by viewModel.allTransactions.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
@@ -77,23 +82,17 @@ fun BudgetsSection(
     var selectedCategoryForHistory by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
-    val currentRealMonthStr = remember {
-        Calendar.getInstance().let { cal ->
-            String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
-        }
-    }
-
-    val displayBudgetMonth = remember(activeMonth) {
-        if (activeMonth.length >= 7) {
-            "Tháng ${activeMonth.substring(5)}/${activeMonth.substring(0, 4)}"
+    val displayBudgetMonth = remember(selectedBudgetMonth) {
+        if (selectedBudgetMonth.length >= 7) {
+            "Tháng ${selectedBudgetMonth.substring(5)}/${selectedBudgetMonth.substring(0, 4)}"
         } else {
-            activeMonth
+            selectedBudgetMonth
         }
     }
 
     fun navigateMonth(delta: Int) {
         try {
-            val parts = activeMonth.split("-")
+            val parts = selectedBudgetMonth.split("-")
             var year = parts[0].toInt()
             var month = parts[1].toInt()
             month += delta
@@ -104,16 +103,15 @@ fun BudgetsSection(
                 month = 12
                 year--
             }
-            val newMonth = String.format("%04d-%02d", year, month)
-            viewModel.setActiveMonth(newMonth)
+            selectedBudgetMonth = String.format("%04d-%02d", year, month)
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    // Filter budgets for activeMonth & compute live spentAmount based on real non-virtual expenses of that month
-    val filteredBudgets = remember(budgets, activeMonth, allTransactions, categoriesList, savingsWalletIds) {
-        val listForMonth = budgets.filter { it.month == activeMonth }
+    // Filter budgets for selectedBudgetMonth & compute live spentAmount based on real non-virtual expenses of that month
+    val filteredBudgets = remember(budgets, selectedBudgetMonth, allTransactions, categoriesList, savingsWalletIds) {
+        val listForMonth = budgets.filter { it.month == selectedBudgetMonth }
         listForMonth.map { budget ->
             val familyCategories = mutableSetOf(budget.categoryName)
             var added = true
@@ -138,7 +136,7 @@ fun BudgetsSection(
                 !isInternalTransfer &&
                 !isSavingsDeposit &&
                 tx.categoryName in familyCategories &&
-                isTimestampInMonth(tx.timestamp, activeMonth)
+                isTimestampInMonth(tx.timestamp, selectedBudgetMonth)
             }.sumOf { it.amount }
 
             budget.copy(spentAmount = dynamicSpent)
@@ -273,13 +271,13 @@ fun BudgetsSection(
                 }
             }
 
-            if (activeMonth != currentRealMonthStr) {
+            if (selectedBudgetMonth != currentRealMonthStr) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center
                 ) {
                     AssistChip(
-                        onClick = { viewModel.setActiveMonth(currentRealMonthStr) },
+                        onClick = { selectedBudgetMonth = currentRealMonthStr },
                         label = { Text("Về tháng hiện tại", fontSize = 12.sp) },
                         leadingIcon = {
                             Icon(
@@ -326,7 +324,7 @@ fun BudgetsSection(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         OutlinedButton(
-                            onClick = { viewModel.copyBudgetsFromPreviousMonth(activeMonth) },
+                            onClick = { viewModel.copyBudgetsFromPreviousMonth(selectedBudgetMonth) },
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(
@@ -376,7 +374,7 @@ fun BudgetsSection(
                 categoriesList = categoriesList,
                 onDismiss = { showAddDialog = false },
                 onAddBudget = { category, limit, isRecurring ->
-                    viewModel.addBudget(category, limit, activeMonth, isRecurring)
+                    viewModel.addBudget(category, limit, selectedBudgetMonth, isRecurring)
                     showAddDialog = false
                     viewModel.showSuccessNotification("Thêm ngân sách thành công!")
                 }
@@ -385,10 +383,10 @@ fun BudgetsSection(
 
         if (showMonthPickerDialog) {
             BudgetMonthPickerDialog(
-                currentMonthStr = activeMonth,
+                currentMonthStr = selectedBudgetMonth,
                 onDismiss = { showMonthPickerDialog = false },
                 onMonthSelected = { selectedMonthStr ->
-                    viewModel.setActiveMonth(selectedMonthStr)
+                    selectedBudgetMonth = selectedMonthStr
                     showMonthPickerDialog = false
                 }
             )
@@ -421,7 +419,7 @@ fun BudgetsSection(
         if (selectedCategoryForHistory != null) {
             com.app.ui.components.CategoryTransactionsDialog(
                 categoryName = selectedCategoryForHistory!!,
-                monthKey = activeMonth,
+                monthKey = selectedBudgetMonth,
                 viewModel = viewModel,
                 onDismiss = { selectedCategoryForHistory = null }
             )

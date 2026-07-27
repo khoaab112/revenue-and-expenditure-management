@@ -54,27 +54,30 @@ fun DashboardScreen(
 ) {
     val wallets by viewModel.dailyWallets.collectAsState()
     val transactions by viewModel.dailyTransactions.collectAsState()
-    val activeMonth by viewModel.activeMonth.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
     val budgets by viewModel.allBudgets.collectAsState()
     val events by viewModel.allEvents.collectAsState()
-    
     var eventToView by remember { mutableStateOf<com.app.data.Event?>(null) }
 
-    val currentMonthBudgets = remember(budgets, activeMonth) {
-        budgets.filter { it.month == activeMonth }
+    val currentRealMonthStr = remember {
+        Calendar.getInstance().let { cal ->
+            String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+        }
+    }
+    val currentMonthBudgets = remember(budgets, currentRealMonthStr) {
+        budgets.filter { it.month == currentRealMonthStr }
     }
     val savingsGoals by viewModel.allSavingsGoals.collectAsState()
 
     val totalBalance = wallets.sumOf { it.balance }
 
     // Filter current month transactions for stats - optimized to reuse a single Calendar instance
-    val currentMonthTransactions = remember(transactions, activeMonth) {
+    val currentMonthTransactions = remember(transactions, currentRealMonthStr) {
         val cal = Calendar.getInstance()
         transactions.filter {
             cal.timeInMillis = it.timestamp
             val txMonth = String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
-            txMonth == activeMonth
+            txMonth == currentRealMonthStr
         }
     }
 
@@ -90,23 +93,23 @@ fun DashboardScreen(
     val incomeCount = remember(currentMonthTransactions) { currentMonthTransactions.count { it.type == "INCOME" } }
     val expenseCount = remember(currentMonthTransactions) { currentMonthTransactions.count { it.type == "EXPENSE" } }
 
-    val displayMonth = remember(activeMonth) {
-        if (activeMonth.length >= 7) {
-            "Tháng ${activeMonth.substring(5)}/${activeMonth.substring(0, 4)}"
+    val displayMonth = remember(currentRealMonthStr) {
+        if (currentRealMonthStr.length >= 7) {
+            "Tháng ${currentRealMonthStr.substring(5)}/${currentRealMonthStr.substring(0, 4)}"
         } else {
-            activeMonth
+            currentRealMonthStr
         }
     }
 
-    val displayMonthShort = remember(activeMonth) {
-        if (activeMonth.length >= 7) {
+    val displayMonthShort = remember(currentRealMonthStr) {
+        if (currentRealMonthStr.length >= 7) {
             try {
-                "T${activeMonth.substring(5).toInt()}"
+                "T${currentRealMonthStr.substring(5).toInt()}"
             } catch (e: Exception) {
-                "T${activeMonth.substring(5)}"
+                "T${currentRealMonthStr.substring(5)}"
             }
         } else {
-            activeMonth
+            currentRealMonthStr
         }
     }
 

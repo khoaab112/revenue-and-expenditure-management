@@ -1007,13 +1007,18 @@ data class ChartBucket(
 @Composable
 fun DistributionReportContent(viewModel: FinanceViewModel) {
     val transactions by viewModel.dailyTransactions.collectAsState()
-    val activeMonth by viewModel.activeMonth.collectAsState()
-
-    val currentYear = remember(activeMonth) {
-        try { activeMonth.substring(0, 4).toInt() } catch (e: Exception) { Calendar.getInstance().get(Calendar.YEAR) }
+    val currentRealMonthStr = remember {
+        Calendar.getInstance().let { cal ->
+            String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+        }
     }
-    val currentMonth = remember(activeMonth) {
-        try { activeMonth.substring(5, 7).toInt() } catch (e: Exception) { Calendar.getInstance().get(Calendar.MONTH) + 1 }
+    var distributionMonth by remember { mutableStateOf(currentRealMonthStr) }
+
+    val currentYear = remember(distributionMonth) {
+        try { distributionMonth.substring(0, 4).toInt() } catch (e: Exception) { Calendar.getInstance().get(Calendar.YEAR) }
+    }
+    val currentMonth = remember(distributionMonth) {
+        try { distributionMonth.substring(5, 7).toInt() } catch (e: Exception) { Calendar.getInstance().get(Calendar.MONTH) + 1 }
     }
 
     fun adjustMonth(diff: Int) {
@@ -1022,15 +1027,15 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
             set(Calendar.MONTH, currentMonth - 1 + diff)
         }
         val formatted = String.format("%04d-%02d", calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1)
-        viewModel.setActiveMonth(formatted)
+        distributionMonth = formatted
     }
 
-    val monthTransactions = remember(transactions, activeMonth) {
+    val monthTransactions = remember(transactions, distributionMonth) {
         val cal = Calendar.getInstance()
         transactions.filter {
             cal.timeInMillis = it.timestamp
             val txMonth = String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
-            txMonth == activeMonth
+            txMonth == distributionMonth
         }
     }
 
@@ -1048,14 +1053,14 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
     fun getRootCategory(catName: String): com.app.data.FinanceCategory {
         var currentCat = categoriesList.find { it.name.equals(catName, ignoreCase = true) }
         while (currentCat?.parentName != null) {
-            val parent = categoriesList.find { it.name.equals(currentCat!!.parentName, ignoreCase = true) }
+            val parent = categoriesList.find { it.name.equals(currentCat?.parentName, ignoreCase = true) }
             if (parent != null) {
                 currentCat = parent
             } else {
                 break
             }
         }
-        return currentCat ?: com.app.data.FinanceCategory(catName, "Category", "#607D8B", "BOTH")
+        return currentCat ?: com.app.data.FinanceCategory(name = catName, type = "EXPENSE", colorHex = "#4CAF50", iconName = "category")
     }
 
     val categoryExpenses = remember(monthTransactions, savingsWalletIds, totalExpenses, categoriesList) {
@@ -1109,7 +1114,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
     var selectedCategoryName by remember { mutableStateOf<String?>(null) }
 
     val animProgress = remember { Animatable(0f) }
-    LaunchedEffect(activeMonth, selectedReportType) {
+    LaunchedEffect(distributionMonth, selectedReportType) {
         selectedCategoryName = null
         animProgress.snapTo(0f)
         animProgress.animateTo(
@@ -1121,7 +1126,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
     if (selectedCategoryForHistory != null) {
         com.app.ui.components.CategoryTransactionsDialog(
             categoryName = selectedCategoryForHistory!!,
-            monthKey = activeMonth,
+            monthKey = distributionMonth,
             viewModel = viewModel,
             onDismiss = { selectedCategoryForHistory = null }
         )
