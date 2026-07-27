@@ -1231,6 +1231,8 @@ fun AppHeader(
                     val activeMonth by viewModel.activeMonth.collectAsState()
                     val transactions by viewModel.dailyTransactions.collectAsState()
                     val historyFilteredTransactions by viewModel.filteredTransactions.collectAsState()
+                    val eventsList by viewModel.allEvents.collectAsState()
+                    val debtsList by viewModel.allDebts.collectAsState()
                     
                     IconButton(
                         onClick = {
@@ -1243,6 +1245,8 @@ fun AppHeader(
                                 com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
                                     context = exportContext,
                                     transactions = monthTxs,
+                                    events = eventsList,
+                                    debts = debtsList,
                                     onWarning = { viewModel.showWarningNotification(it) },
                                     onError = { viewModel.showErrorNotification(it) }
                                 )
@@ -1250,6 +1254,8 @@ fun AppHeader(
                                 com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
                                     context = exportContext,
                                     transactions = historyFilteredTransactions,
+                                    events = eventsList,
+                                    debts = debtsList,
                                     onWarning = { viewModel.showWarningNotification(it) },
                                     onError = { viewModel.showErrorNotification(it) }
                                 )

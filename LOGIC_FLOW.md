@@ -64,3 +64,11 @@ Bất cứ khi nào thêm màn hình hoặc bảng dữ liệu mới:
 3. Viết hàm wrap trong `FinanceRepository.kt`.
 4. Tạo State và Event xử lý trong `FinanceViewModel.kt`.
 5. Thiết kế UI trong `ui/screens/` và kết nối với ViewModel.
+
+---
+
+## 5. Đặc tả Chuẩn Logic Tài chính & Bảo toàn Dữ liệu
+Đối với các logic nghiệp vụ phức tạp như **Phân tích Chi tiêu Thông minh (AI Advisor)**, **Chuẩn đoán rủi ro dòng tiền**, và **Quy chuẩn Bảo toàn Dữ liệu (Backup/Restore không mất dữ liệu)**, vui lòng xem tài liệu đặc tả chuyên sâu:
+👉 **[SMART_FINANCIAL_LOGIC_SPECS.md](file:///d:/coding/revenue-and-expenditure-management/SMART_FINANCIAL_LOGIC_SPECS.md)**
+*(Mọi Unit Test, test case, và nâng cấp thuật toán bắt buộc phải đối chiếu theo tài liệu này).*
+
