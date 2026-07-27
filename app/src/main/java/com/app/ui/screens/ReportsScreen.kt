@@ -472,6 +472,9 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
+                var selectedChartUnit by remember { mutableStateOf("MILLION") } // MILLION (triệu đ), HUNDRED_THOUSAND (trăm nghìn đ)
+                var isUnitMenuExpanded by remember { mutableStateOf(false) }
+
                 // Header of Chart
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -479,18 +482,52 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Biểu đồ thu chi", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Box {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                            modifier = Modifier.clickable { isUnitMenuExpanded = true }
                         ) {
-                            Text("Đơn vị: triệu đ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val unitLabel = if (selectedChartUnit == "MILLION") "triệu" else "trăm nghìn"
+                                Text(
+                                    text = unitLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = isUnitMenuExpanded,
+                            onDismissRequest = { isUnitMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("triệu", fontSize = 13.sp, fontWeight = if (selectedChartUnit == "MILLION") FontWeight.Bold else FontWeight.Normal) },
+                                onClick = {
+                                    selectedChartUnit = "MILLION"
+                                    isUnitMenuExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("trăm nghìn", fontSize = 13.sp, fontWeight = if (selectedChartUnit == "HUNDRED_THOUSAND") FontWeight.Bold else FontWeight.Normal) },
+                                onClick = {
+                                    selectedChartUnit = "HUNDRED_THOUSAND"
+                                    isUnitMenuExpanded = false
+                                }
+                            )
                         }
                     }
                 }
@@ -519,7 +556,8 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                     selectedPeriod = selectedPeriod,
                     periodTransactions = periodTransactions,
                     startDate = startDate,
-                    endDate = endDate
+                    endDate = endDate,
+                    chartUnit = selectedChartUnit
                 )
             }
         }
@@ -743,13 +781,15 @@ fun CombinedTrendCanvasChart(
     selectedPeriod: String,
     periodTransactions: List<Transaction>,
     startDate: Long,
-    endDate: Long
+    endDate: Long,
+    chartUnit: String = "MILLION"
 ) {
     val textMeasurer = rememberTextMeasurer()
 
-    val chartData = remember(selectedPeriod, periodTransactions, startDate, endDate) {
+    val chartData = remember(selectedPeriod, periodTransactions, startDate, endDate, chartUnit) {
         val cal = Calendar.getInstance()
         cal.firstDayOfWeek = Calendar.MONDAY
+        val divisor = if (chartUnit == "HUNDRED_THOUSAND") 100_000.0 else 1_000_000.0
 
         when (selectedPeriod) {
             "WEEK" -> {
@@ -766,8 +806,8 @@ fun CombinedTrendCanvasChart(
                     val dayEnd = cal.timeInMillis
 
                     val dayTxs = periodTransactions.filter { it.timestamp in dayStart..dayEnd }
-                    val inc = dayTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / 1_000_000.0
-                    val exp = dayTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / 1_000_000.0
+                    val inc = dayTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / divisor
+                    val exp = dayTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / divisor
                     val fullLabel = "$dayName\n${dayFormat.format(Date(dayStart))}"
 
                     ChartBucket(fullLabel, inc, exp)
@@ -781,8 +821,8 @@ fun CombinedTrendCanvasChart(
                     val wEnd = if (index == 3) endDate else startDate + (index + 1) * duration - 1
 
                     val wTxs = periodTransactions.filter { it.timestamp in wStart..wEnd }
-                    val inc = wTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / 1_000_000.0
-                    val exp = wTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / 1_000_000.0
+                    val inc = wTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / divisor
+                    val exp = wTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / divisor
 
                     ChartBucket(weekName, inc, exp)
                 }
@@ -798,8 +838,8 @@ fun CombinedTrendCanvasChart(
                     val mEnd = cal.timeInMillis
 
                     val mTxs = periodTransactions.filter { it.timestamp in mStart..mEnd }
-                    val inc = mTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / 1_000_000.0
-                    val exp = mTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / 1_000_000.0
+                    val inc = mTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / divisor
+                    val exp = mTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / divisor
 
                     ChartBucket("T$monthNum", inc, exp)
                 }
@@ -813,8 +853,8 @@ fun CombinedTrendCanvasChart(
                     val yEnd = cal.timeInMillis
 
                     val yTxs = periodTransactions.filter { it.timestamp in yStart..yEnd }
-                    val inc = yTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / 1_000_000.0
-                    val exp = yTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / 1_000_000.0
+                    val inc = yTxs.filter { it.type == "INCOME" }.sumOf { it.amount } / divisor
+                    val exp = yTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount } / divisor
 
                     val sdf = SimpleDateFormat("yyyy", Locale.getDefault())
                     ChartBucket(sdf.format(Date(yStart)), inc, exp)

@@ -1017,14 +1017,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             val obj = jsonArray.getJSONObject(i)
             val timestamp = obj.optLong("timestamp", 0L)
             val text = obj.optString("text", "")
-            if (timestamp == log.timestamp && text == log.text) {
+            val title = obj.optString("title", "")
+            if (timestamp == log.timestamp && text == log.text && (title.isEmpty() || log.title.isEmpty() || title == log.title)) {
                 obj.put("status", newStatus)
                 obj.put("walletName", walletName)
             }
             newList.put(obj)
         }
         repository.saveSetting("notification_logs", newList.toString())
-        loadNotificationLogs()
+        loadNotificationLogsSync()
     }
 
     fun addManualTransactionFromLog(log: NotificationLog, walletId: Int, categoryName: String) {
