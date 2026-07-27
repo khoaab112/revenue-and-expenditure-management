@@ -109,7 +109,7 @@ class BankNotificationListenerService : NotificationListenerService() {
                 }
 
                 // 3. Find matched Wallet from DB
-                val wallets = repository.allWallets.firstOrNull() ?: emptyList()
+                val wallets = (repository.allWallets.firstOrNull() ?: emptyList()).filter { it.type != "SAVINGS" }
                 val matchedWallet = wallets.find { it.name.lowercase().contains(parsed.bankName.lowercase()) }
                     ?: wallets.find { it.name.lowercase().contains(parsed.detectedWalletName.lowercase()) }
                     ?: wallets.find { it.type == "BANK" }

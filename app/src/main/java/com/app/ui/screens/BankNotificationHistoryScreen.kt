@@ -98,7 +98,7 @@ fun BankNotificationHistoryScreen(
 ) {
     val context = LocalContext.current
     val notificationLogs by viewModel.notificationLogs.collectAsState()
-    val wallets by viewModel.allWallets.collectAsState()
+    val wallets by viewModel.dailyWallets.collectAsState()
     val categories by viewModel.categoriesList.collectAsState()
 
     var selectedFilterStatus by remember { mutableStateOf("ALL") }

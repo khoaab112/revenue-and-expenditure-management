@@ -663,7 +663,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val parsed = com.app.service.NotificationParser.parse(title, text, packageName)
                 if (parsed.success) {
-                    val wallets = repository.allWallets.firstOrNull() ?: emptyList()
+                    val wallets = (repository.allWallets.firstOrNull() ?: emptyList()).filter { it.type != "SAVINGS" }
                     val matchedWallet = wallets.find { it.name.lowercase().contains(parsed.bankName.lowercase()) }
                         ?: wallets.find { it.name.lowercase().contains(parsed.detectedWalletName.lowercase()) }
                         ?: wallets.find { it.type == "BANK" }

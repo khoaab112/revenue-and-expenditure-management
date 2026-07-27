@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -113,6 +115,7 @@ fun ReportsScreen(
 // ==========================================
 // TAB 1: XU HƯỚNG (TREND REPORT CONTENT)
 // ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrendReportContent(viewModel: FinanceViewModel) {
     var selectedPeriod by remember { mutableStateOf("WEEK") } // "WEEK", "MONTH", "YEAR", "5YEARS"
@@ -126,15 +129,15 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
     val (startDate, endDate, dateLabel) = remember(selectedPeriod, periodOffset) {
         val cal = Calendar.getInstance()
         cal.firstDayOfWeek = Calendar.MONDAY
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
 
         when (selectedPeriod) {
             "WEEK" -> {
                 cal.add(Calendar.WEEK_OF_YEAR, periodOffset)
                 cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
 
                 cal.add(Calendar.DAY_OF_WEEK, 6)
@@ -150,10 +153,6 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
             "MONTH" -> {
                 cal.add(Calendar.MONTH, periodOffset)
                 cal.set(Calendar.DAY_OF_MONTH, 1)
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
 
                 val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -170,10 +169,6 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
             "YEAR" -> {
                 cal.add(Calendar.YEAR, periodOffset)
                 cal.set(Calendar.DAY_OF_YEAR, 1)
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
-                cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
 
                 val maxDay = cal.getActualMaximum(Calendar.DAY_OF_YEAR)
@@ -187,16 +182,12 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                 val label = "Năm ${sdf.format(Date(start))}"
                 Triple(start, end, label)
             }
-            else -> { // 5YEARS
-                cal.add(Calendar.YEAR, periodOffset * 5)
-                val currentYear = cal.get(Calendar.YEAR)
+            else -> { // "5YEARS"
+                val currentYear = cal.get(Calendar.YEAR) + (periodOffset * 5)
                 val startYear = currentYear - 4
 
                 cal.set(Calendar.YEAR, startYear)
                 cal.set(Calendar.DAY_OF_YEAR, 1)
-                cal.set(Calendar.HOUR_OF_DAY, 0)
-                cal.set(Calendar.MINUTE, 0)
-                cal.set(Calendar.SECOND, 0)
                 val start = cal.timeInMillis
 
                 cal.set(Calendar.YEAR, currentYear)
@@ -263,7 +254,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
         return currentCat ?: com.app.data.FinanceCategory(catName, "Category", "#607D8B", "BOTH")
     }
 
-    val topExpenseCategories = remember(periodTransactions, savingsWalletIds, totalExpense, categoriesList) {
+    val allExpenseCategories = remember(periodTransactions, savingsWalletIds, totalExpense, categoriesList) {
         periodTransactions
             .filter { tx ->
                 val catName = tx.categoryName.trim()
@@ -285,8 +276,13 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                 )
             }
             .sortedByDescending { it.amount }
-            .take(3)
     }
+
+    val topExpenseCategories = remember(allExpenseCategories) {
+        allExpenseCategories.take(3)
+    }
+
+    var showAllCategoriesSheet by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -623,7 +619,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Danh mục chi tiêu nhiều nhất", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                Text("Xem tất cả", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), modifier = Modifier.clickable { })
+                Text("Xem tất cả", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), modifier = Modifier.clickable { showAllCategoriesSheet = true })
             }
 
             if (topExpenseCategories.isEmpty()) {
@@ -728,6 +724,123 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    if (showAllCategoriesSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showAllCategoriesSheet = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Danh mục chi tiêu",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = dateLabel,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { showAllCategoriesSheet = false }) {
+                        Icon(Icons.Default.Close, contentDescription = "Đóng")
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                if (allExpenseCategories.isEmpty()) {
+                    Text(
+                        text = "Không có dữ liệu chi tiêu trong khoảng thời gian này.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 24.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 450.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(allExpenseCategories) { cat ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFFEBEE)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = IconMapper.getIconByName(cat.iconName),
+                                        contentDescription = cat.name,
+                                        tint = Color(0xFFC62828),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = cat.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    LinearProgressIndicator(
+                                        progress = { cat.percentage / 100f },
+                                        color = Color(0xFFFF7043),
+                                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = FormatHelper.formatVND(cat.amount),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${cat.percentage.toInt()}%",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFC62828)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
