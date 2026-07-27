@@ -39,7 +39,8 @@ fun AddWalletSheet(
 ) {
     val focusManager = LocalFocusManager.current
     var walletName by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(initialType) }
+    var walletNameError by remember { mutableStateOf<String?>(null) }
+    var selectedType by remember { mutableStateOf(if (initialType == "SAVINGS") "CASH" else initialType) }
     var startingBalanceStr by remember { mutableStateOf("") }
 
     val colors = listOf(
@@ -51,14 +52,12 @@ fun AddWalletSheet(
     val bankIcons = listOf("AccountBalance", "Business", "Domain", "CurrencyExchange", "AssuredWorkload", "SwapHoriz", "CorporateFare", "AccountBalanceWallet")
     val cashIcons = listOf("Payments", "AccountBalanceWallet", "Money", "AttachMoney", "Wallet", "PriceCheck", "LocalAtm", "PointOfSale")
     val walletIcons = listOf("PhonelinkRing", "Contactless", "QrCode", "PhoneAndroid", "Security", "TapAndPlay", "Nfc", "MobileScreenShare")
-    val savingsIcons = listOf("Savings", "Inventory", "CurrencyBitcoin", "MonetizationOn", "Star", "WorkspacePremium", "Redeem", "CardGiftcard")
     val creditIcons = listOf("CreditCard", "CreditScore", "Payment", "Receipt")
 
     val icons = when (selectedType) {
         "BANK" -> bankIcons
         "CASH" -> cashIcons
         "WALLET" -> walletIcons
-        "SAVINGS" -> savingsIcons
         "CREDIT" -> creditIcons
         else -> cashIcons
     }
@@ -86,7 +85,7 @@ fun AddWalletSheet(
                 }
                 .padding(horizontal = 16.dp, vertical = 4.dp)
         ) {
-            // Header: Title & standard close X icon button (exact system format)
+            // Header: Title & standard close X icon button (system format)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -120,37 +119,48 @@ fun AddWalletSheet(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Tên ví / Tài khoản Input
+                // 1. Tên ví / Tài khoản Input with inline error validation
                 OutlinedTextField(
                     value = walletName,
-                    onValueChange = { walletName = it },
-                    placeholder = { Text("Tên ví / Tài khoản", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
+                    onValueChange = {
+                        walletName = it
+                        if (it.isNotBlank()) walletNameError = null
+                    },
+                    placeholder = { Text("Tên ví / Tài khoản (*)", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
                     leadingIcon = {
                         Box(
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                                .background(
+                                    if (walletNameError != null) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                    else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.AccountBalanceWallet,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = if (walletNameError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                     },
+                    isError = walletNameError != null,
+                    supportingText = if (walletNameError != null) {
+                        { Text(text = walletNameError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    } else null,
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF5C54E5),
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                        errorBorderColor = MaterialTheme.colorScheme.error
                     ),
                     modifier = Modifier.fillMaxWidth().testTag("new_wallet_name_input")
                 )
 
-                // 2. LOẠI VÍ Section
+                // 2. LOẠI VÍ Section (Daily Wallets Only)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "LOẠI VÍ",
@@ -164,130 +174,68 @@ fun AddWalletSheet(
                         Triple("CASH", "Tiền mặt", Icons.Default.Payments to Color(0xFF5C54E5)),
                         Triple("BANK", "Ngân hàng", Icons.Default.AccountBalance to Color(0xFF34C759)),
                         Triple("WALLET", "Ví điện tử", Icons.Default.AccountBalanceWallet to Color(0xFF30B0C7)),
-                        Triple("SAVINGS", "Tiết kiệm", Icons.Default.Savings to Color(0xFFFF9500)),
                         Triple("CREDIT", "Thẻ tín dụng", Icons.Default.CreditCard to Color(0xFFFF2D55))
                     )
 
-                    val row1 = typeOptions.take(3)
-                    val row2 = typeOptions.drop(3)
+                    val rows = typeOptions.chunked(2)
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        row1.forEach { (typeKey, label, iconColorPair) ->
-                            val isSelected = selectedType == typeKey
-                            val (iconVec, iconColor) = iconColorPair
-                            Surface(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { selectedType = typeKey },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) Color(0xFF5C54E5).copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                                border = if (isSelected) BorderStroke(1.5.dp, Color(0xFF5C54E5)) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
-                                    contentAlignment = Alignment.Center
+                    rows.forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowItems.forEach { (typeKey, label, iconColorPair) ->
+                                val isSelected = selectedType == typeKey
+                                val (iconVec, iconColor) = iconColorPair
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(52.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { selectedType = typeKey },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) Color(0xFF5C54E5).copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                    border = if (isSelected) BorderStroke(1.5.dp, Color(0xFF5C54E5)) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    Box(
+                                        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = iconVec,
-                                            contentDescription = label,
-                                            tint = if (isSelected) Color(0xFF5C54E5) else iconColor,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Text(
-                                            text = label,
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) Color(0xFF5C54E5) else MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1
-                                        )
-                                    }
-                                    if (isSelected) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(2.dp)
-                                                .size(14.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF5C54E5)),
-                                            contentAlignment = Alignment.Center
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(10.dp)
+                                                imageVector = iconVec,
+                                                contentDescription = label,
+                                                tint = if (isSelected) Color(0xFF5C54E5) else iconColor,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Text(
+                                                text = label,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) Color(0xFF5C54E5) else MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1
                                             )
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        row2.forEach { (typeKey, label, iconColorPair) ->
-                            val isSelected = selectedType == typeKey
-                            val (iconVec, iconColor) = iconColorPair
-                            Surface(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { selectedType = typeKey },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) Color(0xFF5C54E5).copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
-                                border = if (isSelected) BorderStroke(1.5.dp, Color(0xFF5C54E5)) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = iconVec,
-                                            contentDescription = label,
-                                            tint = if (isSelected) Color(0xFF5C54E5) else iconColor,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Text(
-                                            text = label,
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) Color(0xFF5C54E5) else MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1
-                                        )
-                                    }
-                                    if (isSelected) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(2.dp)
-                                                .size(14.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF5C54E5)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(10.dp)
-                                            )
+                                        if (isSelected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(3.dp)
+                                                    .size(14.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF5C54E5)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(10.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -469,7 +417,9 @@ fun AddWalletSheet(
 
                 Button(
                     onClick = {
-                        if (walletName.isNotBlank()) {
+                        if (walletName.isBlank()) {
+                            walletNameError = "Vui lòng nhập tên ví / tài khoản!"
+                        } else {
                             val bal = startingBalanceStr.toDoubleOrNull() ?: 0.0
                             onAddWallet(walletName, selectedType, bal, selectedColor, selectedIcon)
                             onDismiss()

@@ -14,3 +14,9 @@ Các quy tắc dưới đây chỉ có tác dụng trong phạm vi dự án này
 
 ## 3. Quy tắc Component cụ thể
 - **ModalBottomSheet**: Khi sử dụng `ModalBottomSheet`, luôn khởi tạo state với tham số `skipPartiallyExpanded = true` (ví dụ: `rememberModalBottomSheetState(skipPartiallyExpanded = true)`) để BottomSheet mở rộng hoàn toàn, tránh tình trạng bị kẹt ở giữa màn hình gây khó chịu cho người dùng.
+
+## 4. Quy tắc Validation Form (Form Validation Rules)
+- Khi thực hiện kiểm tra tính hợp lệ (validation) trên các ô nhập liệu (Input Form):
+  - **Hiển thị lỗi trực tiếp**: Không âm thầm bỏ qua hay chỉ thông báo chung chung. Bắt buộc hiển thị thông báo lỗi rõ ràng ngay bên dưới ô input bị lỗi (`supportingText = { Text("...", color = MaterialTheme.colorScheme.error) }`).
+  - **Nổi bật ô input lỗi**: Đánh dấu ô input sai bằng thuộc tính `isError = true` (viền đỏ nổi bật) để người dùng dễ dàng nhận biết và chỉnh sửa ngay lập tức.
+

@@ -284,20 +284,20 @@ fun SavingsVaultScreen(
 
     // Dialog Thêm sổ tiết kiệm mới
     if (showQuickAddWallet) {
-        com.app.ui.components.AddWalletSheet(
+        com.app.ui.components.AddSavingsVaultSheet(
             onDismiss = { showQuickAddWallet = false },
-            onAddWallet = { name, type, startingBalance, color, icon ->
+            onAddSavingsVault = { name, initialBalance, targetAmount, color, icon ->
                 viewModel.addWallet(
                     name = name,
-                    type = type,
-                    initialBalance = startingBalance,
+                    type = "SAVINGS",
+                    initialBalance = initialBalance,
                     colorHex = color,
-                    iconName = icon
+                    iconName = icon,
+                    targetAmount = targetAmount
                 )
                 viewModel.showSuccessNotification("Thêm sổ tiết kiệm thành công!")
                 showQuickAddWallet = false
-            },
-            initialType = "SAVINGS"
+            }
         )
     }
 
