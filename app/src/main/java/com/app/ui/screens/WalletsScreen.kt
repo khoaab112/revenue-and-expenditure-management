@@ -298,7 +298,7 @@ fun WalletsScreen(
         // Add Wallet Dialog
         val context = androidx.compose.ui.platform.LocalContext.current
         if (showAddDialog) {
-            AddWalletDialog(
+            com.app.ui.components.AddWalletSheet(
                 onDismiss = { showAddDialog = false },
                 onAddWallet = { name, type, startingBalance, color, icon ->
                     viewModel.addWallet(name, type, startingBalance, color, icon)
