@@ -40,6 +40,14 @@ import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.StripedProgressIndicator
 import java.util.Calendar
+import android.os.Build.VERSION.SDK_INT
+import androidx.compose.ui.platform.LocalContext
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import com.app.R
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +71,18 @@ fun DashboardScreen(
     val budgets by viewModel.allBudgets.collectAsState()
     val events by viewModel.allEvents.collectAsState()
     var eventToView by remember { mutableStateOf<com.app.data.Event?>(null) }
+    val context = LocalContext.current
+    val bellGifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                if (SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
 
     val currentRealMonthStr = remember {
         Calendar.getInstance().let { cal ->
@@ -313,11 +333,13 @@ fun DashboardScreen(
                             .background(Color(0xFFFFE0B2), shape = CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.NotificationsActive,
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(R.drawable.notification_bell)
+                                .build(),
+                            imageLoader = bellGifImageLoader,
                             contentDescription = "Pending Notifications",
-                            tint = Color(0xFFE65100),
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
@@ -461,11 +483,13 @@ fun DashboardScreen(
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Notifications,
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context)
+                                                .data(R.drawable.notification_bell)
+                                                .build(),
+                                            imageLoader = bellGifImageLoader,
                                             contentDescription = null,
-                                            tint = Color(0xFFE53935),
-                                            modifier = Modifier.size(14.dp)
+                                            modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
@@ -668,158 +692,20 @@ fun DashboardScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    activeOrUpcomingEvents.take(2).forEach { event ->
+                    activeOrUpcomingEvents.take(2).forEachIndexed { eventIdx, event ->
                         val eventTransactions = viewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
                         val spentAmount = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
                         val limitAmount = event.limitAmount ?: 0.0
-                        val progress = if (limitAmount > 0.0) {
-                            (spentAmount / limitAmount).toFloat().coerceIn(0f, 1f)
-                        } else 0.5f
 
-                        val isOngoing = nowMs >= event.startDate && (event.endDate == null || nowMs <= event.endDate + 86400000L - 1)
-                        val daysText = if (isOngoing) {
-                            if (event.endDate != null) {
-                                val daysLeft = Math.max(1, ((event.endDate - nowMs) / 86400000L).toInt())
-                                "Còn $daysLeft ngày"
-                            } else "Đang diễn ra"
-                        } else {
-                            val daysStart = Math.max(1, ((event.startDate - nowMs) / 86400000L).toInt())
-                            "Sắp diễn ra sau $daysStart ngày"
-                        }
-
-                        val baseEventColor = try {
-                            FormatHelper.parseColor(event.colorHex)
-                        } catch (e: Exception) {
-                            if (isOngoing) Color(0xFF4CAF50) else Color(0xFFF57C00)
-                        }
-
-                        val cardBg = baseEventColor.copy(alpha = 0.08f)
-                        val iconBg = baseEventColor.copy(alpha = 0.16f)
-                        val primaryColor = baseEventColor
-                        val trackBg = baseEventColor.copy(alpha = 0.25f)
-
-                        val pillBg = Color(0xFFFFF3E0)
-                        val pillIconColor = Color(0xFFEF6C00)
-                        val pillTextColor = Color(0xFFEF6C00)
-                        val pillText = if (isOngoing) daysText else "Chuẩn bị bắt đầu"
-
-                        Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { eventToView = event }
-                                .testTag("dashboard_event_card_${event.id}"),
-                            colors = CardDefaults.cardColors(containerColor = cardBg),
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(1.dp, iconBg)
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(42.dp)
-                                            .background(iconBg, RoundedCornerShape(10.dp)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Event,
-                                            contentDescription = null,
-                                            tint = primaryColor,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            event.name,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = primaryColor
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        // Status Pill Badge (with calendar icon)
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = pillBg
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Event,
-                                                    contentDescription = null,
-                                                    tint = pillIconColor,
-                                                    modifier = Modifier.size(12.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(
-                                                    text = pillText,
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = pillTextColor
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                // Chi tiêu / Hạn mức
-                                if (limitAmount > 0.0) {
-                                    Text(
-                                        text = buildAnnotatedString {
-                                            withStyle(
-                                                style = SpanStyle(
-                                                    color = Color(0xFF616161)
-                                                )
-                                            ) {
-                                                append(FormatHelper.formatVND(spentAmount))
-                                            }
-                                            withStyle(
-                                                style = SpanStyle(
-                                                    color = Color(0xFF9E9E9E)
-                                                )
-                                            ) {
-                                                append(" / ${FormatHelper.formatVND(limitAmount)}")
-                                            }
-                                        },
-                                        fontSize = 12.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                } else {
-                                    Text(
-                                        text = FormatHelper.formatVND(spentAmount),
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF616161),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                // Clean Progress Bar (Custom Box layout: NO DOT AT END!)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(trackBg)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxHeight()
-                                            .fillMaxWidth(progress.coerceIn(0f, 1f))
-                                            .clip(RoundedCornerShape(3.dp))
-                                            .background(primaryColor)
-                                    )
-                                }
-                            }
-                        }
+                        DashboardEventCard(
+                            eventIdx = eventIdx,
+                            event = event,
+                            spentAmount = spentAmount,
+                            limitAmount = limitAmount,
+                            nowMs = nowMs,
+                            onClick = { eventToView = event },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -1146,40 +1032,17 @@ fun DashboardScreen(
                 if (currentMonthBudgets.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         currentMonthBudgets.forEachIndexed { budgetIdx, budget ->
-                            val progress = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat().coerceIn(0f, 1f) else 0f
                             val isExceeded = budget.spentAmount >= budget.limitAmount
                             val progressColor = if (isExceeded) MaterialTheme.colorScheme.error else FormatHelper.parseColor(budget.categoryColor)
 
-                            Column(
-                                modifier = Modifier.staggeredEntrance(budgetIdx)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = budget.categoryName,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "${FormatHelper.formatVND(budget.spentAmount)} / ${FormatHelper.formatVND(budget.limitAmount)}",
-                                        fontSize = 11.sp,
-                                        color = if (isExceeded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                StripedProgressIndicator(
-                                    progress = progress,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
-                                    color = progressColor,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            }
+                            DashboardBudgetItem(
+                                budgetIdx = budgetIdx,
+                                categoryName = budget.categoryName,
+                                spentAmount = budget.spentAmount,
+                                limitAmount = budget.limitAmount,
+                                progressColor = progressColor,
+                                isExceeded = isExceeded
+                            )
                         }
                     }
                 }
@@ -1289,10 +1152,38 @@ fun DashboardScreen(
 
                         // Dual Bar visualization
                         val maxTotal = Math.max(thisWeekTotal, lastWeekTotal)
-                        val thisWeekRatio = if (maxTotal > 0) (thisWeekTotal / maxTotal).toFloat() else 0f
-                        val lastWeekRatio = if (maxTotal > 0) (lastWeekTotal / maxTotal).toFloat() else 0f
+                        val targetThisWeekRatio = if (maxTotal > 0) (thisWeekTotal / maxTotal).toFloat() else 0f
+                        val targetLastWeekRatio = if (maxTotal > 0) (lastWeekTotal / maxTotal).toFloat() else 0f
 
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        var isTrendVisible by remember { mutableStateOf(false) }
+                        var skipTrendAnimation by remember { mutableStateOf(false) }
+                        val animLastWeekRatio by androidx.compose.animation.core.animateFloatAsState(
+                            targetValue = if (isTrendVisible) targetLastWeekRatio.coerceIn(0.01f, 1f) else 0f,
+                            animationSpec = if (skipTrendAnimation) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(750, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                            label = "animLastWeekRatio"
+                        )
+                        val animThisWeekRatio by androidx.compose.animation.core.animateFloatAsState(
+                            targetValue = if (isTrendVisible) targetThisWeekRatio.coerceIn(0.01f, 1f) else 0f,
+                            animationSpec = if (skipTrendAnimation) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(750, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                            label = "animThisWeekRatio"
+                        )
+
+                        val densityTrend = androidx.compose.ui.platform.LocalDensity.current
+                        val screenHeightPxTrend = with(densityTrend) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
+                        Column(
+                            modifier = Modifier
+                                .onGloballyPositioned { coordinates ->
+                                    if (!isTrendVisible) {
+                                        val y = coordinates.positionInRoot().y
+                                        if (y < screenHeightPxTrend - 20f) {
+                                            if (y <= 0) skipTrendAnimation = true
+                                            isTrendVisible = true
+                                        }
+                                    }
+                                },
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             // Last week
                             Column {
                                 Row(
@@ -1320,7 +1211,7 @@ fun DashboardScreen(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxWidth(lastWeekRatio.coerceIn(0.01f, 1f))
+                                            .fillMaxWidth(animLastWeekRatio.coerceIn(0.001f, 1f))
                                             .fillMaxHeight()
                                             .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f), CircleShape)
                                     )
@@ -1354,7 +1245,7 @@ fun DashboardScreen(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxWidth(thisWeekRatio.coerceIn(0.01f, 1f))
+                                            .fillMaxWidth(animThisWeekRatio.coerceIn(0.001f, 1f))
                                             .fillMaxHeight()
                                             .background(
                                                 if (thisWeekTotal > lastWeekTotal) MaterialTheme.colorScheme.error
@@ -1929,12 +1820,275 @@ private fun FormattedVndText(
 }
 
 @Composable
+private fun DashboardEventCard(
+    eventIdx: Int,
+    event: com.app.data.Event,
+    spentAmount: Double,
+    limitAmount: Double,
+    nowMs: Long,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isVisibleOnScreen by remember { mutableStateOf(false) }
+    var skipAnimation by remember { mutableStateOf(false) }
+
+    val entranceProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVisibleOnScreen) 1f else 0f,
+        animationSpec = if (skipAnimation) androidx.compose.animation.core.snap()
+        else androidx.compose.animation.core.tween(
+            durationMillis = 480,
+            delayMillis = (eventIdx * 80).coerceAtMost(200),
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        ),
+        label = "event_entrance_$eventIdx"
+    )
+
+    val targetProgress = if (limitAmount > 0.0) {
+        (spentAmount / limitAmount).toFloat().coerceIn(0f, 1f)
+    } else 0.5f
+
+    val animProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVisibleOnScreen) targetProgress else 0f,
+        animationSpec = if (skipAnimation) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(750, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "event_progress_$eventIdx"
+    )
+
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val offsetYPx = remember(density) { with(density) { 35.dp.toPx() } }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
+    val isOngoing = nowMs >= event.startDate && (event.endDate == null || nowMs <= event.endDate + 86400000L - 1)
+    val daysText = if (isOngoing) {
+        if (event.endDate != null) {
+            val daysLeft = Math.max(1, ((event.endDate - nowMs) / 86400000L).toInt())
+            "Còn $daysLeft ngày"
+        } else "Đang diễn ra"
+    } else {
+        val daysStart = Math.max(1, ((event.startDate - nowMs) / 86400000L).toInt())
+        "Sắp diễn ra sau $daysStart ngày"
+    }
+
+    val baseEventColor = try {
+        FormatHelper.parseColor(event.colorHex)
+    } catch (e: Exception) {
+        if (isOngoing) Color(0xFF4CAF50) else Color(0xFFF57C00)
+    }
+
+    val cardBg = baseEventColor.copy(alpha = 0.08f)
+    val iconBg = baseEventColor.copy(alpha = 0.16f)
+    val primaryColor = baseEventColor
+    val trackBg = baseEventColor.copy(alpha = 0.25f)
+
+    val pillBg = Color(0xFFFFF3E0)
+    val pillIconColor = Color(0xFFEF6C00)
+    val pillTextColor = Color(0xFFEF6C00)
+    val pillText = if (isOngoing) daysText else "Chuẩn bị bắt đầu"
+
+    Card(
+        modifier = modifier
+            .onGloballyPositioned { coordinates ->
+                if (!isVisibleOnScreen) {
+                    val y = coordinates.positionInRoot().y
+                    if (y < screenHeightPx - 20f) {
+                        if (y <= 0) skipAnimation = true
+                        isVisibleOnScreen = true
+                    }
+                }
+            }
+            .graphicsLayer {
+                alpha = entranceProgress
+                translationY = if (skipAnimation) 0f else (1f - entranceProgress) * offsetYPx
+            }
+            .clickable { onClick() }
+            .testTag("dashboard_event_card_${event.id}"),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, iconBg)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(iconBg, RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Event,
+                        contentDescription = null,
+                        tint = primaryColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        event.name,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = primaryColor
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = pillBg
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Event,
+                                contentDescription = null,
+                                tint = pillIconColor,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = pillText,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = pillTextColor
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (limitAmount > 0.0) {
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(style = SpanStyle(color = Color(0xFF616161))) {
+                            append(FormatHelper.formatVND(spentAmount))
+                        }
+                        withStyle(style = SpanStyle(color = Color(0xFF9E9E9E))) {
+                            append(" / ${FormatHelper.formatVND(limitAmount)}")
+                        }
+                    },
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                Text(
+                    text = FormatHelper.formatVND(spentAmount),
+                    fontSize = 12.sp,
+                    color = Color(0xFF616161),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(trackBg)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(animProgress.coerceIn(0.001f, 1f))
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(primaryColor)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardBudgetItem(
+    budgetIdx: Int,
+    categoryName: String,
+    spentAmount: Double,
+    limitAmount: Double,
+    progressColor: Color,
+    isExceeded: Boolean
+) {
+    var isVisibleOnScreen by remember { mutableStateOf(false) }
+    var skipAnimation by remember { mutableStateOf(false) }
+
+    val entranceProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVisibleOnScreen) 1f else 0f,
+        animationSpec = if (skipAnimation) androidx.compose.animation.core.snap()
+        else androidx.compose.animation.core.tween(
+            durationMillis = 480,
+            delayMillis = (budgetIdx * 60).coerceAtMost(180),
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        ),
+        label = "budget_entrance_$budgetIdx"
+    )
+
+    val targetBarProgress = if (limitAmount > 0) (spentAmount / limitAmount).toFloat().coerceIn(0f, 1f) else 0f
+    val barProgress = if (isVisibleOnScreen) targetBarProgress else 0f
+
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val offsetYPx = remember(density) { with(density) { 35.dp.toPx() } }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                if (!isVisibleOnScreen) {
+                    val y = coordinates.positionInRoot().y
+                    if (y < screenHeightPx - 20f) {
+                        if (y <= 0) skipAnimation = true
+                        isVisibleOnScreen = true
+                    }
+                }
+            }
+            .graphicsLayer {
+                alpha = entranceProgress
+                translationY = if (skipAnimation) 0f else (1f - entranceProgress) * offsetYPx
+            }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = categoryName,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "${FormatHelper.formatVND(spentAmount)} / ${FormatHelper.formatVND(limitAmount)}",
+                fontSize = 11.sp,
+                color = if (isExceeded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        StripedProgressIndicator(
+            progress = barProgress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp)),
+            color = progressColor,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    }
+}
+
+@Composable
 private fun Modifier.staggeredEntrance(index: Int): Modifier {
     var isVisibleOnScreen by remember { mutableStateOf(false) }
+    var skipAnimation by remember { mutableStateOf(false) }
 
     val progress by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isVisibleOnScreen) 1f else 0f,
-        animationSpec = androidx.compose.animation.core.tween(
+        animationSpec = if (skipAnimation) androidx.compose.animation.core.snap()
+        else androidx.compose.animation.core.tween(
             durationMillis = 380,
             delayMillis = (index * 45).coerceAtMost(130),
             easing = androidx.compose.animation.core.FastOutSlowInEasing
@@ -1943,14 +2097,15 @@ private fun Modifier.staggeredEntrance(index: Int): Modifier {
     )
 
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val offsetYPx = remember(density) { with(density) { -20.dp.toPx() } }
+    val offsetYPx = remember(density) { with(density) { 35.dp.toPx() } }
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
     return this
         .onGloballyPositioned { coordinates ->
             if (!isVisibleOnScreen) {
                 val y = coordinates.positionInRoot().y
-                if (y > 0 && y < screenHeightPx - 20f) {
+                if (y < screenHeightPx - 20f) {
+                    if (y <= 0) skipAnimation = true
                     isVisibleOnScreen = true
                 }
             }
@@ -1958,7 +2113,7 @@ private fun Modifier.staggeredEntrance(index: Int): Modifier {
         .fillMaxWidth()
         .graphicsLayer {
             alpha = progress
-            translationY = (1f - progress) * offsetYPx
+            translationY = if (skipAnimation) 0f else (1f - progress) * offsetYPx
         }
 }
 

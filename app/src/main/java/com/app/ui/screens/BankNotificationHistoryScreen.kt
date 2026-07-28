@@ -39,6 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.ui.text.style.TextOverflow
+import android.os.Build.VERSION.SDK_INT
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import com.app.R
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.NotificationLog
@@ -395,11 +402,25 @@ fun BankNotificationHistoryScreen(
                                     .padding(vertical = 24.dp, horizontal = 16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.FactCheck,
+                                val context = LocalContext.current
+                                val imageLoader = remember(context) {
+                                    ImageLoader.Builder(context)
+                                        .components {
+                                            if (SDK_INT >= 28) {
+                                                add(ImageDecoderDecoder.Factory())
+                                            } else {
+                                                add(GifDecoder.Factory())
+                                            }
+                                        }
+                                        .build()
+                                }
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(R.drawable.cat_pookie)
+                                        .build(),
+                                    imageLoader = imageLoader,
                                     contentDescription = "All done",
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(44.dp)
+                                    modifier = Modifier.size(100.dp)
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
@@ -457,7 +478,7 @@ fun BankNotificationHistoryScreen(
                         }
                     }
 
-                    items(pendingGroups, key = { it.log1.timestamp }) { group ->
+                    items(pendingGroups, key = { "pending_" + it.log1.timestamp + "_" + it.log1.text.hashCode() }) { group ->
                         if (group.type == "TRANSFER_PAIR") {
                             PendingTransferPairItem(
                                 logExpense = group.log1,

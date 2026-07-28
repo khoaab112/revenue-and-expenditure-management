@@ -34,6 +34,13 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalFocusManager
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
@@ -845,19 +852,33 @@ fun MainContent(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = when (notification.type) {
-                                                NotificationType.SUCCESS -> Icons.Default.CheckCircle
-                                                NotificationType.WARNING -> Icons.Default.Warning
-                                                NotificationType.ERROR -> Icons.Default.Error
-                                            },
-                                            contentDescription = null,
-                                            tint = when (notification.type) {
-                                                NotificationType.SUCCESS -> Color(0xFF2E7D32)
-                                                NotificationType.WARNING -> Color(0xFFF57F17)
-                                                NotificationType.ERROR -> Color(0xFFC62828)
-                                            },
-                                            modifier = Modifier.size(24.dp)
+                                        val context = LocalContext.current
+                                        val gifRes = when (notification.type) {
+                                            NotificationType.SUCCESS -> R.drawable.success
+                                            NotificationType.WARNING -> R.drawable.warning
+                                            NotificationType.ERROR -> R.drawable.error
+                                        }
+                                        val imageLoader = remember(context) {
+                                            ImageLoader.Builder(context)
+                                                .components {
+                                                    if (Build.VERSION.SDK_INT >= 28) {
+                                                        add(ImageDecoderDecoder.Factory())
+                                                    } else {
+                                                        add(GifDecoder.Factory())
+                                                    }
+                                                }
+                                                .build()
+                                        }
+                                        val painter = rememberAsyncImagePainter(
+                                            model = ImageRequest.Builder(context)
+                                                .data(gifRes)
+                                                .build(),
+                                            imageLoader = imageLoader
+                                        )
+                                        Image(
+                                            painter = painter,
+                                            contentDescription = notification.type.name,
+                                            modifier = Modifier.size(36.dp)
                                         )
                                         
                                         Column(modifier = Modifier.weight(1f)) {
@@ -1112,7 +1133,33 @@ fun NavHostContainer(
             )
         }
 
-        composable(Routes.EVENTS) {
+        composable(
+            route = Routes.EVENTS,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(320)
+                ) + fadeIn(animationSpec = tween(320))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(320)
+                ) + fadeOut(animationSpec = tween(320))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(320)
+                ) + fadeIn(animationSpec = tween(320))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(320)
+                ) + fadeOut(animationSpec = tween(320))
+            }
+        ) {
             com.app.ui.components.EventManagementScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }

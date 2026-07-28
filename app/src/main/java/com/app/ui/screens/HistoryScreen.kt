@@ -58,6 +58,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import java.util.Calendar
 import java.util.Locale
 import java.text.SimpleDateFormat
+import androidx.compose.foundation.Image
+import androidx.compose.ui.platform.LocalContext
+import com.app.R
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1012,11 +1015,28 @@ fun HistoryScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Inbox,
-                            contentDescription = "No trans found",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(64.dp)
+                        val context = LocalContext.current
+                        val imageLoader = remember(context) {
+                            coil.ImageLoader.Builder(context)
+                                .components {
+                                    if (android.os.Build.VERSION.SDK_INT >= 28) {
+                                        add(coil.decode.ImageDecoderDecoder.Factory())
+                                    } else {
+                                        add(coil.decode.GifDecoder.Factory())
+                                    }
+                                }
+                                .build()
+                        }
+                        val painter = coil.compose.rememberAsyncImagePainter(
+                            model = coil.request.ImageRequest.Builder(context)
+                                .data(R.drawable.empty_state)
+                                .build(),
+                            imageLoader = imageLoader
+                        )
+                        Image(
+                            painter = painter,
+                            contentDescription = "No transactions",
+                            modifier = Modifier.size(150.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
@@ -1110,7 +1130,7 @@ fun HistoryScreen(
                             )
                         }
 
-                        items(txList, key = { it.id }) { tx ->
+                        items(txList, key = { tx -> "${tx.id}_${tx.timestamp}_${tx.hashCode()}" }) { tx ->
                             RemovableTransactionItem(
                                 tx = tx,
                                 onDelete = { transactionToDelete = tx },
@@ -2350,22 +2370,27 @@ fun DayTransactionsInline(
                         }
                     }
                 }
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                    modifier = Modifier.padding(top = 4.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (totalExpense > 0.0) {
                         Text(
                             text = "-${FormatHelper.formatVND(totalExpense)}",
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFF44336)
                         )
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
                     }
                     if (totalIncome > 0.0) {
                         Text(
                             text = "+${FormatHelper.formatVND(totalIncome)}",
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF4CAF50)
                         )
@@ -2380,14 +2405,40 @@ fun DayTransactionsInline(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 24.dp),
+                    .padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Không có giao dịch nào trong ngày này.",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val context = LocalContext.current
+                    val imageLoader = remember(context) {
+                        coil.ImageLoader.Builder(context)
+                            .components {
+                                if (android.os.Build.VERSION.SDK_INT >= 28) {
+                                    add(coil.decode.ImageDecoderDecoder.Factory())
+                                } else {
+                                    add(coil.decode.GifDecoder.Factory())
+                                }
+                            }
+                            .build()
+                    }
+                    val painter = coil.compose.rememberAsyncImagePainter(
+                        model = coil.request.ImageRequest.Builder(context)
+                            .data(R.drawable.empty_state)
+                            .build(),
+                        imageLoader = imageLoader
+                    )
+                    Image(
+                        painter = painter,
+                        contentDescription = "No transactions today",
+                        modifier = Modifier.size(110.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Không có giao dịch nào trong ngày này.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         } else {
             Column(

@@ -221,12 +221,18 @@ fun StripedProgressIndicator(
     color: Color = Color(0xFF5CAE34),
     trackColor: Color = Color(0xFFF3F4F6)
 ) {
+    val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 850, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "debtProgressAnim"
+    )
+
     androidx.compose.foundation.Canvas(modifier = modifier.clip(RoundedCornerShape(50))) {
         // Draw track
         drawRect(color = trackColor, size = size)
         
         // Draw progress
-        val progressWidth = size.width * progress.coerceIn(0f, 1f)
+        val progressWidth = size.width * animatedProgress
         drawRect(
             color = color,
             size = size.copy(width = progressWidth)

@@ -23,20 +23,27 @@ fun StripedProgressIndicator(
     trackColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition()
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+        label = "animatedProgress"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "stripedTransition")
     val offset by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(1000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
-        )
+        ),
+        label = "stripedOffset"
     )
 
     Canvas(modifier = modifier.clipToBounds()) {
         val width = size.width
         val height = size.height
-        val progressWidth = width * progress
+        val progressWidth = width * animatedProgress
 
         // Draw track
         drawRoundRect(
@@ -46,7 +53,7 @@ fun StripedProgressIndicator(
         )
 
         // Draw progress
-        if (progress > 0) {
+        if (animatedProgress > 0f) {
             clipPath(
                 Path().apply {
                     addRoundRect(
