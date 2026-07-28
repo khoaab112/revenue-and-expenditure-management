@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -33,6 +34,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.res.painterResource
+import android.os.Build
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import androidx.compose.ui.layout.ContentScale
 import com.app.R
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
@@ -50,6 +57,17 @@ fun SavingsVaultScreen(
 ) {
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    val saveGifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
     val dailyWallets by viewModel.dailyWallets.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
     val savingsTransactions by viewModel.savingsTransactions.collectAsState()
@@ -411,17 +429,34 @@ fun SavingsVaultScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(20.dp))
                             .background(
                                 brush = Brush.horizontalGradient(
                                     colors = listOf(Color(0xFF7C69EF), Color(0xFFA29BFE))
-                                ),
-                                shape = RoundedCornerShape(20.dp)
+                                )
                             )
-                            .padding(20.dp)
                     ) {
+                        // Background GIF Illustration overlay (fits card height via matchParentSize, scaled 1.3x and shifted left towards text)
+                        Box(
+                            modifier = Modifier.matchParentSize(),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            AsyncImage(
+                                model = R.drawable.save,
+                                contentDescription = "Save Gif",
+                                imageLoader = saveGifImageLoader,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .scale(1.3f)
+                                    .offset(x = (-30).dp, y = 2.dp)
+                            )
+                        }
+
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(
@@ -475,21 +510,6 @@ fun SavingsVaultScreen(
                                         color = Color.White.copy(alpha = 0.8f)
                                     )
                                 }
-                            }
-
-                            // 3D Vault Illustration Box
-                            Box(
-                                modifier = Modifier
-                                    .size(60.dp)
-                                    .background(Color.White.copy(alpha = 0.18f), RoundedCornerShape(16.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_safe_square),
-                                    contentDescription = "Safe Vault",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
                             }
                         }
                     }
