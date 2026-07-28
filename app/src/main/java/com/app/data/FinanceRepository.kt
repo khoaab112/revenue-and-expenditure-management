@@ -306,7 +306,12 @@ class FinanceRepository(
         settingsList.forEach { settingsObj.put(it.key, it.value) }
         root.put("app_settings", settingsObj)
         
-        return root.toString()
+        val categoriesSetting = getSetting("custom_categories")?.value ?: ""
+        val notificationLogsSetting = getSetting("notification_logs")?.value ?: "[]"
+        root.put("customCategories", categoriesSetting)
+        root.put("notificationLogs", notificationLogsSetting)
+        
+        return root.toString(2)
     }
 
     // --- Savings Goals ---

@@ -16,6 +16,8 @@ object ExcelExportHelper {
     fun exportTransactionsToCsv(
         context: Context,
         transactions: List<Transaction>,
+        events: List<com.app.data.Event> = emptyList(),
+        debts: List<com.app.data.Debt> = emptyList(),
         onWarning: (String) -> Unit = {},
         onError: (String) -> Unit = {}
     ): Boolean {
@@ -44,6 +46,8 @@ object ExcelExportHelper {
                 "Số tiền (VND)",
                 "Danh mục chi tiêu",
                 "Ví/Tài khoản",
+                "Sự kiện",
+                "Khoản nợ/Cho vay",
                 "Ghi chú",
                 "Có lặp lại?",
                 "Chu kỳ lặp"
@@ -54,7 +58,11 @@ object ExcelExportHelper {
             
             for (tx in transactions) {
                 val dateStr = sdfDate.format(Date(tx.timestamp))
-                val typeStr = if (tx.type == "EXPENSE") "Chi tiêu" else "Thu nhập"
+                val typeStr = when (tx.type) {
+                    "EXPENSE" -> "Chi tiêu"
+                    "TRANSFER" -> "Chuyển tiền"
+                    else -> "Thu nhập"
+                }
                 val recurringStr = if (tx.isRecurring) "Có" else "Không"
                 val recurrencePeriodStr = when (tx.recurrencePeriod) {
                     "DAILY" -> "Hàng ngày"
@@ -62,6 +70,8 @@ object ExcelExportHelper {
                     "MONTHLY" -> "Hàng tháng"
                     else -> "Không"
                 }
+                val eventName = tx.eventId?.let { eId -> events.find { it.id == eId }?.name } ?: ""
+                val debtName = tx.debtId?.let { dId -> debts.find { it.id == dId }?.let { "${it.personName} (${if (it.type == "DEBT") "Nợ" else "Cho vay"})" } } ?: ""
 
                 val row = listOf(
                     tx.id.toString(),
@@ -70,6 +80,8 @@ object ExcelExportHelper {
                     tx.amount.toLong().toString(), // Keep as plain numeric string so Excel/Google Sheets formats/sums it easily
                     tx.categoryName,
                     tx.walletName,
+                    eventName,
+                    debtName,
                     tx.note,
                     recurringStr,
                     recurrencePeriodStr

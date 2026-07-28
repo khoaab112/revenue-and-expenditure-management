@@ -57,6 +57,7 @@ fun DashboardScreen(
     val savingsWallets by viewModel.savingsWallets.collectAsState()
     val budgets by viewModel.allBudgets.collectAsState()
     val events by viewModel.allEvents.collectAsState()
+    val debts by viewModel.allDebts.collectAsState()
     var eventToView by remember { mutableStateOf<com.app.data.Event?>(null) }
 
     val currentRealMonthStr = remember {
@@ -1347,7 +1348,7 @@ fun DashboardScreen(
                 }
 
                 // Insights section list
-                val aiAdvisorData = remember(transactions, currentMonthTransactions, wallets, savingsWallets, currentMonthBudgets, savingsGoals, totalIncome, totalExpense) {
+                val aiAdvisorData = remember(transactions, currentMonthTransactions, wallets, savingsWallets, currentMonthBudgets, savingsGoals, events, debts, totalIncome, totalExpense) {
                     val riskAlerts = mutableListOf<SmartSpendingInsight>()
                     val recommendations = mutableListOf<SmartSpendingInsight>()
                     val evaluations = mutableListOf<SmartSpendingInsight>()
@@ -1359,52 +1360,54 @@ fun DashboardScreen(
                     val daysElapsed = cal.get(Calendar.DAY_OF_MONTH)
                     val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
                     val remainingDays = maxDays - daysElapsed + 1
-                    
                     val daysElapsedSafe = if (daysElapsed > 0) daysElapsed.toDouble() else 1.0
 
-                    // --- 1. RISK ALERTS (Cảnh báo rủi ro) ---
-                    val nonCreditNonSavingsBalance = wallets.filter { it.type != "CREDIT" && it.type != "SAVINGS" }.sumOf { it.balance }
-                    val monthlyExpense = currentMonthTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-                    val dailyExpenseRate = monthlyExpense / daysElapsedSafe
-                    
-                    if (dailyExpenseRate > 0 && nonCreditNonSavingsBalance > 0) {
-                        val daysToDry = nonCreditNonSavingsBalance / dailyExpenseRate
-                        if (daysToDry <= 7) {
-                            riskAlerts.add(
-                                SmartSpendingInsight(
-                                    title = "Tài khoản sắp cạn tiền!",
-                                    description = "Với tốc độ chi tiêu trung bình ${FormatHelper.formatVND(dailyExpenseRate)}/ngày, tài khoản khả dụng của bạn có thể bị cạn kiệt trong ${daysToDry.toInt()} ngày tới.",
-                                    icon = Icons.Default.Warning,
-                                    tint = Color(0xFFF44336)
-                                )
+                    val availableCash = wallets.filter { it.type != "CREDIT" && it.type != "SAVINGS" && !it.isClosed }.sumOf { it.balance }
+
+                    // --- 1. RISK ALERTS (Tầng 1: Chuẩn đoán Rủi ro) ---
+                    // Rủi ro 1: Thiếu hụt dòng tiền trả nợ gối đầu trong 7 ngày tới
+                    val activeDebtsDue7Days = debts.filter { 
+                        it.type == "DEBT" && it.status == "ACTIVE" && it.dueDate != null && it.dueDate!! >= now && (it.dueDate!! - now) <= 7 * oneDay 
+                    }
+                    val totalDebtDue7Days = activeDebtsDue7Days.sumOf { it.remainingAmount }
+                    if (totalDebtDue7Days > 0 && availableCash < totalDebtDue7Days) {
+                        riskAlerts.add(
+                            SmartSpendingInsight(
+                                title = "🚨 Nguy cơ thiếu tiền trả nợ!",
+                                description = "Trong 7 ngày tới có khoản nợ ${FormatHelper.formatVND(totalDebtDue7Days)} sắp đến hạn, nhưng tiền khả dụng chỉ còn ${FormatHelper.formatVND(availableCash)}. Hãy chuẩn bị nguồn tiền!",
+                                icon = Icons.Default.Warning,
+                                tint = Color(0xFFD32F2F)
                             )
-                        }
+                        )
                     }
 
-                    currentMonthBudgets.forEach { bug ->
-                        val spent = bug.spentAmount
-                        val limit = bug.limitAmount
-                        if (limit > 0) {
-                            val remaining = limit - spent
-                            val dailySpent = spent / daysElapsedSafe
-                            
-                            if (spent >= limit) {
-                                riskAlerts.add(
-                                    SmartSpendingInsight(
-                                        title = "Đã vượt hạn mức '${bug.categoryName}'",
-                                        description = "Bạn đã chi tiêu ${FormatHelper.formatVND(spent)}, vượt ${FormatHelper.formatVND(spent - limit)} so với hạn mức ngân sách tháng.",
-                                        icon = Icons.Default.Report,
-                                        tint = Color(0xFFD32F2F)
-                                    )
+                    // Rủi ro 2: Sự kiện vượt ngân sách (Active Event Risk)
+                    val activeEvents = events.filter { 
+                        it.startDate <= now && (it.endDate == null || it.endDate!! >= now) && (it.limitAmount ?: 0.0) > 0.0 
+                    }
+                    activeEvents.forEach { ev ->
+                        val limit = ev.limitAmount!!
+                        val spent = transactions.filter { it.eventId == ev.id && it.type == "EXPENSE" }.sumOf { it.amount }
+                        if (spent >= limit) {
+                            riskAlerts.add(
+                                SmartSpendingInsight(
+                                    title = "⚠️ Sự kiện '${ev.name}' vượt ngân sách",
+                                    description = "Bạn đã chi ${FormatHelper.formatVND(spent)}, vượt ${FormatHelper.formatVND(spent - limit)} so với hạn mức sự kiện.",
+                                    icon = Icons.Default.EventBusy,
+                                    tint = Color(0xFFD32F2F)
                                 )
-                            } else if (dailySpent > 0) {
-                                val daysToExhaust = remaining / dailySpent
-                                if (daysToExhaust > 0 && daysToExhaust <= 3) {
+                            )
+                        } else {
+                            val duration = if (ev.endDate != null && ev.endDate!! > ev.startDate) (ev.endDate!! - ev.startDate).toDouble() else 0.0
+                            if (duration > 0) {
+                                val timeRatio = (now - ev.startDate).toDouble() / duration
+                                val spentRatio = spent / limit
+                                if (timeRatio <= 0.5 && spentRatio >= 0.8) {
                                     riskAlerts.add(
                                         SmartSpendingInsight(
-                                            title = "Dự đoán vượt hạn mức '${bug.categoryName}'",
-                                            description = "Với thói quen hiện tại, chi phí cho '${bug.categoryName}' dự kiến sẽ vượt hạn mức ngân sách trong ${daysToExhaust.toInt()} ngày tới.",
-                                            icon = Icons.Default.TrendingUp,
+                                            title = "⚠️ Sự kiện '${ev.name}' sắp vỡ quỹ!",
+                                            description = "Đã tiêu hết ${(spentRatio * 100).toInt()}% hạn mức dù thời gian mới trôi qua ${(timeRatio * 100).toInt()}%. Hãy điều chỉnh nhịp chi tiêu!",
+                                            icon = Icons.Default.Report,
                                             tint = Color(0xFFE57373)
                                         )
                                     )
@@ -1412,59 +1415,128 @@ fun DashboardScreen(
                             }
                         }
                     }
-                    
+
+                    // Rủi ro 3: Tốc độ cạn kiệt tài khoản (Bộ lọc bảo vệ đầu tháng: daysElapsed >= 5)
+                    val monthlyExpense = currentMonthTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                    val dailyExpenseRate = monthlyExpense / daysElapsedSafe
+                    if (daysElapsed >= 5 && dailyExpenseRate > 0 && availableCash > 0) {
+                        val daysToDry = availableCash / dailyExpenseRate
+                        if (daysToDry <= 10) {
+                            riskAlerts.add(
+                                SmartSpendingInsight(
+                                    title = "⏳ Kịch bản cạn tiền mặt sau ${daysToDry.toInt()} ngày tới",
+                                    description = "Dựa trên thói quen chi ra khoảng ${FormatHelper.formatVND(dailyExpenseRate)}/ngày gần đây, số dư tiền mặt có nguy cơ cạn kiệt trước thời điểm cuối tháng nếu không tiết chế.",
+                                    icon = Icons.Default.TrendingDown,
+                                    tint = Color(0xFFF44336)
+                                )
+                            )
+                        }
+                    }
+
+                    // Rủi ro thói quen & tần suất chi tiêu dồn dập có nguy cơ vỡ quỹ trong tương lai
+                    val recent7DaysTxs = currentMonthTransactions.filter { it.type == "EXPENSE" && it.timestamp >= now - 7 * oneDay }
+                    val categoryFreq7d = recent7DaysTxs.groupingBy { it.categoryName }.eachCount()
+                    val categorySpent7d = recent7DaysTxs.groupingBy { it.categoryName }.fold(0.0) { acc, tx -> acc + tx.amount }
+
+                    currentMonthBudgets.filter { it.limitAmount > 0 && it.spentAmount < it.limitAmount }.forEach { bug ->
+                        val freq = categoryFreq7d[bug.categoryName] ?: 0
+                        val spent7d = categorySpent7d[bug.categoryName] ?: 0.0
+                        if (freq >= 4 && spent7d > 0) {
+                            val dailyBurn = spent7d / 7.0
+                            val daysToExhaust = (bug.limitAmount - bug.spentAmount) / dailyBurn
+                            if (daysToExhaust <= 5 && daysToExhaust <= remainingDays) {
+                                riskAlerts.add(
+                                    SmartSpendingInsight(
+                                        title = "🚨 Nguy cơ vỡ quỹ '${bug.categoryName}' trong ${daysToExhaust.toInt()} ngày tới!",
+                                        description = "Với tần suất chi tiêu dồn dập (${freq} lần trong tuần qua) và nhịp độ ${FormatHelper.formatVND(dailyBurn)}/ngày, quỹ '${bug.categoryName}' sẽ bị cạn trước khi hết tháng.",
+                                        icon = Icons.Default.TrendingUp,
+                                        tint = Color(0xFFE57373)
+                                    )
+                                )
+                            }
+                        }
+                    }
+
                     if (riskAlerts.isEmpty()) {
                         riskAlerts.add(
                             SmartSpendingInsight(
                                 title = "Chưa phát hiện rủi ro",
-                                description = "Tình hình chi tiêu trong tháng của bạn hiện tại vẫn nằm trong ngưỡng an toàn.",
+                                description = "Tình hình tài chính và dòng tiền hiện tại của bạn vẫn nằm trong ngưỡng an toàn.",
                                 icon = Icons.Default.CheckCircle,
                                 tint = Color(0xFF4CAF50)
                             )
                         )
                     }
 
-                    // --- 2. RECOMMENDATIONS (Khuyến nghị) ---
-                    currentMonthBudgets.forEach { bug ->
-                        val limit = bug.limitAmount
-                        val spent = bug.spentAmount
-                        if (limit > 0) {
-                            val remaining = limit - spent
-                            if (remaining > 0) {
-                                val dailyLimit = remaining / remainingDays
-                                recommendations.add(
-                                    SmartSpendingInsight(
-                                        title = "Định mức '${bug.categoryName}' khuyên dùng",
-                                        description = "Bạn nên duy trì chi tiêu '${bug.categoryName}' trung bình khoảng ${FormatHelper.formatVND(dailyLimit)}/ngày từ nay đến cuối tháng.",
-                                        icon = Icons.Default.Lightbulb,
-                                        tint = Color(0xFFFFB300)
-                                    )
+                    // --- 2. RECOMMENDATIONS (Tầng 2: Khuyến nghị Hành động) ---
+                    // Khuyến nghị 1: Tiết chế tần suất chi phí phát sinh linh hoạt
+                    val discretionaryKeywords = listOf("Ăn uống", "Cà phê", "Mua sắm", "Giải trí", "Di chuyển", "Siêu thị", "Shopping", "Chợ", "Xăng", "Điện thoại", "Quần áo", "Du lịch", "Ăn vặt")
+                    val discretionaryTxs = currentMonthTransactions.filter { tx -> tx.type == "EXPENSE" && discretionaryKeywords.any { tx.categoryName.contains(it, ignoreCase = true) } }
+                    val discretionaryFreq = discretionaryTxs.groupingBy { it.categoryName }.eachCount()
+
+                    discretionaryFreq.filter { (cat, count) -> count >= 3 }.forEach { (catName, count) ->
+                        val bug = currentMonthBudgets.find { it.categoryName == catName }
+                        if (bug != null && bug.limitAmount > bug.spentAmount) {
+                            val safeDaily = (bug.limitAmount - bug.spentAmount) / remainingDays
+                            recommendations.add(
+                                SmartSpendingInsight(
+                                    title = "💡 Tiết chế các khoản phát sinh '${catName}'",
+                                    description = "Hạng mục '${catName}' đang có tần suất phát sinh khá dày (${count} lần trong tháng). Bạn nên giảm bớt các chi phí nhỏ lẻ không thiết yếu để duy trì nhịp chi tiêu dưới ${FormatHelper.formatVND(safeDaily)}/ngày cho đến hết tháng.",
+                                    icon = Icons.Default.Lightbulb,
+                                    tint = Color(0xFFFFB300)
                                 )
-                            } else {
-                                recommendations.add(
-                                    SmartSpendingInsight(
-                                        title = "Lời khuyên về '${bug.categoryName}'",
-                                        description = "Ngân sách tháng cho '${bug.categoryName}' đã hết sạch. Hãy tạm hoãn mọi khoản chi tiêu cho danh mục này.",
-                                        icon = Icons.Default.Block,
-                                        tint = Color(0xFFE53935)
-                                    )
+                            )
+                        } else if (bug == null) {
+                            recommendations.add(
+                                SmartSpendingInsight(
+                                    title = "💡 Kiểm soát tần suất '${catName}'",
+                                    description = "Hạng mục '${catName}' đang phát sinh ${count} giao dịch trong tháng này. Hãy cân nhắc đặt hạn mức và giảm bớt các lần chi nhỏ lẻ để tránh lãng phí tiền bạc.",
+                                    icon = Icons.Default.Lightbulb,
+                                    tint = Color(0xFFFFB300)
                                 )
-                            }
+                            )
                         }
                     }
-                    
+
+                    // Khuyến nghị 2: Thích ứng với hạng mục vượt mức (Overspending Adaptation)
+                    currentMonthBudgets.filter { it.limitAmount > 0 && it.spentAmount >= it.limitAmount }.forEach { exBug ->
+                        val excess = exBug.spentAmount - exBug.limitAmount
+                        recommendations.add(
+                            SmartSpendingInsight(
+                                title = "📌 Thích ứng với hạng mục vượt mức '${exBug.categoryName}'",
+                                description = "Việc vượt hạn mức '${exBug.categoryName}' (${FormatHelper.formatVND(excess)}) là bình thường nếu do nhu cầu thực tế. Tuy nhiên, từ nay đến cuối tháng, hãy ưu tiên cắt giảm các chi phí phát sinh linh hoạt khác để tổng thể ngân sách tháng không bị ảnh hưởng.",
+                                icon = Icons.Default.Info,
+                                tint = Color(0xFFFFA000)
+                            )
+                        )
+                    }
+
+                    // Khuyến nghị Hũ tiết kiệm sắp đến hạn trong 30 ngày
+                    savingsGoals.filter { it.targetAmount > 0 && it.targetDate >= now && (it.targetDate - now) <= 30 * oneDay && (it.currentAmount / it.targetAmount) < 0.8 }.forEach { sg ->
+                        val needed = sg.targetAmount - sg.currentAmount
+                        val daysLeft = ((sg.targetDate - now) / oneDay).toInt().coerceAtLeast(1)
+                        recommendations.add(
+                            SmartSpendingInsight(
+                                title = "🎯 Tăng tốc mục tiêu '${sg.name}'",
+                                description = "Chỉ còn ${daysLeft} ngày nữa là đến hạn mục tiêu, bạn cần tích lũy thêm ${FormatHelper.formatVND(needed)}. Hãy cố gắng tiết kiệm nhé!",
+                                icon = Icons.Default.Lightbulb,
+                                tint = Color(0xFF4CAF50)
+                            )
+                        )
+                    }
+
                     if (recommendations.isEmpty()) {
                         recommendations.add(
                             SmartSpendingInsight(
                                 title = "Chưa có khuyến nghị",
-                                description = "Hãy tạo Hạn mức chi tiêu trong mục ngân sách để trợ lý AI tính toán lời khuyên định mức.",
+                                description = "Hãy tạo thêm Hạn mức chi tiêu hoặc Hũ tiết kiệm để trợ lý AI tính toán lời khuyên định mức tối ưu.",
                                 icon = Icons.Default.Lightbulb,
                                 tint = Color(0xFF78909C)
                             )
                         )
                     }
 
-                    // --- 3. EVALUATIONS (Đánh giá xu hướng) ---
+                    // --- 3. EVALUATIONS (Tầng 3: Đánh giá Xu hướng) ---
                     val exps = transactions.filter { it.type == "EXPENSE" }
                     if (exps.isNotEmpty()) {
                         val cWeek = exps.filter { now - it.timestamp <= 7 * oneDay }.sumOf { it.amount }
@@ -1473,36 +1545,53 @@ fun DashboardScreen(
                             diff > 7 * oneDay && diff <= 14 * oneDay 
                         }.sumOf { it.amount }
 
+                        val goodKeywords = listOf("Trả nợ", "Tiết kiệm", "Đầu tư", "Bảo hiểm", "Học tập")
                         val allCategoryNames = transactions.map { it.categoryName }.distinct()
                         var foundCatEval = false
+
                         for (catName in allCategoryNames) {
+                            val isGoodExpense = goodKeywords.any { catName.contains(it, ignoreCase = true) }
                             val cCatSpent = exps.filter { it.categoryName == catName && now - it.timestamp <= 7 * oneDay }.sumOf { it.amount }
                             val pCatSpent = exps.filter { 
                                 it.categoryName == catName && (now - it.timestamp) > 7 * oneDay && (now - it.timestamp) <= 14 * oneDay 
                             }.sumOf { it.amount }
                             
                             if (pCatSpent > 0.0) {
-                                val change = ((pCatSpent - cCatSpent) / pCatSpent * 100).toInt()
-                                if (change >= 20) {
-                                    evaluations.add(
-                                        SmartSpendingInsight(
-                                            title = "Đánh giá: Giảm chi '${catName}'",
-                                            description = "Chúc mừng! Bạn đã cắt giảm thành công chi phí nhóm '${catName}' đi ${change}% so với tuần trước.",
-                                            icon = Icons.Default.TrendingDown,
-                                            tint = Color(0xFF4CAF50)
+                                val change = ((cCatSpent - pCatSpent) / pCatSpent * 100).toInt()
+                                if (isGoodExpense) {
+                                    if (change >= 20) {
+                                        evaluations.add(
+                                            SmartSpendingInsight(
+                                                title = "🌟 Tốt lắm! Tăng tích lũy '${catName}'",
+                                                description = "Bạn đã gia tăng ngân sách cho việc tích lũy/trả nợ thêm ${change}% so với tuần trước. Rất đáng khen!",
+                                                icon = Icons.Default.TrendingUp,
+                                                tint = Color(0xFF4CAF50)
+                                            )
                                         )
-                                    )
-                                    foundCatEval = true
-                                } else if (change <= -30) {
-                                    evaluations.add(
-                                        SmartSpendingInsight(
-                                            title = "Đánh giá: Tăng chi '${catName}'",
-                                            description = "Cảnh báo: Chi phí dành cho nhóm '${catName}' đang tăng mạnh thêm ${-change}% so với tuần trước.",
-                                            icon = Icons.Default.TrendingUp,
-                                            tint = Color(0xFFF44336)
+                                        foundCatEval = true
+                                    }
+                                } else {
+                                    if (change <= -20) {
+                                        evaluations.add(
+                                            SmartSpendingInsight(
+                                                title = "🎉 Giảm chi tiêu '${catName}'",
+                                                description = "Chúc mừng! Bạn đã cắt giảm thành công chi phí nhóm '${catName}' đi ${-change}% so với tuần trước.",
+                                                icon = Icons.Default.TrendingDown,
+                                                tint = Color(0xFF4CAF50)
+                                            )
                                         )
-                                    )
-                                    foundCatEval = true
+                                        foundCatEval = true
+                                    } else if (change >= 35) {
+                                        evaluations.add(
+                                            SmartSpendingInsight(
+                                                title = "📈 Tăng chi '${catName}'",
+                                                description = "Cảnh báo: Chi phí dành cho nhóm '${catName}' đang tăng mạnh thêm ${change}% so với tuần trước.",
+                                                icon = Icons.Default.TrendingUp,
+                                                tint = Color(0xFFF44336)
+                                            )
+                                        )
+                                        foundCatEval = true
+                                    }
                                 }
                             }
                         }
@@ -1530,7 +1619,7 @@ fun DashboardScreen(
                             }
                         }
                     }
-                    
+
                     if (evaluations.isEmpty()) {
                         evaluations.add(
                             SmartSpendingInsight(
