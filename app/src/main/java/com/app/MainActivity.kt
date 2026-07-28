@@ -219,7 +219,7 @@ fun MainContent(
                 }
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    text = "Ghi Chép Thu Chi",
+                    text = "Sổ Thu Chi",
                     fontWeight = FontWeight.Bold,
                     fontSize = 22.sp,
                     color = MaterialTheme.colorScheme.onBackground
