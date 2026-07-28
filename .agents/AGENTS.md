@@ -24,3 +24,9 @@ Các quy tắc dưới đây chỉ có tác dụng trong phạm vi dự án này
   - **Hiển thị lỗi trực tiếp**: Không âm thầm bỏ qua hay chỉ thông báo chung chung. Bắt buộc hiển thị thông báo lỗi rõ ràng ngay bên dưới ô input bị lỗi (`supportingText = { Text("...", color = MaterialTheme.colorScheme.error) }`).
   - **Nổi bật ô input lỗi**: Đánh dấu ô input sai bằng thuộc tính `isError = true` (viền đỏ nổi bật) để người dùng dễ dàng nhận biết và chỉnh sửa ngay lập tức.
 
+## 5. Quy tắc Kiểm thử (Testing Rules)
+- **Phát triển tính năng mới (Feature):** 
+  - **Bắt buộc viết test cho:** Business logic, Data transformation, Validation, Calculation, State management.
+  - **Không bắt buộc với:** UI layout đơn giản, Animation, Styling.
+- **Sửa lỗi (Bug Fixes):** Bắt buộc phải chạy và kiểm tra lại Unit Test. Nếu việc sửa bug làm hỏng Unit Test cũ (test case fail), **không được tự ý sửa test case** mà phải phân tích lý do: do logic cũ sai, hay do test case viết sai, từ đó báo cáo lại để có hướng xử lý triệt để.
+- **Tính an toàn tuyệt đối:** Tất cả các test case đều **không được can thiệp vào logic của app hiện có**, **không sửa code gốc** của dự án đang chạy, và **không làm sai lệch dữ liệu** của app. Bộ test case này chỉ là một công cụ kiểm thử độc lập (tích hợp bên ngoài) để xác minh tính đúng đắn của logic mà không gây ảnh hưởng đến production code.

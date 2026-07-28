@@ -376,4 +376,49 @@ class FinanceRepositoryTest {
         assertEquals("LocalDining", budget.categoryIcon)
         assertEquals("#BBB", budget.categoryColor)
     }
+
+    @Test
+    fun `insert TRANSFER transaction correctly updates source and destination wallets`() = runTest {
+        val sourceId = repository.insertWallet(Wallet(name = "Source", type = "BANK", balance = 2000.0, colorHex = "#FFF", iconName = "AccountBalance")).toInt()
+        val destId = repository.insertWallet(Wallet(name = "Dest", type = "CASH", balance = 100.0, colorHex = "#FFF", iconName = "Payments")).toInt()
+        
+        repository.insertTransaction(
+            Transaction(
+                walletId = sourceId,
+                walletName = "Source",
+                type = "TRANSFER",
+                amount = 500.0,
+                categoryName = "Transfer",
+                categoryIcon = "SwapHoriz",
+                categoryColor = "#000",
+                destinationWalletId = destId,
+                note = "Internal",
+                timestamp = System.currentTimeMillis()
+            )
+        )
+        
+        assertEquals(1500.0, repository.getWalletById(sourceId)!!.balance, 0.0)
+        assertEquals(600.0, repository.getWalletById(destId)!!.balance, 0.0)
+    }
+
+    @Test
+    fun `debt operations should be fully independent and not affect wallet balances`() = runTest {
+        val initialWalletBalance = 5000.0
+        val walletId = repository.insertWallet(Wallet(name = "Wallet", type = "CASH", balance = initialWalletBalance, colorHex = "#FFF", iconName = "Payments")).toInt()
+        
+        // Thêm nợ
+        val debtId = repository.insertDebt(Debt(personName = "John", type = "DEBT", totalAmount = 1000.0, remainingAmount = 1000.0, status = "ACTIVE", dueDate = System.currentTimeMillis() + 10000, walletId = walletId, creationDate = System.currentTimeMillis())).toInt()
+        
+        // Kiểm tra số dư ví KHÔNG bị trừ (chứng minh tính độc lập)
+        assertEquals(initialWalletBalance, repository.getWalletById(walletId)!!.balance, 0.0)
+        
+        // Sửa nợ
+        val debt = repository.allDebts.first().first { it.id == debtId }
+        repository.updateDebt(debt.copy(remainingAmount = 500.0))
+        assertEquals(initialWalletBalance, repository.getWalletById(walletId)!!.balance, 0.0)
+        
+        // Xóa nợ
+        repository.deleteDebt(debt)
+        assertEquals(initialWalletBalance, repository.getWalletById(walletId)!!.balance, 0.0)
+    }
 }
