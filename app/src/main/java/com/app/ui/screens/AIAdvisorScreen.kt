@@ -155,10 +155,7 @@ fun AIAdvisorScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(50.dp),
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    com.app.ui.components.AppLoadingIndicator(size = 64.dp)
                     Spacer(modifier = Modifier.height(20.dp))
                     Text(
                         text = "AI đang phân tích tài chính của bạn...",

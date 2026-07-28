@@ -378,7 +378,7 @@ fun OnboardingScreen(
                             modifier = Modifier.padding(28.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            CircularProgressIndicator(color = Color(0xFF3B82F6))
+                            com.app.ui.components.AppLoadingIndicator(size = 56.dp)
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
                                 text = "Đang kiểm tra dữ liệu đám mây...",

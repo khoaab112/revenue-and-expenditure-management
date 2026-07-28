@@ -15,7 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -123,7 +128,7 @@ fun DashboardScreen(
         // --- Total Balance Section ---
         Card(
             modifier = Modifier
-                .fillMaxWidth()
+                .staggeredEntrance(0)
                 .clickable { onNavigateToStats() }
                 .testTag("total_balance_card"),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF4564ED)),
@@ -288,7 +293,7 @@ fun DashboardScreen(
         if (pendingCount > 0) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .staggeredEntrance(1)
                     .clickable { onNavigateToBankNotifications() }
                     .testTag("dashboard_pending_notifications_banner"),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
@@ -351,7 +356,9 @@ fun DashboardScreen(
             val loanItems = remember(activeDebtsList) { activeDebtsList.filter { it.type == "LOAN" } }
             
             Row(
-                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+                modifier = Modifier
+                    .staggeredEntrance(2)
+                    .height(IntrinsicSize.Max),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // KHOẢN NỢ CARD (Left)
@@ -633,179 +640,184 @@ fun DashboardScreen(
         }
 
         if (activeOrUpcomingEvents.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.staggeredEntrance(3),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Sự kiện",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = "Xem tất cả",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF5C79FF),
-                    modifier = Modifier.clickable { onNavigateToEvents() }
-                )
-            }
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                activeOrUpcomingEvents.take(2).forEach { event ->
-                    val eventTransactions = viewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
-                    val spentAmount = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-                    val limitAmount = event.limitAmount ?: 0.0
-                    val progress = if (limitAmount > 0.0) {
-                        (spentAmount / limitAmount).toFloat().coerceIn(0f, 1f)
-                    } else 0.5f
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Sự kiện",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Xem tất cả",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF5C79FF),
+                        modifier = Modifier.clickable { onNavigateToEvents() }
+                    )
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    activeOrUpcomingEvents.take(2).forEach { event ->
+                        val eventTransactions = viewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
+                        val spentAmount = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                        val limitAmount = event.limitAmount ?: 0.0
+                        val progress = if (limitAmount > 0.0) {
+                            (spentAmount / limitAmount).toFloat().coerceIn(0f, 1f)
+                        } else 0.5f
 
-                    val isOngoing = nowMs >= event.startDate && (event.endDate == null || nowMs <= event.endDate + 86400000L - 1)
-                    val daysText = if (isOngoing) {
-                        if (event.endDate != null) {
-                            val daysLeft = Math.max(1, ((event.endDate - nowMs) / 86400000L).toInt())
-                            "Còn $daysLeft ngày"
-                        } else "Đang diễn ra"
-                    } else {
-                        val daysStart = Math.max(1, ((event.startDate - nowMs) / 86400000L).toInt())
-                        "Sắp diễn ra sau $daysStart ngày"
-                    }
+                        val isOngoing = nowMs >= event.startDate && (event.endDate == null || nowMs <= event.endDate + 86400000L - 1)
+                        val daysText = if (isOngoing) {
+                            if (event.endDate != null) {
+                                val daysLeft = Math.max(1, ((event.endDate - nowMs) / 86400000L).toInt())
+                                "Còn $daysLeft ngày"
+                            } else "Đang diễn ra"
+                        } else {
+                            val daysStart = Math.max(1, ((event.startDate - nowMs) / 86400000L).toInt())
+                            "Sắp diễn ra sau $daysStart ngày"
+                        }
 
-                    val baseEventColor = try {
-                        FormatHelper.parseColor(event.colorHex)
-                    } catch (e: Exception) {
-                        if (isOngoing) Color(0xFF4CAF50) else Color(0xFFF57C00)
-                    }
+                        val baseEventColor = try {
+                            FormatHelper.parseColor(event.colorHex)
+                        } catch (e: Exception) {
+                            if (isOngoing) Color(0xFF4CAF50) else Color(0xFFF57C00)
+                        }
 
-                    val cardBg = baseEventColor.copy(alpha = 0.08f)
-                    val iconBg = baseEventColor.copy(alpha = 0.16f)
-                    val primaryColor = baseEventColor
-                    val trackBg = baseEventColor.copy(alpha = 0.25f)
+                        val cardBg = baseEventColor.copy(alpha = 0.08f)
+                        val iconBg = baseEventColor.copy(alpha = 0.16f)
+                        val primaryColor = baseEventColor
+                        val trackBg = baseEventColor.copy(alpha = 0.25f)
 
-                    val pillBg = Color(0xFFFFF3E0)
-                    val pillIconColor = Color(0xFFEF6C00)
-                    val pillTextColor = Color(0xFFEF6C00)
-                    val pillText = if (isOngoing) daysText else "Chuẩn bị bắt đầu"
+                        val pillBg = Color(0xFFFFF3E0)
+                        val pillIconColor = Color(0xFFEF6C00)
+                        val pillTextColor = Color(0xFFEF6C00)
+                        val pillText = if (isOngoing) daysText else "Chuẩn bị bắt đầu"
 
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { eventToView = event }
-                            .testTag("dashboard_event_card_${event.id}"),
-                        colors = CardDefaults.cardColors(containerColor = cardBg),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, iconBg)
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .background(iconBg, RoundedCornerShape(10.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Event,
-                                        contentDescription = null,
-                                        tint = primaryColor,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        event.name,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = primaryColor
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    // Status Pill Badge (with calendar icon)
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = pillBg
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { eventToView = event }
+                                .testTag("dashboard_event_card_${event.id}"),
+                            colors = CardDefaults.cardColors(containerColor = cardBg),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, iconBg)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .background(iconBg, RoundedCornerShape(10.dp)),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                        Icon(
+                                            imageVector = Icons.Default.Event,
+                                            contentDescription = null,
+                                            tint = primaryColor,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            event.name,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = primaryColor
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        // Status Pill Badge (with calendar icon)
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = pillBg
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Event,
-                                                contentDescription = null,
-                                                tint = pillIconColor,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = pillText,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = pillTextColor
-                                            )
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Event,
+                                                    contentDescription = null,
+                                                    tint = pillIconColor,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = pillText,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = pillTextColor
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            
-                            Spacer(modifier = Modifier.height(16.dp))
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
 
-                            // Chi tiêu / Hạn mức
-                            if (limitAmount > 0.0) {
-                                Text(
-                                    text = buildAnnotatedString {
-                                        withStyle(
-                                            style = SpanStyle(
-                                                color = Color(0xFF616161)
-                                            )
-                                        ) {
-                                            append(FormatHelper.formatVND(spentAmount))
-                                        }
-                                        withStyle(
-                                            style = SpanStyle(
-                                                color = Color(0xFF9E9E9E)
-                                            )
-                                        ) {
-                                            append(" / ${FormatHelper.formatVND(limitAmount)}")
-                                        }
-                                    },
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            } else {
-                                Text(
-                                    text = FormatHelper.formatVND(spentAmount),
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF616161),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                                // Chi tiêu / Hạn mức
+                                if (limitAmount > 0.0) {
+                                    Text(
+                                        text = buildAnnotatedString {
+                                            withStyle(
+                                                style = SpanStyle(
+                                                    color = Color(0xFF616161)
+                                                )
+                                            ) {
+                                                append(FormatHelper.formatVND(spentAmount))
+                                            }
+                                            withStyle(
+                                                style = SpanStyle(
+                                                    color = Color(0xFF9E9E9E)
+                                                )
+                                            ) {
+                                                append(" / ${FormatHelper.formatVND(limitAmount)}")
+                                            }
+                                        },
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                } else {
+                                    Text(
+                                        text = FormatHelper.formatVND(spentAmount),
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF616161),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
 
-                            // Clean Progress Bar (Custom Box layout: NO DOT AT END!)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(trackBg)
-                            ) {
+                                // Clean Progress Bar (Custom Box layout: NO DOT AT END!)
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                        .fillMaxWidth()
+                                        .height(6.dp)
                                         .clip(RoundedCornerShape(3.dp))
-                                        .background(primaryColor)
-                                )
+                                        .background(trackBg)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth(progress.coerceIn(0f, 1f))
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(primaryColor)
+                                    )
+                                }
                             }
                         }
                     }
@@ -824,146 +836,151 @@ fun DashboardScreen(
             )
         }
 
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = "Tài khoản của tôi",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "Xem tất cả",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF5C79FF),
-                modifier = Modifier
-                    .clickable { onNavigateToWallets(null) }
-                    .testTag("view_all_wallets_button")
-            )
-        }
-
-        if (sortedWallets.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(90.dp)
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        RoundedCornerShape(16.dp)
-                    ),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.staggeredEntrance(4),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Không có ví nào. Thêm ví mới!",
+                    text = "Tài khoản của tôi",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Xem tất cả",
                     fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF5C79FF),
+                    modifier = Modifier
+                        .clickable { onNavigateToWallets(null) }
+                        .testTag("view_all_wallets_button")
                 )
             }
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                sortedWallets.forEach { wallet ->
-                    val walletColor = try {
-                        FormatHelper.parseColor(wallet.colorHex)
-                    } catch (e: Exception) {
-                        Color(0xFF5C79FF)
-                    }
 
-                    val subtitleText = when (wallet.type.uppercase()) {
-                        "CASH" -> "Tiền mặt"
-                        "BANK" -> "Tài khoản ngân hàng"
-                        "WALLET" -> "Ví điện tử"
-                        "SAVINGS" -> "Tiết kiệm"
-                        "CREDIT" -> "Thẻ tín dụng"
-                        else -> wallet.type
-                    }
+            if (sortedWallets.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(90.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            RoundedCornerShape(16.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Không có ví nào. Thêm ví mới!",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    sortedWallets.forEachIndexed { walletIdx, wallet ->
+                        val walletColor = try {
+                            FormatHelper.parseColor(wallet.colorHex)
+                        } catch (e: Exception) {
+                            Color(0xFF5C79FF)
+                        }
 
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigateToWallets(wallet) }
-                            .testTag("dashboard_wallet_card_${wallet.id}"),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFFEEEEEE)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
-                    ) {
-                        Row(
+                        val subtitleText = when (wallet.type.uppercase()) {
+                            "CASH" -> "Tiền mặt"
+                            "BANK" -> "Tài khoản ngân hàng"
+                            "WALLET" -> "Ví điện tử"
+                            "SAVINGS" -> "Tiết kiệm"
+                            "CREDIT" -> "Thẻ tín dụng"
+                            else -> wallet.type
+                        }
+
+                        Card(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .staggeredEntrance(4 + walletIdx + 1)
+                                .clickable { onNavigateToWallets(wallet) }
+                                .testTag("dashboard_wallet_card_${wallet.id}"),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFFEEEEEE)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
                         ) {
                             Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(walletColor.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
                                 ) {
-                                    Icon(
-                                        imageVector = IconMapper.getIconByName(wallet.iconName),
-                                        contentDescription = wallet.name,
-                                        tint = walletColor,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(walletColor.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = IconMapper.getIconByName(wallet.iconName),
+                                            contentDescription = wallet.name,
+                                            tint = walletColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = wallet.name,
+                                            fontSize = 14.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1E293B),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(1.dp))
+                                        Text(
+                                            text = subtitleText,
+                                            fontSize = 11.5.sp,
+                                            color = Color(0xFF64748B),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = wallet.name,
-                                        fontSize = 14.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF1E293B),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(1.dp))
-                                    Text(
-                                        text = subtitleText,
-                                        fontSize = 11.5.sp,
-                                        color = Color(0xFF64748B),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        text = "Số dư",
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF94A3B8)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    FormattedVndText(
-                                        amount = wallet.balance,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF1E293B)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "Số dư",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF94A3B8)
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        FormattedVndText(
+                                            amount = wallet.balance,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1E293B)
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = "Chi tiết ví",
+                                        tint = Color(0xFF94A3B8),
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
-                                Icon(
-                                    imageVector = Icons.Default.ChevronRight,
-                                    contentDescription = "Chi tiết ví",
-                                    tint = Color(0xFF94A3B8),
-                                    modifier = Modifier.size(20.dp)
-                                )
                             }
                         }
                     }
@@ -972,7 +989,7 @@ fun DashboardScreen(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.staggeredEntrance(5),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // --- Visual Gauge Visual Component ---
@@ -1128,12 +1145,14 @@ fun DashboardScreen(
 
                 if (currentMonthBudgets.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        currentMonthBudgets.forEach { budget ->
+                        currentMonthBudgets.forEachIndexed { budgetIdx, budget ->
                             val progress = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat().coerceIn(0f, 1f) else 0f
                             val isExceeded = budget.spentAmount >= budget.limitAmount
                             val progressColor = if (isExceeded) MaterialTheme.colorScheme.error else FormatHelper.parseColor(budget.categoryColor)
 
-                            Column {
+                            Column(
+                                modifier = Modifier.staggeredEntrance(budgetIdx)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -1184,7 +1203,9 @@ fun DashboardScreen(
             ) {
                 // Header of Insights
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .staggeredEntrance(0),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1251,6 +1272,7 @@ fun DashboardScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .staggeredEntrance(1)
                             .background(
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                                 RoundedCornerShape(12.dp)
@@ -1572,7 +1594,11 @@ fun DashboardScreen(
                 }
                 
                 Row(
-                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .staggeredEntrance(2)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1602,41 +1628,56 @@ fun DashboardScreen(
                 }
 
                 // 1. RISK ALERTS SECTION
-                Text(
-                    text = "⚠️ Cảnh báo rủi ro",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                aiAdvisorData.first.take(2).forEach { ins ->
-                    InsightRow(ins)
+                Column(
+                    modifier = Modifier.staggeredEntrance(3),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "⚠️ Cảnh báo rủi ro",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    aiAdvisorData.first.take(2).forEach { ins ->
+                        InsightRow(ins)
+                    }
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
 
                 // 2. RECOMMENDATIONS SECTION
-                Text(
-                    text = "💡 Khuyến nghị",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                aiAdvisorData.second.take(2).forEach { ins ->
-                    InsightRow(ins)
+                Column(
+                    modifier = Modifier.staggeredEntrance(4),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "💡 Khuyến nghị",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    aiAdvisorData.second.take(2).forEach { ins ->
+                        InsightRow(ins)
+                    }
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), thickness = 0.5.dp)
 
                 // 3. EVALUATIONS SECTION
-                Text(
-                    text = "📊 Đánh giá xu hướng",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                aiAdvisorData.third.take(2).forEach { ins ->
-                    InsightRow(ins)
+                Column(
+                    modifier = Modifier.staggeredEntrance(5),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "📊 Đánh giá xu hướng",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    aiAdvisorData.third.take(2).forEach { ins ->
+                        InsightRow(ins)
+                    }
                 }
             }
         }
@@ -1886,5 +1927,40 @@ private fun FormattedVndText(
         modifier = modifier
     )
 }
+
+@Composable
+private fun Modifier.staggeredEntrance(index: Int): Modifier {
+    var isVisibleOnScreen by remember { mutableStateOf(false) }
+
+    val progress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVisibleOnScreen) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = 380,
+            delayMillis = (index * 45).coerceAtMost(130),
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        ),
+        label = "staggered_$index"
+    )
+
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val offsetYPx = remember(density) { with(density) { -20.dp.toPx() } }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
+    return this
+        .onGloballyPositioned { coordinates ->
+            if (!isVisibleOnScreen) {
+                val y = coordinates.positionInRoot().y
+                if (y > 0 && y < screenHeightPx - 20f) {
+                    isVisibleOnScreen = true
+                }
+            }
+        }
+        .fillMaxWidth()
+        .graphicsLayer {
+            alpha = progress
+            translationY = (1f - progress) * offsetYPx
+        }
+}
+
 
 

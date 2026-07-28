@@ -231,11 +231,7 @@ fun MainContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(28.dp))
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(32.dp)
-                )
+                com.app.ui.components.AppLoadingIndicator(size = 64.dp)
             }
         }
     } else if (!isAppUnlocked) {

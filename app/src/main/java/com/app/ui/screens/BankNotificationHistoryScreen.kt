@@ -274,11 +274,7 @@ fun BankNotificationHistoryScreen(
                     )
                 ) {
                     if (isCheckingNotifications) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            strokeWidth = 2.dp
-                        )
+                        com.app.ui.components.AppLoadingIndicator(size = 24.dp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Đang quét...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     } else {
