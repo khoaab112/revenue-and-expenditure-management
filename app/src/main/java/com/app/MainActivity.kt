@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -89,6 +92,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainContent(
     viewModel: FinanceViewModel,
@@ -246,6 +250,7 @@ fun MainContent(
     } else {
         val hasSeenOnboarding by viewModel.hasSeenOnboarding.collectAsState()
         val isDatabaseEmpty by viewModel.isDatabaseEmpty.collectAsState()
+        var showDonateModal by remember { mutableStateOf(false) }
 
         if (!hasSeenOnboarding) {
             com.app.ui.screens.OnboardingScreen(
@@ -370,7 +375,8 @@ fun MainContent(
                                 canPop = canPop,
                                 onNavigateBack = { handleBackNavigation() },
                                 viewModel = viewModel,
-                                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) }
+                                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                                onOpenDonateModal = { showDonateModal = true }
                             )
                         }
                         Box(
@@ -410,7 +416,8 @@ fun MainContent(
                                 canPop = canPop,
                                 onNavigateBack = { handleBackNavigation() },
                                 viewModel = viewModel,
-                                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) }
+                                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                                onOpenDonateModal = { showDonateModal = true }
                             )
                         }
                     },
@@ -516,6 +523,30 @@ fun MainContent(
                         )
 
                     // -------------------- POPUPS AND DIALOGS --------------------
+                    if (showDonateModal) {
+                        com.app.ui.components.AppModalBottomSheet(
+                            onDismissRequest = { showDonateModal = false },
+                            title = "Ủng hộ",
+                            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_donate_qr),
+                                    contentDescription = "Mã QR Ủng hộ",
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.95f)
+                                        .clip(RoundedCornerShape(16.dp)),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.FillWidth
+                                )
+                            }
+                        }
+                    }
+
                     if (showPermissionErrorPopup) {
                         androidx.compose.ui.window.Dialog(
                             onDismissRequest = { showPermissionErrorPopup = false }
@@ -1162,6 +1193,7 @@ fun AppHeader(
     onNavigateBack: () -> Unit,
     viewModel: FinanceViewModel? = null,
     onNavigateToAIAdvisor: (() -> Unit)? = null,
+    onOpenDonateModal: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val customTitle = viewModel?.customTopBarTitle?.collectAsState()?.value
@@ -1213,6 +1245,19 @@ fun AppHeader(
                 }
             },
             actions = {
+                if (baseRoute == Routes.SETTINGS && onOpenDonateModal != null) {
+                    IconButton(
+                        onClick = onOpenDonateModal,
+                        modifier = Modifier.testTag("app_header_donate_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "Ủng hộ",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
                 if (baseRoute == Routes.DASHBOARD && onNavigateToAIAdvisor != null) {
                     IconButton(
                         onClick = onNavigateToAIAdvisor,
