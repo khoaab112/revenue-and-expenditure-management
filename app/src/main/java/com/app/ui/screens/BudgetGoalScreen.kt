@@ -588,9 +588,9 @@ fun BudgetItemCard(
     val animatedRatio by animateFloatAsState(
         targetValue = if (alreadyAnimated || isZero) rawRatio.coerceAtMost(1.0f) else animRatioTarget,
         animationSpec = if (alreadyAnimated || isZero) snap() else tween(
-            durationMillis = 850,
-            delayMillis = 80,
-            easing = FastOutSlowInEasing
+            durationMillis = 650,
+            delayMillis = 0,
+            easing = LinearOutSlowInEasing
         ),
         label = "itemRatio"
     )
@@ -598,9 +598,9 @@ fun BudgetItemCard(
     val animatedPercentage by animateIntAsState(
         targetValue = if (alreadyAnimated || targetPercentage == 0) targetPercentage else animPercentTarget,
         animationSpec = if (alreadyAnimated || targetPercentage == 0) snap() else tween(
-            durationMillis = 850,
-            delayMillis = 80,
-            easing = FastOutSlowInEasing
+            durationMillis = 650,
+            delayMillis = 0,
+            easing = LinearOutSlowInEasing
         ),
         label = "itemPercent"
     )
