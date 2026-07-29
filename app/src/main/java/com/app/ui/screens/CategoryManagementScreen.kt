@@ -1,6 +1,7 @@
 package com.app.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -12,6 +13,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -57,6 +60,48 @@ fun Modifier.dashedBorder(
     )
 }
 
+@Composable
+private fun Modifier.staggeredEntrance(
+    index: Int,
+    key: String,
+    seenKeys: MutableList<String>
+): Modifier {
+    val alreadySeen = remember(key) { seenKeys.contains(key) }
+    var cardVisible by rememberSaveable(key) { mutableStateOf(alreadySeen) }
+
+    LaunchedEffect(key) {
+        if (!alreadySeen) {
+            cardVisible = true
+            seenKeys.add(key)
+        }
+    }
+
+    val alphaProgress by animateFloatAsState(
+        targetValue = if (cardVisible || alreadySeen) 1f else 0f,
+        animationSpec = if (alreadySeen) snap() else tween(
+            durationMillis = 400,
+            delayMillis = (index * 45).coerceAtMost(250),
+            easing = LinearOutSlowInEasing
+        ),
+        label = "cat_stagger_alpha_$index"
+    )
+
+    val offsetYProgress by animateDpAsState(
+        targetValue = if (cardVisible || alreadySeen) 0.dp else 24.dp,
+        animationSpec = if (alreadySeen) snap() else tween(
+            durationMillis = 400,
+            delayMillis = (index * 45).coerceAtMost(250),
+            easing = LinearOutSlowInEasing
+        ),
+        label = "cat_stagger_offset_$index"
+    )
+
+    return this.graphicsLayer {
+        alpha = alphaProgress
+        translationY = offsetYProgress.toPx()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryManagementScreen(
@@ -65,6 +110,11 @@ fun CategoryManagementScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val seenKeys = rememberSaveable(saver = listSaver(
+        save = { it.toList() },
+        restore = { mutableStateListOf<String>().apply { addAll(it) } }
+    )) { mutableStateListOf<String>() }
+
     val focusManager = LocalFocusManager.current
     val categoriesList by viewModel.categoriesList.collectAsState()
     
@@ -294,6 +344,7 @@ fun CategoryManagementScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .staggeredEntrance(0, "cat_tab_switcher", seenKeys)
                                 .padding(horizontal = 16.dp, vertical = 2.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F3F4)),
@@ -478,6 +529,7 @@ fun CategoryManagementScreen(
 
                                     val cardModifier = Modifier
                                         .fillMaxWidth()
+                                        .staggeredEntrance(index + 1, "cat_root_${cat.name}_$selectedTypeTab", seenKeys)
                                         .zIndex(zIndexValue)
                                         .graphicsLayer {
                                             translationY = verticalOffset
@@ -655,6 +707,7 @@ fun CategoryManagementScreen(
 
                                 val cardModifier = Modifier
                                     .fillMaxWidth()
+                                    .staggeredEntrance(index, "cat_sub_${subcat.name}_$detailCategoryName", seenKeys)
                                     .zIndex(zIndexValue)
                                     .graphicsLayer {
                                         translationY = verticalOffset
@@ -1120,65 +1173,115 @@ fun CategoryTreeDialog(
     onDismiss: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf("EXPENSE") }
+    val seenKeys = rememberSaveable(saver = listSaver(
+        save = { it.toList() },
+        restore = { mutableStateListOf<String>().apply { addAll(it) } }
+    )) { mutableStateListOf<String>() }
     
     val filteredCategories = categoriesList.filter { it.type == selectedTab || it.type == "BOTH" }
     val parentCats = filteredCategories.filter { it.parentName == null }
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.background
+        title = "Sơ đồ danh mục",
+        isScrollableContent = false,
+        contentPadding = PaddingValues(0.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f)
-        ) {
-            // Header
-            Row(
+        Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f)) {
+            // Pill tab switcher for Expense & Income
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .staggeredEntrance(0, "tree_tab_switcher", seenKeys),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F3F4)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Text("Sơ đồ Danh mục", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                IconButton(onClick = onDismiss) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Đóng")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val isExpenseSelected = selectedTab == "EXPENSE"
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isExpenseSelected) Color(0xFFE53935)
+                                else Color.Transparent
+                            )
+                            .clickable { selectedTab = "EXPENSE" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Khoản chi",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = if (isExpenseSelected) Color.White else Color.Gray
+                        )
+                    }
+
+                    val isIncomeSelected = selectedTab == "INCOME"
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isIncomeSelected) Color(0xFF2E7D32)
+                                else Color.Transparent
+                            )
+                            .clickable { selectedTab = "INCOME" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Khoản thu",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = if (isIncomeSelected) Color.White else Color.Gray
+                        )
+                    }
                 }
             }
 
-            // Tabs
-            TabRow(
-                selectedTabIndex = if (selectedTab == "EXPENSE") 0 else 1,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ) {
-                Tab(
-                    selected = selectedTab == "EXPENSE",
-                    onClick = { selectedTab = "EXPENSE" },
-                    text = { Text("Khoản chi", fontWeight = FontWeight.Bold) },
-                    selectedContentColor = Color(0xFFF44336),
-                    unselectedContentColor = Color.Gray
-                )
-                Tab(
-                    selected = selectedTab == "INCOME",
-                    onClick = { selectedTab = "INCOME" },
-                    text = { Text("Khoản thu", fontWeight = FontWeight.Bold) },
-                    selectedContentColor = Color(0xFF4CAF50),
-                    unselectedContentColor = Color.Gray
-                )
-            }
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Tree Content
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                parentCats.forEach { parentCat ->
-                    val childCats = filteredCategories.filter { it.parentName == parentCat.name }
-                    CategoryTreeItem(parentCat = parentCat, childCats = childCats)
-                    Spacer(modifier = Modifier.height(16.dp))
+                if (parentCats.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (selectedTab == "EXPENSE") "Chưa có sơ đồ khoản chi nào" else "Chưa có sơ đồ khoản thu nào",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
+                    parentCats.forEachIndexed { index, parentCat ->
+                        val childCats = filteredCategories.filter { it.parentName?.lowercase() == parentCat.name.lowercase() }
+                        CategoryTreeItem(
+                            parentCat = parentCat,
+                            childCats = childCats,
+                            parentIndex = index,
+                            selectedTab = selectedTab,
+                            seenKeys = seenKeys
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
                 Spacer(modifier = Modifier.height(40.dp))
             }
@@ -1187,10 +1290,54 @@ fun CategoryTreeDialog(
 }
 
 @Composable
-fun CategoryTreeItem(parentCat: FinanceCategory, childCats: List<FinanceCategory>) {
+fun CategoryTreeItem(
+    parentCat: FinanceCategory,
+    childCats: List<FinanceCategory>,
+    parentIndex: Int,
+    selectedTab: String,
+    seenKeys: MutableList<String>
+) {
     val parentColor = try { FormatHelper.parseColor(parentCat.colorHex) } catch(e: Exception) { Color.Gray }
     
-    Column {
+    val parentKey = "tree_parent_${parentCat.name}_$selectedTab"
+    val alreadySeenParent = remember(parentKey) { seenKeys.contains(parentKey) }
+    var isParentVisible by rememberSaveable(parentKey) { mutableStateOf(alreadySeenParent) }
+
+    LaunchedEffect(parentKey) {
+        if (!alreadySeenParent) {
+            isParentVisible = true
+            seenKeys.add(parentKey)
+        }
+    }
+
+    val parentAlpha by animateFloatAsState(
+        targetValue = if (isParentVisible || alreadySeenParent) 1f else 0f,
+        animationSpec = if (alreadySeenParent) snap() else tween(
+            durationMillis = 500,
+            delayMillis = (parentIndex * 90).coerceAtMost(350),
+            easing = LinearOutSlowInEasing
+        ),
+        label = "tree_parent_alpha_$parentIndex"
+    )
+
+    val parentOffsetY by animateDpAsState(
+        targetValue = if (isParentVisible || alreadySeenParent) 0.dp else 20.dp,
+        animationSpec = if (alreadySeenParent) snap() else tween(
+            durationMillis = 500,
+            delayMillis = (parentIndex * 90).coerceAtMost(350),
+            easing = LinearOutSlowInEasing
+        ),
+        label = "tree_parent_offset_$parentIndex"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = parentAlpha
+                translationY = parentOffsetY.toPx()
+            }
+    ) {
         // Parent Node
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -1219,58 +1366,115 @@ fun CategoryTreeItem(parentCat: FinanceCategory, childCats: List<FinanceCategory
                     val isLast = index == childCats.size - 1
                     val childColor = try { FormatHelper.parseColor(childCat.colorHex) } catch(e: Exception) { Color.Gray }
                     
+                    val childKey = "tree_child_${parentCat.name}_${childCat.name}_$selectedTab"
+                    val alreadySeenChild = remember(childKey) { seenKeys.contains(childKey) }
+                    var isChildVisible by rememberSaveable(childKey) { mutableStateOf(alreadySeenChild) }
+
+                    LaunchedEffect(childKey) {
+                        if (!alreadySeenChild) {
+                            isChildVisible = true
+                            seenKeys.add(childKey)
+                        }
+                    }
+
+                    val parentBaseDelay = (parentIndex * 90).coerceAtMost(350) + 120
+                    // Line drawing progress (0.0f -> 1.0f)
+                    val lineProgress by animateFloatAsState(
+                        targetValue = if (isChildVisible || alreadySeenChild) 1f else 0f,
+                        animationSpec = if (alreadySeenChild) snap() else tween(
+                            durationMillis = 420,
+                            delayMillis = parentBaseDelay + (index * 130),
+                            easing = FastOutSlowInEasing
+                        ),
+                        label = "tree_line_${parentCat.name}_$index"
+                    )
+
+                    // Child node appearance (pop in as line reaches)
+                    val childAlpha by animateFloatAsState(
+                        targetValue = if ((isChildVisible && lineProgress > 0.35f) || alreadySeenChild) 1f else 0f,
+                        animationSpec = if (alreadySeenChild) snap() else tween(
+                            durationMillis = 350,
+                            easing = LinearOutSlowInEasing
+                        ),
+                        label = "tree_child_alpha_${parentCat.name}_$index"
+                    )
+
+                    val childScale by animateFloatAsState(
+                        targetValue = if ((isChildVisible && lineProgress > 0.35f) || alreadySeenChild) 1f else 0.65f,
+                        animationSpec = if (alreadySeenChild) snap() else tween(
+                            durationMillis = 350,
+                            easing = LinearOutSlowInEasing
+                        ),
+                        label = "tree_child_scale_${parentCat.name}_$index"
+                    )
+
                     Row(
                         modifier = Modifier.height(IntrinsicSize.Min),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Lines Canvas
+                        // Animated Lines Canvas
                         androidx.compose.foundation.Canvas(
                             modifier = Modifier
                                 .width(30.dp)
                                 .fillMaxHeight()
                         ) {
                             val strokeWidth = 2.dp.toPx()
-                            val lineColor = parentColor.copy(alpha = 0.5f)
+                            val lineColor = parentColor.copy(alpha = 0.55f)
                             
                             val startX = 1.dp.toPx()
                             val endX = size.width
                             val centerY = size.height / 2
                             val bottomY = if (isLast) centerY else size.height
                             
-                            // Vertical Line
-                            drawLine(
-                                color = lineColor,
-                                start = androidx.compose.ui.geometry.Offset(startX, 0f),
-                                end = androidx.compose.ui.geometry.Offset(startX, bottomY),
-                                strokeWidth = strokeWidth
-                            )
+                            // Vertical Line (draws downwards)
+                            val vertProgress = (lineProgress * 2f).coerceIn(0f, 1f)
+                            if (vertProgress > 0f) {
+                                drawLine(
+                                    color = lineColor,
+                                    start = androidx.compose.ui.geometry.Offset(startX, 0f),
+                                    end = androidx.compose.ui.geometry.Offset(startX, bottomY * vertProgress),
+                                    strokeWidth = strokeWidth
+                                )
+                            }
                             
-                            // Horizontal Line
-                            drawLine(
-                                color = lineColor,
-                                start = androidx.compose.ui.geometry.Offset(startX, centerY),
-                                end = androidx.compose.ui.geometry.Offset(endX, centerY),
-                                strokeWidth = strokeWidth
-                            )
+                            // Horizontal Line (draws rightwards towards child node)
+                            val horizProgress = ((lineProgress - 0.35f) / 0.65f).coerceIn(0f, 1f)
+                            if (horizProgress > 0f) {
+                                drawLine(
+                                    color = lineColor,
+                                    start = androidx.compose.ui.geometry.Offset(startX, centerY),
+                                    end = androidx.compose.ui.geometry.Offset(startX + (endX - startX) * horizProgress, centerY),
+                                    strokeWidth = strokeWidth
+                                )
+                            }
                         }
                         
-                        // Child Node
-                        Box(
-                            modifier = Modifier
-                                .padding(vertical = 10.dp)
-                                .size(28.dp)
-                                .background(childColor, CircleShape),
-                            contentAlignment = Alignment.Center
+                        // Child Node with pop-in scale & alpha
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.graphicsLayer {
+                                alpha = childAlpha
+                                scaleX = childScale
+                                scaleY = childScale
+                            }
                         ) {
-                            Icon(
-                                imageVector = IconMapper.getIconByName(childCat.iconName), 
-                                contentDescription = null,
-                                tint = Color.White, 
-                                modifier = Modifier.size(14.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .padding(vertical = 10.dp)
+                                    .size(28.dp)
+                                    .background(childColor, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = IconMapper.getIconByName(childCat.iconName), 
+                                    contentDescription = null,
+                                    tint = Color.White, 
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(childCat.name, fontSize = 15.sp)
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(childCat.name, fontSize = 15.sp)
                     }
                 }
             }
