@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,8 +25,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import android.os.Build
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -56,6 +70,26 @@ fun WalletsScreen(
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val focusedWalletId by viewModel.focusedWalletId.collectAsState()
+
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                add(SvgDecoder.Factory())
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+    
+    val emptySvgPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(com.app.R.raw.investment_data_rafiki)
+            .build(),
+        imageLoader = gifImageLoader
+    )
 
     if (walletToDelete != null) {
         AlertDialog(
@@ -102,6 +136,7 @@ fun WalletsScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("wallets_screen_root"),
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -161,135 +196,169 @@ fun WalletsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp)
+                .padding(
+                    top = innerPadding.calculateTopPadding() + 8.dp,
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = 0.dp
+                )
         ) {
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Wallets list (horizontal scroll with selection)
-            if (wallets.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            RoundedCornerShape(16.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Vui lòng thêm tài khoản ví đầu tiên của bạn!",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp
-                    )
-                }
-            } else {
-                val sortedWallets = remember(wallets, pinnedWalletId) {
-                    val pinnedId = pinnedWalletId
-                    if (pinnedId != null) {
-                        val pinnedWallet = wallets.find { it.id == pinnedId }
-                        if (pinnedWallet != null) {
-                            listOf(pinnedWallet) + wallets.filter { it.id != pinnedId }
+            // Wallets list (horizontal scroll with selection) - Animated entrance (index = 0)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .staggeredEntrance(0)
+            ) {
+                if (wallets.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                RoundedCornerShape(16.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Vui lòng thêm tài khoản ví đầu tiên của bạn!",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
+                    val sortedWallets = remember(wallets, pinnedWalletId) {
+                        val pinnedId = pinnedWalletId
+                        if (pinnedId != null) {
+                            val pinnedWallet = wallets.find { it.id == pinnedId }
+                            if (pinnedWallet != null) {
+                                listOf(pinnedWallet) + wallets.filter { it.id != pinnedId }
+                            } else {
+                                wallets
+                            }
                         } else {
                             wallets
                         }
-                    } else {
-                        wallets
                     }
-                }
 
-                val walletsListState = rememberLazyListState()
-                
-                LazyRow(
-                    state = walletsListState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(sortedWallets) { wallet ->
-                        val isSelected = selectedWalletForTransactions?.id == wallet.id
-                        WalletBigCard(
-                            wallet = wallet,
-                            isSelected = isSelected,
-                            onSelect = { selectedWalletForTransactions = wallet },
-                            onDelete = { walletToDelete = wallet },
-                            showDeleteButton = true,
-                            modifier = Modifier.width(170.dp)
-                        )
-                    }
-                }
+                    val walletsListState = rememberLazyListState()
+                    
+                    Column {
+                        LazyRow(
+                            state = walletsListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(sortedWallets) { wallet ->
+                                val isSelected = selectedWalletForTransactions?.id == wallet.id
+                                WalletBigCard(
+                                    wallet = wallet,
+                                    isSelected = isSelected,
+                                    onSelect = { selectedWalletForTransactions = wallet },
+                                    onDelete = { walletToDelete = wallet },
+                                    showDeleteButton = true,
+                                    modifier = Modifier.width(170.dp)
+                                )
+                            }
+                        }
 
-                if (sortedWallets.size > 1) {
-                    val currentIndex by remember {
-                        derivedStateOf { walletsListState.firstVisibleItemIndex }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        repeat(sortedWallets.size) { index ->
-                            val isSelected = currentIndex == index
-                            val size = if (isSelected) 8.dp else 5.dp
-                            val color = if (isSelected) MaterialTheme.colorScheme.primary 
-                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                            Box(
+                        if (sortedWallets.size > 1) {
+                            val currentIndex by remember {
+                                derivedStateOf { walletsListState.firstVisibleItemIndex }
+                            }
+                            Row(
                                 modifier = Modifier
-                                    .padding(horizontal = 3.dp)
-                                    .size(size)
-                                    .clip(CircleShape)
-                                    .background(color)
-                            )
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(sortedWallets.size) { index ->
+                                    val isSelected = currentIndex == index
+                                    val size = if (isSelected) 8.dp else 5.dp
+                                    val color = if (isSelected) MaterialTheme.colorScheme.primary 
+                                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(horizontal = 3.dp)
+                                            .size(size)
+                                            .clip(CircleShape)
+                                            .background(color)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Associated transactions
-            Text(
-                text = "Lịch sử của ví: ${selectedWalletForTransactions?.name ?: ""}",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
             Spacer(modifier = Modifier.height(12.dp))
 
-            val walletTxs = transactions.filter { it.walletId == (selectedWalletForTransactions?.id ?: -1) }
+            // Associated transactions - Animated entrance (index = 1)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .staggeredEntrance(1)
+            ) {
+                Text(
+                    text = "Lịch sử của ví: ${selectedWalletForTransactions?.name ?: ""}",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
 
-            if (walletTxs.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
-                            RoundedCornerShape(16.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Ví này chưa có giao dịch nào",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(walletTxs) { tx ->
-                        WalletRecentTransactionItem(tx = tx)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val walletTxs = transactions.filter { it.walletId == (selectedWalletForTransactions?.id ?: -1) }
+
+                if (walletTxs.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+                                RoundedCornerShape(16.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Image(
+                                painter = emptySvgPainter,
+                                contentDescription = "Empty Animation",
+                                modifier = Modifier.size(160.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Không có giao dịch",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .animateContentSize(),
+                        contentPadding = PaddingValues(bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        itemsIndexed(walletTxs, key = { _, tx -> tx.id }) { index, tx ->
+                            WalletRecentTransactionItem(
+                                tx = tx,
+                                modifier = Modifier.staggeredEntrance(
+                                    index = index + 1,
+                                    key = "${selectedWalletForTransactions?.id}_${tx.id}"
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -990,4 +1059,41 @@ fun AdjustWalletFlowDialog(
             }
         }
     }
-    }
+}
+
+@Composable
+private fun Modifier.staggeredEntrance(index: Int, key: Any? = null): Modifier {
+    var isVisibleOnScreen by remember(key) { mutableStateOf(false) }
+    var skipAnimation by remember(key) { mutableStateOf(false) }
+
+    val progress by animateFloatAsState(
+        targetValue = if (isVisibleOnScreen) 1f else 0f,
+        animationSpec = if (skipAnimation) snap()
+        else tween(
+            durationMillis = 350,
+            delayMillis = (index * 45).coerceAtMost(250),
+            easing = FastOutSlowInEasing
+        ),
+        label = "staggered_$index"
+    )
+
+    val density = LocalDensity.current
+    val offsetYPx = remember(density) { with(density) { 30.dp.toPx() } }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
+    return this
+        .onGloballyPositioned { coordinates ->
+            if (!isVisibleOnScreen) {
+                val y = coordinates.positionInRoot().y
+                if (y < screenHeightPx - 10f) {
+                    if (y <= 0) skipAnimation = true
+                    isVisibleOnScreen = true
+                }
+            }
+        }
+        .fillMaxWidth()
+        .graphicsLayer {
+            alpha = progress
+            translationY = if (skipAnimation) 0f else (1f - progress) * offsetYPx
+        }
+}

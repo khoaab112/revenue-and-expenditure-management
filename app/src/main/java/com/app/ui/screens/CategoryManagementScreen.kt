@@ -42,6 +42,14 @@ import com.app.ui.IconMapper
 import com.app.ui.components.AppModalBottomSheet
 import com.app.ui.components.AppNotificationDialog
 import com.app.ui.components.DialogButtonConfig
+import android.os.Build
+import androidx.compose.foundation.Image
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import androidx.compose.ui.layout.ContentScale
 
 // Custom Dashed Border Modifier for Add Sub-Category Button
 fun Modifier.dashedBorder(
@@ -1189,6 +1197,25 @@ fun CategoryManagementScreen(
 
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+        val gifImageLoader = remember(context) {
+            ImageLoader.Builder(context)
+                .components {
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        add(ImageDecoderDecoder.Factory())
+                    } else {
+                        add(GifDecoder.Factory())
+                    }
+                }
+                .build()
+        }
+
+        val lazyCatGifPainter = rememberAsyncImagePainter(
+            model = ImageRequest.Builder(context)
+                .data(com.app.R.drawable.lazy_cat)
+                .build(),
+            imageLoader = gifImageLoader
+        )
+
         AppModalBottomSheet(
             onDismissRequest = { showSyncSystemCategoriesSheet = false },
             title = "Bổ sung danh mục hệ thống",
@@ -1252,11 +1279,11 @@ fun CategoryManagementScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF34C759),
-                            modifier = Modifier.size(56.dp)
+                        Image(
+                            painter = lazyCatGifPainter,
+                            contentDescription = "Lazy Cat GIF",
+                            modifier = Modifier.size(120.dp),
+                            contentScale = ContentScale.Fit
                         )
                         Text(
                             text = "Bạn đã có đầy đủ tất cả danh mục của hệ thống!",

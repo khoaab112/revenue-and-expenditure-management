@@ -54,6 +54,13 @@ import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.CustomMoneyInputField
 import com.app.service.GeminiAdvisorService
+import android.os.Build
+import androidx.compose.foundation.Image
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -221,6 +228,25 @@ fun SettingsScreen(
         val googleAccount = remember(isCloudSyncEnabled) {
             com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)
         }
+
+        val gifImageLoader = remember(context) {
+            ImageLoader.Builder(context)
+                .components {
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        add(ImageDecoderDecoder.Factory())
+                    } else {
+                        add(GifDecoder.Factory())
+                    }
+                }
+                .build()
+        }
+
+        val userAvatarGifPainter = rememberAsyncImagePainter(
+            model = ImageRequest.Builder(context)
+                .data(com.app.R.drawable.user_avatar)
+                .build(),
+            imageLoader = gifImageLoader
+        )
 
         // =============================================================
         // SECTION 1: Đồng bộ google

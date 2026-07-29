@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
@@ -42,6 +43,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.data.Transaction
 import com.app.ui.FinanceViewModel
+import android.os.Build
+import androidx.compose.foundation.Image
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.AppModalBottomSheet
@@ -126,6 +135,27 @@ fun ReportsScreen(
 fun TrendReportContent(viewModel: FinanceViewModel) {
     var selectedPeriod by remember { mutableStateOf("WEEK") } // "WEEK", "MONTH", "YEAR", "5YEARS"
     var periodOffset by remember { mutableStateOf(0) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                add(SvgDecoder.Factory())
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+
+    val analyzePanaPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(com.app.R.raw.analyze_pana)
+            .build(),
+        imageLoader = gifImageLoader
+    )
 
     val allTransactions by viewModel.dailyTransactions.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
@@ -650,7 +680,27 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
             }
 
             if (topExpenseCategories.isEmpty()) {
-                Text("Không có dữ liệu chi tiêu trong khoảng thời gian này.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Image(
+                            painter = analyzePanaPainter,
+                            contentDescription = "No data illustration",
+                            modifier = Modifier.size(160.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Không có giao dịch",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
             } else {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1189,6 +1239,27 @@ data class ChartBucket(
 // ==========================================
 @Composable
 fun DistributionReportContent(viewModel: FinanceViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                add(SvgDecoder.Factory())
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+
+    val analyzePanaPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(com.app.R.raw.analyze_pana)
+            .build(),
+        imageLoader = gifImageLoader
+    )
+
     val transactions by viewModel.dailyTransactions.collectAsState()
     val currentRealMonthStr = remember {
         Calendar.getInstance().let { cal ->
@@ -1422,21 +1493,21 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
+                    .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.TrendingDown,
-                        contentDescription = "Empty Stats",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.size(56.dp)
+                    Image(
+                        painter = analyzePanaPainter,
+                        contentDescription = "No data illustration",
+                        modifier = Modifier.size(160.dp),
+                        contentScale = ContentScale.Fit
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = if (selectedReportType == "EXPENSE") "Không phát sinh chi tiêu trong tháng này" else "Không phát sinh thu nhập trong tháng này",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Không có giao dịch",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp
                     )
                 }
             }

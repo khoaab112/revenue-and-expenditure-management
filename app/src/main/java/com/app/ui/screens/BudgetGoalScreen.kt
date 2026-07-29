@@ -44,6 +44,14 @@ import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.AppModalBottomSheet
 import com.app.ui.components.StripedProgressIndicator
+import android.os.Build
+import androidx.compose.foundation.Image
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import androidx.compose.ui.layout.ContentScale
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 import androidx.compose.ui.text.withStyle
@@ -83,6 +91,26 @@ fun BudgetsSection(
     val savingsWallets by viewModel.savingsWallets.collectAsState()
     val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
 
+    val context = LocalContext.current
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+
+    val orangeGifPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(com.app.R.drawable.orange)
+            .build(),
+        imageLoader = gifImageLoader
+    )
+
     val seenKeys = rememberSaveable(saver = listSaver(
         save = { it.toList() },
         restore = { mutableStateListOf<String>().apply { addAll(it) } }
@@ -92,7 +120,6 @@ fun BudgetsSection(
     var showMonthPickerDialog by remember { mutableStateOf(false) }
     var budgetToDelete by remember { mutableStateOf<Budget?>(null) }
     var selectedCategoryForHistory by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
 
     val displayBudgetMonth = remember(selectedBudgetMonth) {
         if (selectedBudgetMonth.length >= 7) {
@@ -324,11 +351,11 @@ fun BudgetsSection(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(24.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Gavel,
-                            contentDescription = "Empty Budgets",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(56.dp)
+                        Image(
+                            painter = orangeGifPainter,
+                            contentDescription = "Empty Budgets GIF",
+                            modifier = Modifier.size(120.dp),
+                            contentScale = ContentScale.Fit
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(

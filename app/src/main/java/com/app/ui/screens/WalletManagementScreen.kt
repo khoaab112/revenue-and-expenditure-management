@@ -36,6 +36,9 @@ import com.app.ui.IconMapper
 import com.app.ui.components.AppNotificationDialog
 import com.app.ui.components.DialogButtonConfig
 
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletManagementScreen(
     viewModel: FinanceViewModel,
@@ -384,6 +387,42 @@ fun WalletManagementScreen(
             .fillMaxSize()
             .background(Color(0xFFFBFBFB))
     ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 3.dp,
+            tonalElevation = 1.dp
+        ) {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (showAddForm) "THÊM VÍ MỚI" else "QUẢN LÝ VÍ",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        letterSpacing = 0.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        if (showAddForm) {
+                            showAddForm = false
+                        } else {
+                            onNavigateBack()
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Quay lại",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        }
         if (!showAddForm) {
             Box(
                 modifier = Modifier
