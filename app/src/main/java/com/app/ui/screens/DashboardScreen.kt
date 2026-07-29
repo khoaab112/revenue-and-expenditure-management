@@ -892,42 +892,14 @@ fun DashboardScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val expenseRatio = remember(totalIncome, totalExpense) {
-                        if (totalIncome > 0) (totalExpense / totalIncome).coerceIn(0.0, 1.0).toFloat()
-                        else if (totalExpense > 0) 1f
-                        else 0f
-                    }
-
-                    Box(
-                        modifier = Modifier.size(40.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val trackColor = MaterialTheme.colorScheme.surfaceVariant
-                        val strokeColor = MaterialTheme.colorScheme.error
-
-                        Canvas(modifier = Modifier.size(36.dp)) {
-                            drawArc(
-                                color = trackColor,
-                                startAngle = 0f,
-                                sweepAngle = 360f,
-                                useCenter = false,
-                                style = Stroke(width = 8f)
-                            )
-                            drawArc(
-                                color = strokeColor,
-                                startAngle = -90f,
-                                sweepAngle = expenseRatio * 360f,
-                                useCenter = false,
-                                style = Stroke(width = 8f)
-                            )
-                        }
-                        Text(
-                            text = "${(expenseRatio * 100).toInt()}%",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(R.drawable.growth_chart)
+                            .build(),
+                        imageLoader = bellGifImageLoader,
+                        contentDescription = "Biểu đồ",
+                        modifier = Modifier.size(40.dp)
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
@@ -954,19 +926,14 @@ fun DashboardScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(MaterialTheme.colorScheme.tertiaryContainer, shape = CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountBalance,
-                            contentDescription = "Kho tiết kiệm",
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(R.drawable.save_money)
+                            .build(),
+                        imageLoader = bellGifImageLoader,
+                        contentDescription = "Kho tiết kiệm",
+                        modifier = Modifier.size(40.dp)
+                    )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "Kho\ntiết kiệm",

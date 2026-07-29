@@ -2,6 +2,7 @@ package com.app.ui.screens
 
 import android.app.DatePickerDialog
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,12 +21,21 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.input.KeyboardType
@@ -41,6 +52,13 @@ import com.app.ui.components.CustomMoneyInputField
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import android.os.Build.VERSION.SDK_INT
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import com.app.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,12 +67,28 @@ fun DebtBookScreen(
     onNavigateBack: () -> Unit,
     initialTab: Int = 0
 ) {
+    val context = LocalContext.current
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                if (SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+
     val debts by viewModel.allDebts.collectAsState()
     val wallets by viewModel.allWallets.collectAsState()
     val dailyTransactions by viewModel.dailyTransactions.collectAsState()
 
     var selectedTab by remember { mutableStateOf(initialTab) }
     val tabs = listOf("Đi Vay", "Cho Vay")
+
+    // Seen keys tracking for Rule 5 animation protection
+    val seenKeys = remember { mutableStateOf(mutableSetOf<String>()) }
     
     var showAddDialog by remember { mutableStateOf(false) }
     var debtToPay by remember { mutableStateOf<Debt?>(null) }
@@ -65,6 +99,27 @@ fun DebtBookScreen(
         debts.filter { debt ->
             if (selectedTab == 0) debt.type == "DEBT" else debt.type == "LOAN"
         }
+    }
+
+    // Header Metrics Calculation
+    val totalRemainingAmount = remember(filteredDebts) {
+        filteredDebts.filter { it.status != "COMPLETED" && it.remainingAmount > 0.01 }.sumOf { it.remainingAmount }
+    }
+    val totalOriginalAmount = remember(filteredDebts) {
+        filteredDebts.sumOf { it.totalAmount }
+    }
+    val totalPaidAmount = remember(totalOriginalAmount, totalRemainingAmount) {
+        (totalOriginalAmount - totalRemainingAmount).coerceAtLeast(0.0)
+    }
+    val overallPaidProgress = remember(totalOriginalAmount, totalPaidAmount) {
+        if (totalOriginalAmount > 0.01) (totalPaidAmount / totalOriginalAmount).toFloat().coerceIn(0f, 1f) else 0f
+    }
+    val activeCount = remember(filteredDebts) {
+        filteredDebts.count { it.status != "COMPLETED" && it.remainingAmount > 0.01 }
+    }
+    val nowTime = System.currentTimeMillis()
+    val overdueCount = remember(filteredDebts, nowTime) {
+        filteredDebts.count { it.dueDate != null && it.dueDate < nowTime && it.status != "COMPLETED" && it.remainingAmount > 0.01 }
     }
 
     // Sort order:
@@ -110,34 +165,59 @@ fun DebtBookScreen(
                 }
             }
 
-            if (sortedDebts.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.AccountBalanceWallet,
-                            contentDescription = "Empty",
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.outline
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            "Không có khoản nợ nào",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp, 
+                    end = 16.dp, 
+                    top = 16.dp, 
+                    bottom = 80.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Header Summary Card
+                item(key = "summary_header_$selectedTab") {
+                    DebtSummaryCard(
+                        selectedTab = selectedTab,
+                        totalRemaining = totalRemainingAmount,
+                        totalPaid = totalPaidAmount,
+                        overallProgress = overallPaidProgress,
+                        activeCount = activeCount,
+                        overdueCount = overdueCount,
+                        seenKeys = seenKeys.value,
+                        modifier = Modifier.staggeredEntrance(0, "debt_summary_$selectedTab", seenKeys.value)
+                    )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp, 
-                        end = 16.dp, 
-                        top = 16.dp, 
-                        bottom = 80.dp // extra padding to scroll past the FAB
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    items(sortedDebts, key = { it.id }) { debt ->
+
+                if (sortedDebts.isEmpty()) {
+                    item(key = "empty_state_$selectedTab") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp)
+                                .staggeredEntrance(1, "debt_empty_$selectedTab", seenKeys.value),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(R.drawable.address_book)
+                                        .build(),
+                                    imageLoader = gifImageLoader,
+                                    contentDescription = "Empty State",
+                                    modifier = Modifier.size(110.dp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    if (selectedTab == 0) "Chưa có khoản đi vay nào" else "Chưa có khoản cho vay nào",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    itemsIndexed(sortedDebts, key = { _, debt -> debt.id }) { index, debt ->
                         DebtItemCard(
                             debt = debt,
                             onPayClick = { debtToPay = it },
@@ -148,25 +228,47 @@ fun DebtBookScreen(
                             },
                             onUpdateCreationDate = { targetDebt, newCreationDate ->
                                 viewModel.updateDebtCreationDate(targetDebt, newCreationDate)
-                            }
+                            },
+                            seenKeys = seenKeys.value,
+                            modifier = Modifier.staggeredEntrance(
+                                index = index + 1,
+                                key = "debt_item_${debt.id}_${debt.status}_${debt.remainingAmount}",
+                                seenKeys = seenKeys.value
+                            )
                         )
                     }
                 }
             }
         }
 
-        // Floating Action Button
+        // Floating Action Button with smooth scale entrance
+        var fabVisible by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            fabVisible = true
+        }
+        val fabScale by animateFloatAsState(
+            targetValue = if (fabVisible) 1f else 0f,
+            animationSpec = spring(stiffness = Spring.StiffnessLow),
+            label = "fabScale"
+        )
+
         FloatingActionButton(
             onClick = { showAddDialog = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp),
+                .padding(16.dp)
+                .graphicsLayer {
+                    scaleX = fabScale
+                    scaleY = fabScale
+                    alpha = fabScale
+                },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = Color.White
         ) {
             Icon(imageVector = Icons.Default.Add, contentDescription = "Add Debt")
         }
     }
+
 
     if (showAddDialog) {
         AddDebtDialog(
@@ -219,11 +321,26 @@ fun StripedProgressIndicator(
     progress: Float,
     modifier: Modifier = Modifier,
     color: Color = Color(0xFF5CAE34),
-    trackColor: Color = Color(0xFFF3F4F6)
+    trackColor: Color = Color(0xFFF3F4F6),
+    alreadyAnimated: Boolean = false
 ) {
-    val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = androidx.compose.animation.core.tween(durationMillis = 850, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+    val isZero = progress <= 0.001f
+    var animTarget by remember(progress, alreadyAnimated) {
+        mutableFloatStateOf(if (alreadyAnimated || isZero) progress.coerceIn(0f, 1f) else 0f)
+    }
+    LaunchedEffect(progress, alreadyAnimated) {
+        if (!isZero && !alreadyAnimated) {
+            animTarget = progress.coerceIn(0f, 1f)
+        }
+    }
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = if (isZero || alreadyAnimated) progress.coerceIn(0f, 1f) else animTarget,
+        animationSpec = if (isZero || alreadyAnimated) snap() else tween(
+            durationMillis = 1000,
+            delayMillis = 100,
+            easing = FastOutSlowInEasing
+        ),
         label = "debtProgressAnim"
     )
 
@@ -231,29 +348,31 @@ fun StripedProgressIndicator(
         // Draw track
         drawRect(color = trackColor, size = size)
         
-        // Draw progress
-        val progressWidth = size.width * animatedProgress
-        drawRect(
-            color = color,
-            size = size.copy(width = progressWidth)
-        )
-        
-        // Draw stripes inside progress area
-        clipRect(right = progressWidth) {
-            val stripeWidth = 6.dp.toPx()
-            val spacing = 6.dp.toPx()
-            val totalStripes = (size.width / (stripeWidth + spacing)).toInt() * 2
+        // Draw progress only if > 0
+        if (animatedProgress > 0.001f) {
+            val progressWidth = size.width * animatedProgress
+            drawRect(
+                color = color,
+                size = size.copy(width = progressWidth)
+            )
             
-            for (i in -totalStripes..totalStripes) {
-                val startX = i * (stripeWidth + spacing)
-                val path = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(startX, size.height)
-                    lineTo(startX + stripeWidth, size.height)
-                    lineTo(startX + stripeWidth + size.height, 0f)
-                    lineTo(startX + size.height, 0f)
-                    close()
+            // Draw stripes inside progress area
+            clipRect(right = progressWidth) {
+                val stripeWidth = 6.dp.toPx()
+                val spacing = 6.dp.toPx()
+                val totalStripes = (size.width / (stripeWidth + spacing)).toInt() * 2
+                
+                for (i in -totalStripes..totalStripes) {
+                    val startX = i * (stripeWidth + spacing)
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(startX, size.height)
+                        lineTo(startX + stripeWidth, size.height)
+                        lineTo(startX + stripeWidth + size.height, 0f)
+                        lineTo(startX + size.height, 0f)
+                        close()
+                    }
+                    drawPath(path, color = Color.White.copy(alpha = 0.25f))
                 }
-                drawPath(path, color = Color.White.copy(alpha = 0.25f))
             }
         }
     }
@@ -266,8 +385,16 @@ fun DebtItemCard(
     onIncreaseClick: (Debt) -> Unit,
     onHistoryClick: (Debt) -> Unit,
     onUpdateDueDate: ((Debt, Long) -> Unit)? = null,
-    onUpdateCreationDate: ((Debt, Long) -> Unit)? = null
+    onUpdateCreationDate: ((Debt, Long) -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    seenKeys: MutableSet<String>? = null
 ) {
+    val progressKey = "debt_item_progress_${debt.id}"
+    val alreadyAnimated = remember(progressKey) { seenKeys?.contains(progressKey) == true }
+    LaunchedEffect(progressKey) {
+        seenKeys?.add(progressKey)
+    }
+
     val now = System.currentTimeMillis()
     val isCompleted = debt.status == "COMPLETED" || debt.remainingAmount <= 0.01
     val paidAmount = Math.max(0.0, debt.totalAmount - debt.remainingAmount)
@@ -298,8 +425,40 @@ fun DebtItemCard(
 
     val contentAlpha = if (isCompleted) 0.5f else 1.0f
 
+    // Animations for overdue pulse and progress donut
+    val infiniteTransition = rememberInfiniteTransition(label = "overduePulse")
+    val overduePulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "overduePulseAlpha"
+    )
+
+    val isDonutZero = paidPercent <= 0
+    var donutTarget by remember(paidPercent, alreadyAnimated) {
+        mutableFloatStateOf(if (alreadyAnimated || isDonutZero) (paidPercent / 100f).coerceIn(0f, 1f) else 0f)
+    }
+    LaunchedEffect(paidPercent, alreadyAnimated) {
+        if (!isDonutZero && !alreadyAnimated) {
+            donutTarget = (paidPercent / 100f).coerceIn(0f, 1f)
+        }
+    }
+
+    val animatedDonutProgress by animateFloatAsState(
+        targetValue = if (isDonutZero || alreadyAnimated) (paidPercent / 100f).coerceIn(0f, 1f) else donutTarget,
+        animationSpec = if (isDonutZero || alreadyAnimated) snap() else tween(durationMillis = 1000, delayMillis = 100, easing = FastOutSlowInEasing),
+        label = "animatedDonutProgress"
+    )
+
+    val displayedPercent = if (isDonutZero) 0 else if (alreadyAnimated) paidPercent else (animatedDonutProgress * 100).toInt()
+
     Card(
-        modifier = Modifier.fillMaxWidth().alpha(contentAlpha),
+        modifier = modifier
+            .fillMaxWidth()
+            .alpha(contentAlpha),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -528,6 +687,7 @@ fun DebtItemCard(
                     ) {
                         StripedProgressIndicator(
                             progress = dateProgress,
+                            alreadyAnimated = alreadyAnimated,
                             modifier = Modifier
                                 .weight(1f)
                                 .height(8.dp),
@@ -551,7 +711,7 @@ fun DebtItemCard(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        progress = { paidPercent / 100f },
+                        progress = { animatedDonutProgress },
                         modifier = Modifier.fillMaxSize(),
                         color = Color(0xFF00C853),
                         strokeWidth = 6.dp,
@@ -559,7 +719,7 @@ fun DebtItemCard(
                         strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                     )
                     Text(
-                        text = "$paidPercent%",
+                        text = "$displayedPercent%",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF00C853)
@@ -593,7 +753,8 @@ fun DebtItemCard(
                     } else if (isOverdue) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFFFFF0F0)
+                            color = Color(0xFFFFF0F0),
+                            modifier = Modifier.graphicsLayer { alpha = overduePulseAlpha }
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1965,3 +2126,233 @@ fun IncreaseDebtDialog(
         }
     }
 }
+
+@Composable
+fun DebtSummaryCard(
+    selectedTab: Int,
+    totalRemaining: Double,
+    totalPaid: Double,
+    overallProgress: Float,
+    activeCount: Int,
+    overdueCount: Int,
+    modifier: Modifier = Modifier,
+    seenKeys: MutableSet<String>? = null
+) {
+    val progressKey = "summary_card_progress_$selectedTab"
+    val alreadyAnimated = remember(progressKey) { seenKeys?.contains(progressKey) == true }
+    LaunchedEffect(progressKey) {
+        seenKeys?.add(progressKey)
+    }
+
+    val isDebtTab = selectedTab == 0
+    val titleText = if (isDebtTab) "Tổng dư nợ cần trả" else "Tổng nợ cần thu"
+    val cardGradient = if (isDebtTab) {
+        Brush.linearGradient(
+            colors = listOf(Color(0xFF1E293B), Color(0xFF334155))
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(Color(0xFF0F172A), Color(0xFF1E293B))
+        )
+    }
+    val accentColor = if (isDebtTab) Color(0xFFF87171) else Color(0xFF4ADE80)
+
+    val isZero = totalRemaining <= 0.01
+
+    var animMoneyTarget by remember(selectedTab, totalRemaining, alreadyAnimated) {
+        mutableFloatStateOf(if (alreadyAnimated || isZero) totalRemaining.toFloat() else 0f)
+    }
+    var animProgressTarget by remember(selectedTab, overallProgress, alreadyAnimated) {
+        mutableFloatStateOf(if (alreadyAnimated || isZero) overallProgress.coerceIn(0f, 1f) else 0f)
+    }
+
+    LaunchedEffect(selectedTab, totalRemaining, overallProgress, alreadyAnimated) {
+        if (!isZero && !alreadyAnimated) {
+            animMoneyTarget = totalRemaining.toFloat()
+            animProgressTarget = overallProgress.coerceIn(0f, 1f)
+        }
+    }
+
+    val animatedMoney by animateFloatAsState(
+        targetValue = if (isZero || alreadyAnimated) totalRemaining.toFloat() else animMoneyTarget,
+        animationSpec = if (isZero || alreadyAnimated) snap() else tween(durationMillis = 800, easing = FastOutSlowInEasing),
+        label = "animSummaryMoney"
+    )
+
+    val animatedSummaryProgress by animateFloatAsState(
+        targetValue = if (isZero || alreadyAnimated) overallProgress.coerceIn(0f, 1f) else animProgressTarget,
+        animationSpec = if (isZero || alreadyAnimated) snap() else tween(durationMillis = 800, easing = FastOutSlowInEasing),
+        label = "animatedSummaryProgress"
+    )
+
+    val displayedMoney = if (isZero) 0.0 else if (alreadyAnimated) totalRemaining else animatedMoney.toDouble()
+    val displayedSummaryPercent = if (isZero) 0 else if (alreadyAnimated) (overallProgress * 100).toInt() else (animatedSummaryProgress * 100).toInt()
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(cardGradient)
+                .padding(16.dp)
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(accentColor.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isDebtTab) Icons.Default.TrendingDown else Icons.Default.TrendingUp,
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = titleText,
+                            fontSize = 14.sp,
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    if (overdueCount > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFEF4444).copy(alpha = 0.25f),
+                            border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(Color(0xFFEF4444), CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "$overdueCount quá hạn",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFFCA5A5),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = FormatHelper.formatVND(displayedMoney),
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Đã thanh toán: ${FormatHelper.formatVND(totalPaid)}",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = "$displayedSummaryPercent%",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accentColor
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                StripedProgressIndicator(
+                    progress = if (isZero) 0f else animatedSummaryProgress,
+                    alreadyAnimated = alreadyAnimated,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp),
+                    color = accentColor,
+                    trackColor = Color.White.copy(alpha = 0.15f)
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Đang quản lý $activeCount khoản",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Modifier.staggeredEntrance(
+    index: Int,
+    key: String,
+    seenKeys: MutableSet<String>
+): Modifier {
+    val alreadySeen = remember(key) { seenKeys.contains(key) }
+    var isVisibleOnScreen by remember { mutableStateOf(alreadySeen) }
+    var skipAnimation by remember { mutableStateOf(alreadySeen) }
+
+    val progress by animateFloatAsState(
+        targetValue = if (isVisibleOnScreen) 1f else 0f,
+        animationSpec = if (skipAnimation) snap()
+        else tween(
+            durationMillis = 380,
+            delayMillis = (index * 45).coerceAtMost(180),
+            easing = FastOutSlowInEasing
+        ),
+        label = "debt_staggered_$index"
+    )
+
+    val density = LocalDensity.current
+    val offsetYPx = remember(density) { with(density) { 35.dp.toPx() } }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
+    return this
+        .onGloballyPositioned { coordinates ->
+            if (!isVisibleOnScreen) {
+                val y = coordinates.positionInRoot().y
+                if (y < screenHeightPx - 20f) {
+                    if (y <= 0) skipAnimation = true
+                    seenKeys.add(key)
+                    isVisibleOnScreen = true
+                }
+            }
+        }
+        .graphicsLayer {
+            alpha = progress
+            translationY = if (skipAnimation) 0f else (1f - progress) * offsetYPx
+        }
+}
+
