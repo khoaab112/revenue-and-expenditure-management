@@ -1,6 +1,8 @@
 package com.app.ui.screens
 
 import android.app.DatePickerDialog
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,11 +20,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -76,6 +82,11 @@ fun BudgetsSection(
     val allTransactions by viewModel.allTransactions.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
     val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
+
+    val seenKeys = rememberSaveable(saver = listSaver(
+        save = { it.toList() },
+        restore = { mutableStateListOf<String>().apply { addAll(it) } }
+    )) { mutableStateListOf<String>() }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showMonthPickerDialog by remember { mutableStateOf(false) }
@@ -144,6 +155,9 @@ fun BudgetsSection(
         }
     }
 
+    val totalLimit = remember(filteredBudgets) { filteredBudgets.sumOf { it.limitAmount } }
+    val totalSpent = remember(filteredBudgets) { filteredBudgets.sumOf { it.spentAmount } }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -202,7 +216,7 @@ fun BudgetsSection(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp) // Removed 16.dp vertical padding to fix bottom whitespace
+                    .padding(horizontal = 16.dp)
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -293,6 +307,16 @@ fun BudgetsSection(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            if (filteredBudgets.isNotEmpty()) {
+                BudgetSummaryCard(
+                    totalLimit = totalLimit,
+                    totalSpent = totalSpent,
+                    displayMonth = selectedBudgetMonth,
+                    seenKeys = seenKeys
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             if (filteredBudgets.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -356,15 +380,44 @@ fun BudgetsSection(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("budgets_lazy_column"),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    items(filteredBudgets, key = { it.id }) { budget ->
-                        BudgetItemCard(
-                            budget = budget,
-                            onDelete = { budgetToDelete = budget },
-                            onToggleRecurring = { viewModel.toggleBudgetRecurring(budget) },
-                            onClick = { selectedCategoryForHistory = budget.categoryName }
+                    itemsIndexed(filteredBudgets, key = { _, b -> b.id }) { index, budget ->
+                        val animKey = "stagger_${budget.id}_$selectedBudgetMonth"
+                        val alreadySeen = remember(animKey) { seenKeys.contains(animKey) }
+
+                        var cardVisible by rememberSaveable(animKey) { mutableStateOf(alreadySeen) }
+                        LaunchedEffect(animKey) {
+                            cardVisible = true
+                        }
+
+                        val cardAlpha by animateFloatAsState(
+                            targetValue = if (cardVisible) 1f else 0f,
+                            animationSpec = if (alreadySeen) snap() else tween(400, delayMillis = index * 50, easing = FastOutSlowInEasing),
+                            label = "cardAlpha"
                         )
+                        val cardOffsetY by animateDpAsState(
+                            targetValue = if (cardVisible) 0.dp else 24.dp,
+                            animationSpec = if (alreadySeen) snap() else tween(400, delayMillis = index * 50, easing = FastOutSlowInEasing),
+                            label = "cardOffsetY"
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    alpha = cardAlpha
+                                    translationY = cardOffsetY.toPx()
+                                }
+                        ) {
+                            BudgetItemCard(
+                                budget = budget,
+                                onDelete = { budgetToDelete = budget },
+                                onToggleRecurring = { viewModel.toggleBudgetRecurring(budget) },
+                                onClick = { selectedCategoryForHistory = budget.categoryName },
+                                seenKeys = seenKeys
+                            )
+                        }
                     }
                 }
             }
@@ -507,31 +560,192 @@ fun BudgetMonthPickerDialog(
 }
 
 @Composable
+fun BudgetSummaryCard(
+    totalLimit: Double,
+    totalSpent: Double,
+    displayMonth: String,
+    seenKeys: MutableList<String>
+) {
+    val progressKey = "summary_$displayMonth"
+    val alreadyAnimated = remember(progressKey) { seenKeys.contains(progressKey) }
+
+    val rawProgress = if (totalLimit > 0.01) (totalSpent / totalLimit).toFloat().coerceIn(0f, 1.5f) else 0f
+    val percentageInt = ((totalSpent / if (totalLimit > 0.01) totalLimit else 1.0) * 100).toInt()
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = rawProgress.coerceAtMost(1.0f),
+        animationSpec = if (alreadyAnimated) snap() else tween(800, easing = FastOutSlowInEasing),
+        label = "summaryProgress"
+    )
+
+    val animatedPercent by animateIntAsState(
+        targetValue = percentageInt,
+        animationSpec = if (alreadyAnimated) snap() else tween(800, easing = FastOutSlowInEasing),
+        label = "summaryPercent"
+    )
+
+    LaunchedEffect(progressKey) {
+        if (!alreadyAnimated) {
+            seenKeys.add(progressKey)
+        }
+    }
+
+    val statusColor = when {
+        totalSpent > totalLimit -> Color(0xFFF44336)
+        rawProgress >= 0.8f -> Color(0xFFFF9800)
+        else -> Color(0xFF4CAF50)
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        shadowElevation = 2.dp
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "TỔNG NGÂN SÁCH HẠN MỨC",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = FormatHelper.formatVND(totalLimit),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(statusColor.copy(alpha = 0.12f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$animatedPercent%",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black,
+                        color = statusColor
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            StripedProgressIndicator(
+                progress = animatedProgress,
+                color = statusColor,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp))
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
+                    Text(
+                        text = "Đã chi: ${FormatHelper.formatVND(totalSpent)}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                val diff = totalLimit - totalSpent
+                Text(
+                    text = if (diff >= 0) "Còn lại ${FormatHelper.formatVND(diff)}" else "Vượt ${FormatHelper.formatVND(-diff)}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (diff >= 0) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFF44336)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun BudgetItemCard(
     budget: Budget,
     onDelete: () -> Unit,
     onToggleRecurring: () -> Unit,
     onClick: () -> Unit = {},
+    seenKeys: MutableList<String> = remember { mutableStateListOf() },
     modifier: Modifier = Modifier
 ) {
-    val ratio = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat() else 0f
-    val percentage = (ratio * 100).toInt()
-    val isOverBudget = ratio >= 1.0f
-    
+    val itemKey = "budget_card_${budget.id}_${budget.month}"
+    val alreadyAnimated = remember(itemKey) { seenKeys.contains(itemKey) }
+
+    val rawRatio = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat() else 0f
+    val targetPercentage = (rawRatio * 100).toInt()
+    val isOverBudget = rawRatio >= 1.0f
+
+    val animatedRatio by animateFloatAsState(
+        targetValue = rawRatio.coerceAtMost(1.0f),
+        animationSpec = if (alreadyAnimated) snap() else tween(800, easing = FastOutSlowInEasing),
+        label = "itemRatio"
+    )
+
+    val animatedPercentage by animateIntAsState(
+        targetValue = targetPercentage,
+        animationSpec = if (alreadyAnimated) snap() else tween(800, easing = FastOutSlowInEasing),
+        label = "itemPercent"
+    )
+
+    LaunchedEffect(itemKey) {
+        if (!alreadyAnimated) {
+            seenKeys.add(itemKey)
+        }
+    }
+
     val catColor = FormatHelper.parseColor(budget.categoryColor)
 
     // Choose progress color depending on danger ratios
     val progressColor = when {
         isOverBudget -> Color(0xFFF44336) // Red (overspent)
-        ratio >= 0.8f -> Color(0xFFFF9800) // Orange (danger)
+        rawRatio >= 0.8f -> Color(0xFFFF9800) // Orange (danger)
         else -> catColor // Category color
     }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "overbudgetPulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
     Card(
-        modifier = modifier.fillMaxWidth().testTag("budget_card_${budget.id}").clickable { onClick() },
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("budget_card_${budget.id}")
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        border = BorderStroke(
+            if (isOverBudget) 1.5.dp else 1.dp,
+            if (isOverBudget) Color(0xFFF44336).copy(alpha = pulseAlpha) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -634,7 +848,7 @@ fun BudgetItemCard(
 
             // Row 3: Striped Progress Bar
             StripedProgressIndicator(
-                progress = ratio.coerceAtMost(1.0f),
+                progress = animatedRatio,
                 color = progressColor,
                 modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
             )
@@ -648,7 +862,7 @@ fun BudgetItemCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$percentage%",
+                    text = "$animatedPercentage%",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = progressColor
@@ -677,7 +891,7 @@ fun BudgetItemCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFFFEBEE), RoundedCornerShape(8.dp))
+                        .background(Color(0xFFFFEBEE).copy(alpha = pulseAlpha), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -691,7 +905,7 @@ fun BudgetItemCard(
                     Text(
                         text = "Vượt quá hạn mức!",
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.Bold,
                         color = Color(0xFFD32F2F)
                     )
                 }
