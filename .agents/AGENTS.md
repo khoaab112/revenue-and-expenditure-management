@@ -29,6 +29,7 @@ Các quy tắc dưới đây chỉ có tác dụng trong phạm vi dự án này
 - Khi người dùng điều hướng từ màn hình chính sang các màn hình con (sub-screens / sub-destinations không thuộc 5 tab menu chính) hoặc mở các Dialog/BottomSheet rồi back về màn hình cũ, các hiệu ứng KHÔNG ĐƯỢC tự động chạy lại nếu dữ liệu màn đó không đổi. Sử dụng `rememberSaveable`, `hasAnimated` flag hoặc `seenKeys` để ghi nhớ và bỏ qua animation khi back lại màn cũ.
 
 ## 6. Quy tắc Commit Message (Git Commit Rules)
+- **Quyền hạn thực hiện**: AI **TUYỆT ĐỐI KHÔNG** tự ý chạy lệnh `git commit` sau các bước sửa code. Quy tắc bên dưới CHỈ áp dụng KHI người dùng có yêu cầu AI tạo commit.
 - **Định dạng chuẩn**: Bắt buộc tạo commit message theo cấu trúc:
   `<branch> (<type>): <message>`
 - **Yêu cầu đối với `<message>`**:
