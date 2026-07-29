@@ -568,24 +568,42 @@ fun BudgetItemCard(
     val rawRatio = if (budget.limitAmount > 0) (budget.spentAmount / budget.limitAmount).toFloat() else 0f
     val targetPercentage = (rawRatio * 100).toInt()
     val isOverBudget = rawRatio >= 1.0f
+    val isZero = rawRatio <= 0.001f
+
+    var animRatioTarget by remember(itemKey, rawRatio, alreadyAnimated) {
+        mutableFloatStateOf(if (alreadyAnimated || isZero) rawRatio.coerceAtMost(1.0f) else 0f)
+    }
+    var animPercentTarget by remember(itemKey, targetPercentage, alreadyAnimated) {
+        mutableIntStateOf(if (alreadyAnimated || targetPercentage == 0) targetPercentage else 0)
+    }
+
+    LaunchedEffect(itemKey, rawRatio, targetPercentage, alreadyAnimated) {
+        if (!alreadyAnimated) {
+            animRatioTarget = rawRatio.coerceAtMost(1.0f)
+            animPercentTarget = targetPercentage
+            seenKeys.add(itemKey)
+        }
+    }
 
     val animatedRatio by animateFloatAsState(
-        targetValue = rawRatio.coerceAtMost(1.0f),
-        animationSpec = if (alreadyAnimated) snap() else tween(800, easing = FastOutSlowInEasing),
+        targetValue = if (alreadyAnimated || isZero) rawRatio.coerceAtMost(1.0f) else animRatioTarget,
+        animationSpec = if (alreadyAnimated || isZero) snap() else tween(
+            durationMillis = 850,
+            delayMillis = 80,
+            easing = FastOutSlowInEasing
+        ),
         label = "itemRatio"
     )
 
     val animatedPercentage by animateIntAsState(
-        targetValue = targetPercentage,
-        animationSpec = if (alreadyAnimated) snap() else tween(800, easing = FastOutSlowInEasing),
+        targetValue = if (alreadyAnimated || targetPercentage == 0) targetPercentage else animPercentTarget,
+        animationSpec = if (alreadyAnimated || targetPercentage == 0) snap() else tween(
+            durationMillis = 850,
+            delayMillis = 80,
+            easing = FastOutSlowInEasing
+        ),
         label = "itemPercent"
     )
-
-    LaunchedEffect(itemKey) {
-        if (!alreadyAnimated) {
-            seenKeys.add(itemKey)
-        }
-    }
 
     val catColor = FormatHelper.parseColor(budget.categoryColor)
 
