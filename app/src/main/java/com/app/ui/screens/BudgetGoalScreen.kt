@@ -307,15 +307,7 @@ fun BudgetsSection(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (filteredBudgets.isNotEmpty()) {
-                BudgetSummaryCard(
-                    totalLimit = totalLimit,
-                    totalSpent = totalSpent,
-                    displayMonth = selectedBudgetMonth,
-                    seenKeys = seenKeys
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
+
 
             if (filteredBudgets.isEmpty()) {
                 Box(
@@ -559,127 +551,7 @@ fun BudgetMonthPickerDialog(
     )
 }
 
-@Composable
-fun BudgetSummaryCard(
-    totalLimit: Double,
-    totalSpent: Double,
-    displayMonth: String,
-    seenKeys: MutableList<String>
-) {
-    val progressKey = "summary_$displayMonth"
-    val alreadyAnimated = remember(progressKey) { seenKeys.contains(progressKey) }
 
-    val rawProgress = if (totalLimit > 0.01) (totalSpent / totalLimit).toFloat().coerceIn(0f, 1.5f) else 0f
-    val percentageInt = ((totalSpent / if (totalLimit > 0.01) totalLimit else 1.0) * 100).toInt()
-
-    val animatedProgress by animateFloatAsState(
-        targetValue = rawProgress.coerceAtMost(1.0f),
-        animationSpec = if (alreadyAnimated) snap() else tween(800, easing = FastOutSlowInEasing),
-        label = "summaryProgress"
-    )
-
-    val animatedPercent by animateIntAsState(
-        targetValue = percentageInt,
-        animationSpec = if (alreadyAnimated) snap() else tween(800, easing = FastOutSlowInEasing),
-        label = "summaryPercent"
-    )
-
-    LaunchedEffect(progressKey) {
-        if (!alreadyAnimated) {
-            seenKeys.add(progressKey)
-        }
-    }
-
-    val statusColor = when {
-        totalSpent > totalLimit -> Color(0xFFF44336)
-        rawProgress >= 0.8f -> Color(0xFFFF9800)
-        else -> Color(0xFF4CAF50)
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-        shadowElevation = 2.dp
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "TỔNG NGÂN SÁCH HẠN MỨC",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = FormatHelper.formatVND(totalLimit),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .background(statusColor.copy(alpha = 0.12f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "$animatedPercent%",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Black,
-                        color = statusColor
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            StripedProgressIndicator(
-                progress = animatedProgress,
-                color = statusColor,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(5.dp))
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
-                    Text(
-                        text = "Đã chi: ${FormatHelper.formatVND(totalSpent)}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                val diff = totalLimit - totalSpent
-                Text(
-                    text = if (diff >= 0) "Còn lại ${FormatHelper.formatVND(diff)}" else "Vượt ${FormatHelper.formatVND(-diff)}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (diff >= 0) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFF44336)
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun BudgetItemCard(
