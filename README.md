@@ -16,7 +16,15 @@
 
 ---
 
+## 📊 Tài liệu Kiến trúc & Sơ đồ Luồng (Architecture & Flowcharts)
+- 🗺️ **Sơ đồ Luồng Hoạt Động (Flowcharts):** Xem chi tiết các sơ đồ Mermaid tại **[FLOWCHARTS.md](file:///d:/coding/revenue-and-expenditure-management/FLOWCHARTS.md)**
+- 📐 **Kiến trúc & Luồng Logic (Architecture & Logic Flow):** **[LOGIC_FLOW.md](file:///d:/coding/revenue-and-expenditure-management/LOGIC_FLOW.md)**
+- 🎯 **Đặc tả Logic AI & Toàn vẹn Dữ liệu:** **[SMART_FINANCIAL_LOGIC_SPECS.md](file:///d:/coding/revenue-and-expenditure-management/SMART_FINANCIAL_LOGIC_SPECS.md)**
+
+---
+
 ## Yêu cầu công cụ
+
 Để mở và chạy được mã nguồn này trên máy tính của bạn, bạn cần:
 - **Android Studio**: Tải xuống và cài đặt phiên bản mới nhất (Google khuyến nghị bản Ladybug hoặc Koala).
 - **Java Development Kit (JDK 17)**: Thường được tích hợp sẵn khi cài Android Studio.

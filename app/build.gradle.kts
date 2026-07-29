@@ -55,7 +55,17 @@ android {
     compose = true
     buildConfig = true
   }
-  testOptions { unitTests { isIncludeAndroidResources = true } }
+  testOptions {
+    unitTests {
+      isIncludeAndroidResources = true
+      all { test ->
+        test.testLogging {
+          events("passed", "skipped", "failed")
+          showStandardStreams = true
+        }
+      }
+    }
+  }
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
@@ -113,6 +123,8 @@ dependencies {
   testImplementation(libs.roborazzi)
   testImplementation(libs.roborazzi.compose)
   testImplementation(libs.roborazzi.junit.rule)
+  testImplementation(libs.mockk)
+  testImplementation(libs.turbine)
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   androidTestImplementation(libs.androidx.espresso.core)

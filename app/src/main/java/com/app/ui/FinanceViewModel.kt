@@ -1556,6 +1556,23 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
 
+                // 6. Events Info
+                val events = allEvents.value
+                val eventsInfo = if (events.isEmpty()) "Không có sự kiện chi tiêu nào." else {
+                    events.joinToString("\n") { e ->
+                        val spent = allTransactions.value.filter { it.eventId == e.id && it.type == "EXPENSE" }.sumOf { it.amount }
+                        "- Sự kiện ${e.name}: Hạn mức ${if (e.limitAmount != null) FormatHelper.formatVND(e.limitAmount) else "Không giới hạn"}, Đã chi ${FormatHelper.formatVND(spent)}"
+                    }
+                }
+
+                // 7. Savings Goals Info
+                val goals = allSavingsGoals.value
+                val savingsGoalsInfo = if (goals.isEmpty()) "Chưa thiết lập mục tiêu tích lũy." else {
+                    goals.joinToString("\n") { g ->
+                        "- Mục tiêu ${g.name}: Cần đạt ${FormatHelper.formatVND(g.targetAmount)}, Hiện có ${FormatHelper.formatVND(g.currentAmount)} (Hạn tới: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(g.targetDate))})"
+                    }
+                }
+
                 // Call Service
                 val result = com.app.service.GeminiAdvisorService.getFinancialAdvice(
                     walletsInfo = walletsInfo,
@@ -1563,6 +1580,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     topExpenses = topExpenses,
                     debtsInfo = debtsInfo,
                     budgetsInfo = budgetsInfo,
+                    eventsInfo = eventsInfo,
+                    savingsGoalsInfo = savingsGoalsInfo,
                     customApiKey = _geminiApiKey.value
                 )
 
@@ -2187,140 +2206,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             try {
                 addLog("Bắt đầu tạo bản sao lưu cục bộ...")
 
-                val walletsList = repository.allWallets.first()
-                val transactionsList = repository.allTransactions.first()
-                val budgetsList = repository.getAllBudgets().first()
-                val savingsGoalsList = repository.allSavingsGoals.first()
-                val eventsList = repository.allEvents.first()
-                val debtsList = repository.allDebts.first()
-
-                addLog("Đang nén dữ liệu: ${walletsList.size} ví, ${transactionsList.size} giao dịch, ${budgetsList.size} ngân sách, ${savingsGoalsList.size} mục tiêu tích lũy, ${eventsList.size} sự kiện, ${debtsList.size} khoản nợ.")
-
-                val root = org.json.JSONObject()
-                root.put("version", 2)
-                root.put("backup_timestamp", System.currentTimeMillis())
-
-                // Wallets
-                val walletsArray = org.json.JSONArray()
-                walletsList.forEach { w ->
-                    val obj = org.json.JSONObject()
-                    obj.put("id", w.id)
-                    obj.put("name", w.name)
-                    obj.put("type", w.type)
-                    obj.put("balance", w.balance)
-                    obj.put("colorHex", w.colorHex)
-                    obj.put("iconName", w.iconName)
-                    obj.put("displayOrder", w.displayOrder)
-                    walletsArray.put(obj)
-                }
-                root.put("wallets", walletsArray)
-
-                // Transactions
-                val transactionsArray = org.json.JSONArray()
-                transactionsList.forEach { t ->
-                    val obj = org.json.JSONObject()
-                    obj.put("id", t.id)
-                    obj.put("walletId", t.walletId)
-                    obj.put("walletName", t.walletName)
-                    obj.put("type", t.type)
-                    obj.put("amount", t.amount)
-                    obj.put("categoryName", t.categoryName)
-                    obj.put("categoryIcon", t.categoryIcon)
-                    obj.put("categoryColor", t.categoryColor)
-                    obj.put("note", t.note)
-                    obj.put("timestamp", t.timestamp)
-                    obj.put("isRecurring", t.isRecurring)
-                    obj.put("recurrencePeriod", t.recurrencePeriod)
-                    obj.put("eventId", t.eventId)
-                    t.destinationWalletId?.let { obj.put("destinationWalletId", it) }
-                    transactionsArray.put(obj)
-                }
-                root.put("transactions", transactionsArray)
-
-                // Budgets
-                val budgetsArray = org.json.JSONArray()
-                budgetsList.forEach { b ->
-                    val obj = org.json.JSONObject()
-                    obj.put("id", b.id)
-                    obj.put("categoryName", b.categoryName)
-                    obj.put("categoryIcon", b.categoryIcon)
-                    obj.put("categoryColor", b.categoryColor)
-                    obj.put("limitAmount", b.limitAmount)
-                    obj.put("spentAmount", b.spentAmount)
-                    obj.put("month", b.month)
-                    obj.put("isRecurring", b.isRecurring)
-                    budgetsArray.put(obj)
-                }
-                root.put("budgets", budgetsArray)
-
-                // Savings Goals
-                val savingsGoalsArray = org.json.JSONArray()
-                savingsGoalsList.forEach { s ->
-                    val obj = org.json.JSONObject()
-                    obj.put("id", s.id)
-                    obj.put("name", s.name)
-                    obj.put("targetAmount", s.targetAmount)
-                    obj.put("currentAmount", s.currentAmount)
-                    obj.put("targetDate", s.targetDate)
-                    obj.put("note", s.note ?: "")
-                    savingsGoalsArray.put(obj)
-                }
-                root.put("savingsGoals", savingsGoalsArray)
-
-                // Events
-                val eventsArray = org.json.JSONArray()
-                eventsList.forEach { e ->
-                    val obj = org.json.JSONObject()
-                    obj.put("id", e.id)
-                    obj.put("name", e.name)
-                    obj.put("description", e.description)
-                    obj.put("startDate", e.startDate)
-                    e.endDate?.let { obj.put("endDate", it) }
-                    e.limitAmount?.let { obj.put("limitAmount", it) }
-                    obj.put("colorHex", e.colorHex)
-                    eventsArray.put(obj)
-                }
-                root.put("events", eventsArray)
-
-                // Debts
-                val debtsArray = org.json.JSONArray()
-                debtsList.forEach { d ->
-                    val obj = org.json.JSONObject()
-                    obj.put("id", d.id)
-                    obj.put("personName", d.personName)
-                    obj.put("type", d.type)
-                    obj.put("totalAmount", d.totalAmount)
-                    obj.put("remainingAmount", d.remainingAmount)
-                    obj.put("walletId", d.walletId)
-                    obj.put("creationDate", d.creationDate)
-                    d.dueDate?.let { obj.put("dueDate", it) }
-                    obj.put("note", d.note)
-                    obj.put("status", d.status)
-                    obj.put("repaymentType", d.repaymentType)
-                    d.periodicAmount?.let { obj.put("periodicAmount", it) }
-                    d.periodType?.let { obj.put("periodType", it) }
-                    debtsArray.put(obj)
-                }
-                root.put("debts", debtsArray)
-
-                // Application & Protection Settings
-                val settingsObj = org.json.JSONObject()
-                val allSettings = repository.getAllSettings()
-                allSettings.forEach { setting ->
-                    settingsObj.put(setting.key, setting.value)
-                }
-                
-                // Fallbacks if not present in DB but needed for legacy reasons
-                val categoriesSetting = repository.getSetting("custom_categories")?.value ?: ""
-                val notificationLogsSetting = repository.getSetting("notification_logs")?.value ?: "[]"
-                
-                root.put("app_settings", settingsObj)
-
-                // Legacy fields for backward compatibility
-                root.put("customCategories", categoriesSetting)
-                root.put("notificationLogs", notificationLogsSetting)
-
-                val jsonString = root.toString(2)
+                val jsonString = repository.exportAllDataAsJson()
 
                 // Save to context.getExternalFilesDir("Backups")
                 val backupDir = context.getExternalFilesDir("Backups") ?: context.filesDir
@@ -2975,7 +2861,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             balance = obj.optDouble("balance", 0.0),
                             colorHex = obj.optString("colorHex", "#9E9E9E"),
                             iconName = obj.optString("iconName", "AccountBalanceWallet"),
-                            displayOrder = obj.optInt("displayOrder", 0)
+                            displayOrder = obj.optInt("displayOrder", 0),
+                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                            isClosed = obj.optBoolean("isClosed", false),
+                            targetAmount = if (obj.has("targetAmount") && !obj.isNull("targetAmount")) obj.optDouble("targetAmount") else null
                         )
                         repository.insertWalletDirect(w)
                     }
@@ -3001,7 +2890,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                             isRecurring = obj.optBoolean("isRecurring", false),
                             recurrencePeriod = obj.optString("recurrencePeriod", "NONE"),
                             eventId = if (obj.has("eventId") && !obj.isNull("eventId")) obj.optInt("eventId") else null,
-                            destinationWalletId = if (obj.has("destinationWalletId") && !obj.isNull("destinationWalletId")) obj.optInt("destinationWalletId") else null
+                            destinationWalletId = if (obj.has("destinationWalletId") && !obj.isNull("destinationWalletId")) obj.optInt("destinationWalletId") else null,
+                            debtId = if (obj.has("debtId") && !obj.isNull("debtId")) obj.optInt("debtId") else null,
+                            notificationKey = if (obj.has("notificationKey") && !obj.isNull("notificationKey")) obj.optString("notificationKey") else null
                         )
                         repository.insertTransactionDirect(t)
                     }

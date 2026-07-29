@@ -39,15 +39,22 @@ object GeminiAdvisorService {
 5. Tình hình ngân sách (Hạn mức chi tiêu):
 [Dữ liệu hạn mức]
 
+6. Các sự kiện chi tiêu đặc biệt (Events):
+[Dữ liệu sự kiện]
+
+7. Các mục tiêu tích lũy (Hũ tiết kiệm):
+[Dữ liệu hũ tiết kiệm]
+
 QUY TẮC RÀNG BUỘC PHÂN TÍCH (LƯU Ý NGHIÊM NGẶT):
 1. CHỈ sử dụng thông tin có trong dữ liệu đầu vào. Không được suy diễn hoặc tự tạo thêm các giao dịch, khoản nợ, ví tiền hoặc ngân sách không tồn tại.
 2. Nếu dữ liệu đầu vào không đủ hoặc rỗng để đưa ra kết luận, hãy ghi rõ trong phần "assessment" là "chưa đủ dữ liệu phân tích".
 3. TRONG MẢNG "warnings" (CẢNH BÁO RỦI RO): Cần mang tính tiên đoán/dự báo tương lai nhiều hơn là chỉ thống kê hiện tại:
    - Dựa vào tốc độ chi tiêu hàng ngày trong tháng, hãy tính toán và dự đoán xem một hạng mục (ví dụ: **Ăn uống**, **Đi lại**) có nguy cơ vượt hạn mức ngân sách trong bao nhiêu ngày tới (ví dụ: *"Với tình hình chi tiêu hiện tại, chi phí **Ăn uống** của bạn sẽ vượt hạn mức trong **3 ngày tới**"*).
    - Hãy tiên đoán xem tài khoản khả dụng/ví tiền có nguy cơ bị **cháy tài khoản** (hết sạch tiền) trong bao nhiêu ngày tới (ví dụ: *"Tài khoản của bạn có thể bị **cháy** trong **3 ngày tới** nếu với tình hình chi tiêu cho **Ăn uống** như hiện tại"*).
-   - Chỉ ra các rủi ro thực tế khác nếu có (Tổng chi > Tổng thu, Nợ quá hạn, Ví cạn kiệt...).
-4. TRONG MẢNG "recommendations" (KHUYẾN NGHỊ): Hãy đưa ra lời khuyên cụ thể, mang tính hành động kèm con số định mức chi tiêu giới hạn mỗi ngày từ nay đến cuối tháng để người dùng không vượt quá hạn mức:
-   - Ví dụ: *"Chi phí **Ăn uống** của bạn nên ở mức **25.000đ/1 ngày** để không vượt quá hạn mức ngân sách"* hoặc đề xuất mức giảm chi tiêu cụ thể.
+   - Chỉ ra các rủi ro thực tế khác nếu có (Tổng chi > Tổng thu, Nợ quá hạn, Sự kiện vượt mức, Ví cạn kiệt...).
+4. TRONG MẢNG "recommendations" (KHUYẾN NGHỊ): Hãy đưa ra lời khuyên cụ thể, mang tính hành động và tiết chế thói quen:
+   - TUYỆT ĐỐI KHÔNG khuyên lấy ngân sách từ mục này đập sang mục khác (vì vượt hạn mức là việc bình thường theo nhu cầu).
+   - Hãy khuyên người dùng giảm tần suất các chi phí phát sinh linh hoạt không thiết yếu (như Ăn uống ngoài, Cà phê, Mua sắm, Taxi) và đưa ra con số định mức chi tiêu giới hạn mỗi ngày từ nay đến cuối tháng cho các mục đó (ví dụ: *"Bạn nên giảm bớt các lần chi **Cà phê** nhỏ lẻ và giữ nhịp chi tiêu dưới **25.000đ/1 ngày** cho đến hết tháng"*).
    - TUYỆT ĐỐI không đưa ra lời khuyên chung chung như "Hãy tiết kiệm hơn", "Cố gắng chi tiêu hợp lý".
 5. TRONG MẢNG "assessment" (ĐÁNH GIÁ): Hãy chia nhỏ thành các dòng nhận định ngắn gọn rành mạch. Phải có ít nhất một dòng đánh giá so sánh xu hướng tăng/giảm chi tiết (Ví dụ: *"Bạn đã giảm chi phí **Đi lại** được **50%** so với tuần trước/tháng trước"*).
 6. ĐÁNH DẤU TỪ KHÓA BẰNG DẤU SAO KÉP: Bạn bắt buộc phải bọc các từ khóa quan trọng trong câu bằng ký tự `**` (ví dụ: "**Ăn uống**", "**Ví Cash**", "**cháy trong 3 ngày tới**", "**25.000đ/1 ngày**", "**giảm 50%**", "**vượt hạn mức**") để hệ thống tự động tô đậm trên giao diện.
@@ -88,6 +95,8 @@ LƯU Ý: Nếu không có cảnh báo hoặc đề xuất nào thỏa mãn đi�
         topExpenses: String,
         debtsInfo: String,
         budgetsInfo: String,
+        eventsInfo: String = "Không có sự kiện nào.",
+        savingsGoalsInfo: String = "Chưa có mục tiêu tích lũy nào.",
         customApiKey: String? = null
     ): AdvisorResult = withContext(Dispatchers.IO) {
         val apiKey = if (!customApiKey.isNullOrBlank()) customApiKey else BuildConfig.GEMINI_API_KEY
@@ -107,6 +116,8 @@ LƯU Ý: Nếu không có cảnh báo hoặc đề xuất nào thỏa mãn đi�
             .replace("[Dữ liệu hạng mục]", topExpenses)
             .replace("[Dữ liệu khoản nợ]", debtsInfo)
             .replace("[Dữ liệu hạn mức]", budgetsInfo)
+            .replace("[Dữ liệu sự kiện]", eventsInfo)
+            .replace("[Dữ liệu hũ tiết kiệm]", savingsGoalsInfo)
 
         val models = listOf(
             "gemini-flash-latest",

@@ -64,3 +64,12 @@ Bất cứ khi nào thêm màn hình hoặc bảng dữ liệu mới:
 3. Viết hàm wrap trong `FinanceRepository.kt`.
 4. Tạo State và Event xử lý trong `FinanceViewModel.kt`.
 5. Thiết kế UI trong `ui/screens/` và kết nối với ViewModel.
+
+---
+
+## 5. Tài liệu Sơ đồ Luồng (Flowcharts) & Đặc tả Chuẩn Logic Tài chính
+* 📊 **Sơ đồ Luồng Tổng quan (Flowcharts):** 👉 **[FLOWCHARTS.md](file:///d:/coding/revenue-and-expenditure-management/FLOWCHARTS.md)** (Chứa sơ đồ kiến trúc MVVM, luồng thêm giao dịch, đọc thông báo ngân hàng, AI 3 tầng, backup/restore và khóa PIN).
+* 📐 **Đặc tả Logic Tài chính & Bảo toàn Dữ liệu:** 👉 **[SMART_FINANCIAL_LOGIC_SPECS.md](file:///d:/coding/revenue-and-expenditure-management/SMART_FINANCIAL_LOGIC_SPECS.md)**
+*(Mọi Unit Test, test case, và nâng cấp thuật toán bắt buộc phải đối chiếu theo các tài liệu này).*
+
+
