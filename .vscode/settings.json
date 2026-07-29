@@ -9,5 +9,24 @@
     }
   ],
   "java.import.gradle.java.home": "K:\\android\\jbr",
-  "snyk.advanced.autoSelectOrganization": true
+  "snyk.advanced.autoSelectOrganization": true,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "CRITICAL REQUIREMENT: Always start the commit message with the active git branch name followed by space and (<type>):"
+    },
+    {
+      "text": "Strict format: <branch> (<type>): <message>"
+    },
+    {
+      "text": "Example: feature_v4.0.0 (chore): update project settings"
+    },
+    {
+      "text": "<message> must be concise, single line, summary in English."
+    }
+  ],
+  "antigravity.commitMessage.instructions": "Always format commit message as: <branch> (<type>): <message> where <message> is short, single line, in English. Example: feature_v4.0.0 (chore): add settings.",
+  "antigravity.commitMessagePrompt": "Always format commit message strictly as: <branch> (<type>): <message>. Example: feature_v4.0.0 (chore): update documentation."
 }
+
+
+

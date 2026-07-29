@@ -28,4 +28,18 @@ Các quy tắc dưới đây chỉ có tác dụng trong phạm vi dự án này
 - **Bảo vệ màn cũ (Prevent Re-animation on Navigation to Sub-screens)**: Các hiệu ứng chuyển động/xuất hiện (staggered entrance, chart path drawing, count-up percentage, list item animations) CHỈ ĐƯỢC RENDER/ANIMATE 1 LẦN duy nhất khi người dùng vào màn hình lần đầu hoặc khi dữ liệu (data/filter) thực sự có thay đổi.
 - Khi người dùng điều hướng từ màn hình chính sang các màn hình con (sub-screens / sub-destinations không thuộc 5 tab menu chính) hoặc mở các Dialog/BottomSheet rồi back về màn hình cũ, các hiệu ứng KHÔNG ĐƯỢC tự động chạy lại nếu dữ liệu màn đó không đổi. Sử dụng `rememberSaveable`, `hasAnimated` flag hoặc `seenKeys` để ghi nhớ và bỏ qua animation khi back lại màn cũ.
 
+## 6. Quy tắc Commit Message (Git Commit Rules)
+- **Định dạng chuẩn**: Bắt buộc tạo commit message theo cấu trúc:
+  `<branch> (<type>): <message>`
+- **Yêu cầu đối với `<message>`**:
+  - Bắt buộc viết bằng **Tiếng Anh (English)**.
+  - Phải ngắn gọn, tối ưu nằm trên **1 dòng duy nhất**.
+  - Tóm tắt đúng trọng tâm, không viết quá chi tiết hay dài dòng.
+- **Các `<type>` thường dùng**: `feat` (tính năng), `fix` (sửa lỗi), `docs` (tài liệu), `style` (giao diện/format), `refactor` (tối ưu code), `chore` (cấu hình/thư viện).
+- **Ví dụ**:
+  - `main (feat): add savings vault management screen`
+  - `feature/report (fix): fix total revenue calculation bug`
+
+
+
 
