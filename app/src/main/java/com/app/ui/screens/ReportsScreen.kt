@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -28,6 +29,11 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -37,8 +43,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.data.Transaction
 import com.app.ui.FinanceViewModel
+import android.os.Build
+import androidx.compose.foundation.Image
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
+import com.app.ui.components.AppModalBottomSheet
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -120,6 +135,27 @@ fun ReportsScreen(
 fun TrendReportContent(viewModel: FinanceViewModel) {
     var selectedPeriod by remember { mutableStateOf("WEEK") } // "WEEK", "MONTH", "YEAR", "5YEARS"
     var periodOffset by remember { mutableStateOf(0) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                add(SvgDecoder.Factory())
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+
+    val analyzePanaPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(com.app.R.raw.analyze_pana)
+            .build(),
+        imageLoader = gifImageLoader
+    )
 
     val allTransactions by viewModel.dailyTransactions.collectAsState()
     val savingsWallets by viewModel.savingsWallets.collectAsState()
@@ -284,6 +320,21 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
 
     var showAllCategoriesSheet by remember { mutableStateOf(false) }
 
+    val trendDataKey = "$selectedPeriod-$periodOffset-${topExpenseCategories.size}"
+    var lastTrendDataKey by rememberSaveable { mutableStateOf("") }
+    val trendAnimProgress = remember { Animatable(if (lastTrendDataKey == trendDataKey) 1f else 0f) }
+
+    LaunchedEffect(trendDataKey) {
+        if (lastTrendDataKey != trendDataKey) {
+            trendAnimProgress.snapTo(0f)
+            trendAnimProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 1300, easing = FastOutSlowInEasing)
+            )
+            lastTrendDataKey = trendDataKey
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -294,7 +345,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
         // TIME PERIOD SUB-SELECTOR ("Tuần", "Tháng", "Năm", "5 năm")
         Row(
             modifier = Modifier
-                .fillMaxWidth()
+                .staggeredEntrance(0)
                 .clip(RoundedCornerShape(20.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 .padding(4.dp),
@@ -332,7 +383,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
 
         // DATE RANGE NAVIGATOR
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.staggeredEntrance(1),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -365,7 +416,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
 
         // TOP ROW SUMMARY CARDS (Tổng thu & Tổng chi)
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.staggeredEntrance(2),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             val periodText = when (selectedPeriod) {
@@ -462,7 +513,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
 
         // COMBINED CHART CARD ("Biểu đồ thu chi")
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.staggeredEntrance(3),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(20.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -559,7 +610,10 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
         }
 
         // OVERVIEW GRID SECTION ("Tổng quan" - 4 Cards)
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.staggeredEntrance(4),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text("Tổng quan", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
 
             Row(
@@ -612,7 +666,10 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
         }
 
         // TOP SPENDING CATEGORIES SECTION
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.staggeredEntrance(5),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -623,7 +680,27 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
             }
 
             if (topExpenseCategories.isEmpty()) {
-                Text("Không có dữ liệu chi tiêu trong khoảng thời gian này.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Image(
+                            painter = analyzePanaPainter,
+                            contentDescription = "No data illustration",
+                            modifier = Modifier.size(160.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Không có giao dịch",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
             } else {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -636,19 +713,20 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         topExpenseCategories.forEach { cat ->
+                            val catColor = FormatHelper.parseColor(cat.colorHex)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Box(
-                                    modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFFFEBEE)),
+                                    modifier = Modifier.size(36.dp).clip(CircleShape).background(catColor.copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = IconMapper.getIconByName(cat.iconName),
                                         contentDescription = cat.name,
-                                        tint = Color(0xFFC62828),
+                                        tint = catColor,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -656,8 +734,8 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(cat.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                     LinearProgressIndicator(
-                                        progress = { cat.percentage / 100f },
-                                        color = Color(0xFFFF7043),
+                                        progress = { (cat.percentage / 100f) * trendAnimProgress.value },
+                                        color = catColor,
                                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
                                     )
@@ -665,7 +743,15 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
 
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text(FormatHelper.formatVND(cat.amount), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                    Text("${cat.percentage.toInt()}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                    AnimatedPercentageText(
+                                        targetPercentage = cat.percentage,
+                                        decimalPlaces = 0,
+                                        suffix = "%",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = catColor,
+                                        durationMillis = 1300
+                                    )
                                 }
                             }
                         }
@@ -676,7 +762,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
 
         // SMART INSIGHT BANNER
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.staggeredEntrance(6),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F9)),
             shape = RoundedCornerShape(16.dp)
         ) {
@@ -728,41 +814,31 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
 
     if (showAllCategoriesSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(
+        val sheetAnimProgress = remember { Animatable(0f) }
+        LaunchedEffect(Unit) {
+            sheetAnimProgress.snapTo(0f)
+            sheetAnimProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 1300, easing = FastOutSlowInEasing)
+            )
+        }
+
+        AppModalBottomSheet(
             onDismissRequest = { showAllCategoriesSheet = false },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface
+            title = "Danh mục chi tiêu",
+            sheetState = sheetState
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(16.dp),
+                    .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Danh mục chi tiêu",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = dateLabel,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { showAllCategoriesSheet = false }) {
-                        Icon(Icons.Default.Close, contentDescription = "Đóng")
-                    }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Text(
+                    text = dateLabel,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 if (allExpenseCategories.isEmpty()) {
                     Text(
@@ -775,10 +851,11 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 450.dp),
+                            .heightIn(max = 480.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(allExpenseCategories) { cat ->
+                            val catColor = FormatHelper.parseColor(cat.colorHex)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -792,13 +869,13 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                                     modifier = Modifier
                                         .size(38.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFFFFEBEE)),
+                                        .background(catColor.copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = IconMapper.getIconByName(cat.iconName),
                                         contentDescription = cat.name,
-                                        tint = Color(0xFFC62828),
+                                        tint = catColor,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -814,8 +891,8 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     LinearProgressIndicator(
-                                        progress = { cat.percentage / 100f },
-                                        color = Color(0xFFFF7043),
+                                        progress = { (cat.percentage / 100f) * sheetAnimProgress.value },
+                                        color = catColor,
                                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
                                     )
@@ -828,11 +905,14 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
-                                    Text(
-                                        text = "${cat.percentage.toInt()}%",
+                                    AnimatedPercentageText(
+                                        targetPercentage = cat.percentage,
+                                        decimalPlaces = 0,
+                                        suffix = "%",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFC62828)
+                                        color = catColor,
+                                        durationMillis = 1300
                                     )
                                 }
                             }
@@ -851,7 +931,9 @@ fun OverviewItemCard(
     iconColor: Color,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     valueStr: String,
-    labelStr: String
+    labelStr: String,
+    isPercentage: Boolean = false,
+    percentageVal: Float = 0f
 ) {
     Card(
         modifier = modifier,
@@ -869,13 +951,24 @@ fun OverviewItemCard(
             ) {
                 Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(16.dp))
             }
-            Text(
-                text = valueStr,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Black,
-                color = iconColor,
-                maxLines = 1
-            )
+            if (isPercentage) {
+                AnimatedPercentageText(
+                    targetPercentage = percentageVal,
+                    decimalPlaces = 0,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = iconColor,
+                    durationMillis = 1300
+                )
+            } else {
+                Text(
+                    text = valueStr,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = iconColor,
+                    maxLines = 1
+                )
+            }
             Text(
                 text = labelStr,
                 fontSize = 9.sp,
@@ -898,6 +991,21 @@ fun CombinedTrendCanvasChart(
     chartUnit: String = "MILLION"
 ) {
     val textMeasurer = rememberTextMeasurer()
+
+    val trendChartDataKey = "$selectedPeriod-$startDate-$endDate-$chartUnit-${periodTransactions.size}"
+    var lastTrendChartDataKey by rememberSaveable { mutableStateOf("") }
+    val animProgress = remember { Animatable(if (lastTrendChartDataKey == trendChartDataKey) 1f else 0f) }
+
+    LaunchedEffect(trendChartDataKey) {
+        if (lastTrendChartDataKey != trendChartDataKey) {
+            animProgress.snapTo(0f)
+            animProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 1300, easing = FastOutSlowInEasing)
+            )
+            lastTrendChartDataKey = trendChartDataKey
+        }
+    }
 
     val chartData = remember(selectedPeriod, periodTransactions, startDate, endDate, chartUnit) {
         val cal = Calendar.getInstance()
@@ -994,6 +1102,8 @@ fun CombinedTrendCanvasChart(
         val numPoints = chartData.size
         val pointSpacing = width / numPoints
 
+        val pProgress = animProgress.value
+
         // Draw horizontal grid lines
         val gridLines = 4
         for (i in 0..gridLines) {
@@ -1010,22 +1120,25 @@ fun CombinedTrendCanvasChart(
         val barWidth = (pointSpacing * 0.4f).coerceIn(12.dp.toPx(), 28.dp.toPx())
         chartData.forEachIndexed { index, bucket ->
             val cx = index * pointSpacing + pointSpacing / 2f
-            val barH = ((bucket.expense / maxVal) * chartHeight).toFloat()
+            val rawBarH = ((bucket.expense / maxVal) * chartHeight).toFloat()
+            val barH = rawBarH * pProgress
             val barTop = topMargin + chartHeight - barH
 
             // Bar Gradient
-            drawRoundRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFFFF7043), Color(0xFFFFCCBC))
-                ),
-                topLeft = Offset(cx - barWidth / 2f, barTop),
-                size = Size(barWidth, barH.coerceAtLeast(4f)),
-                cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
-            )
+            if (barH > 0f) {
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFFFF7043), Color(0xFFFFCCBC))
+                    ),
+                    topLeft = Offset(cx - barWidth / 2f, barTop),
+                    size = Size(barWidth, barH.coerceAtLeast(4f)),
+                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
+                )
+            }
 
             // Value text above bar if expense > 0
-            if (bucket.expense > 0) {
-                val expStr = String.format(Locale.US, "%.1f", bucket.expense)
+            if (bucket.expense > 0 && pProgress > 0.3f) {
+                val expStr = String.format(Locale.US, "%.1f", bucket.expense * pProgress)
                 val textLayout = textMeasurer.measure(
                     text = expStr,
                     style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
@@ -1060,7 +1173,7 @@ fun CombinedTrendCanvasChart(
             Offset(cx, nodeY)
         }
 
-        if (points.isNotEmpty()) {
+        if (points.isNotEmpty() && pProgress > 0f) {
             linePath.moveTo(points[0].x, points[0].y)
             for (i in 0 until points.size - 1) {
                 val p1 = points[i]
@@ -1069,20 +1182,27 @@ fun CombinedTrendCanvasChart(
                 linePath.cubicTo(controlX, p1.y, controlX, p2.y, p2.x, p2.y)
             }
 
+            val pathMeasure = PathMeasure()
+            pathMeasure.setPath(linePath, false)
+            val animatedPath = Path()
+            pathMeasure.getSegment(0f, pathMeasure.length * pProgress, animatedPath, true)
+
             // Draw line
             drawPath(
-                path = linePath,
+                path = animatedPath,
                 color = Color(0xFF2E7D32),
                 style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
             )
 
-            // Draw nodes and callout boxes
-            points.forEachIndexed { index, pt ->
+            // Draw nodes and callout boxes for visible segment
+            val maxVisibleIdx = (points.size * pProgress).toInt().coerceIn(0, points.size - 1)
+            for (index in 0..maxVisibleIdx) {
+                val pt = points[index]
                 val incVal = chartData[index].income
                 drawCircle(color = Color.White, radius = 5.dp.toPx(), center = pt)
                 drawCircle(color = Color(0xFF2E7D32), radius = 3.5.dp.toPx(), center = pt)
 
-                if (incVal > 0) {
+                if (incVal > 0 && pProgress > 0.4f) {
                     val incStr = String.format(Locale.US, "%.1f", incVal)
                     val textLayout = textMeasurer.measure(
                         text = incStr,
@@ -1119,6 +1239,27 @@ data class ChartBucket(
 // ==========================================
 @Composable
 fun DistributionReportContent(viewModel: FinanceViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                add(SvgDecoder.Factory())
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+
+    val analyzePanaPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(com.app.R.raw.analyze_pana)
+            .build(),
+        imageLoader = gifImageLoader
+    )
+
     val transactions by viewModel.dailyTransactions.collectAsState()
     val currentRealMonthStr = remember {
         Calendar.getInstance().let { cal ->
@@ -1226,14 +1367,20 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
     var selectedReportType by remember { mutableStateOf("EXPENSE") }
     var selectedCategoryName by remember { mutableStateOf<String?>(null) }
 
-    val animProgress = remember { Animatable(0f) }
-    LaunchedEffect(distributionMonth, selectedReportType) {
-        selectedCategoryName = null
-        animProgress.snapTo(0f)
-        animProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing)
-        )
+    val distDataKey = "$distributionMonth-$selectedReportType-${categoryExpenses.size}-${categoryIncomes.size}"
+    var lastDistDataKey by rememberSaveable { mutableStateOf("") }
+    val animProgress = remember { Animatable(if (lastDistDataKey == distDataKey) 1f else 0f) }
+
+    LaunchedEffect(distDataKey) {
+        if (lastDistDataKey != distDataKey) {
+            selectedCategoryName = null
+            animProgress.snapTo(0f)
+            animProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 1300, easing = FastOutSlowInEasing)
+            )
+            lastDistDataKey = distDataKey
+        }
     }
 
     if (selectedCategoryForHistory != null) {
@@ -1255,7 +1402,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
         // Timeline month selector box
         Row(
             modifier = Modifier
-                .fillMaxWidth()
+                .staggeredEntrance(0)
                 .background(
                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
                     RoundedCornerShape(14.dp)
@@ -1288,7 +1435,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
 
         // Summary comparative indicators
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.staggeredEntrance(1),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Card(
@@ -1327,7 +1474,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
         }
 
         // Selector tab row
-        Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f))) {
+        Row(modifier = Modifier.staggeredEntrance(2).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f))) {
             Box(modifier = Modifier.weight(1f).clickable { selectedReportType = "EXPENSE" }.background(if (selectedReportType == "EXPENSE") MaterialTheme.colorScheme.primary else Color.Transparent).padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
                 Text("Khoản chi", fontWeight = FontWeight.Bold, color = if (selectedReportType == "EXPENSE") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
             }
@@ -1346,27 +1493,27 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
+                    .padding(vertical = 24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.TrendingDown,
-                        contentDescription = "Empty Stats",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.size(56.dp)
+                    Image(
+                        painter = analyzePanaPainter,
+                        contentDescription = "No data illustration",
+                        modifier = Modifier.size(160.dp),
+                        contentScale = ContentScale.Fit
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = if (selectedReportType == "EXPENSE") "Không phát sinh chi tiêu trong tháng này" else "Không phát sinh thu nhập trong tháng này",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Không có giao dịch",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp
                     )
                 }
             }
         } else {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.staggeredEntrance(3),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(20.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -1511,11 +1658,14 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
                                         color = if (isSelected) FormatHelper.parseColor(cat.colorHex) else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-                                Text(
-                                    text = "${String.format("%.1f", cat.percentage)}%",
+                                AnimatedPercentageText(
+                                    targetPercentage = cat.percentage,
+                                    decimalPlaces = 1,
+                                    suffix = "%",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) FormatHelper.parseColor(cat.colorHex) else MaterialTheme.colorScheme.onSurface
+                                    color = if (isSelected) FormatHelper.parseColor(cat.colorHex) else MaterialTheme.colorScheme.onSurface,
+                                    durationMillis = 1300
                                 )
                             }
                         }
@@ -1533,7 +1683,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
             )
 
             Column(
-                modifier = Modifier.fillMaxWidth().testTag("report_category_spending_list"),
+                modifier = Modifier.staggeredEntrance(4).testTag("report_category_spending_list"),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val displayCategories = if (selectedReportType == "EXPENSE") categoryExpenses else categoryIncomes
@@ -1601,17 +1751,21 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
                                         }
                                     )
                                 } else {
-                                    Text(
-                                        text = "${String.format("%.1f", cat.percentage)}%",
+                                    AnimatedPercentageText(
+                                        targetPercentage = cat.percentage,
+                                        decimalPlaces = 1,
+                                        suffix = "%",
                                         fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.primary
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        durationMillis = 1300
                                     )
                                 }
                             }
                         }
 
                         LinearProgressIndicator(
-                            progress = { cat.percentage / 100f },
+                            progress = { (cat.percentage / 100f) * animProgress.value },
                             color = FormatHelper.parseColor(cat.colorHex),
                             trackColor = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
@@ -1635,3 +1789,83 @@ data class CategorySpend(
     val iconName: String,
     val percentage: Float
 )
+
+@Composable
+fun AnimatedPercentageText(
+    targetPercentage: Float,
+    decimalPlaces: Int = 1,
+    suffix: String = "%",
+    style: TextStyle = TextStyle.Default,
+    color: Color = Color.Unspecified,
+    fontWeight: FontWeight? = null,
+    fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+    durationMillis: Int = 1300
+) {
+    var lastTargetPercentage by rememberSaveable { mutableStateOf<Float?>(null) }
+    val isNewData = lastTargetPercentage == null || lastTargetPercentage != targetPercentage
+
+    val animProgress = remember(targetPercentage) { Animatable(if (isNewData) 0f else 1f) }
+
+    LaunchedEffect(targetPercentage) {
+        if (isNewData) {
+            animProgress.snapTo(0f)
+            animProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing)
+            )
+            lastTargetPercentage = targetPercentage
+        }
+    }
+
+    val currentVal = targetPercentage * animProgress.value
+
+    val formatted = if (decimalPlaces == 0) {
+        "${currentVal.toInt()}$suffix"
+    } else {
+        "${String.format(Locale.US, "%.${decimalPlaces}f", currentVal)}$suffix"
+    }
+    Text(
+        text = formatted,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        color = color,
+        style = style
+    )
+}
+
+@Composable
+private fun Modifier.staggeredEntrance(index: Int): Modifier {
+    var isVisibleOnScreen by rememberSaveable { mutableStateOf(false) }
+    var skipAnimation by rememberSaveable { mutableStateOf(false) }
+
+    val progress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVisibleOnScreen) 1f else 0f,
+        animationSpec = if (skipAnimation) androidx.compose.animation.core.snap()
+        else tween(
+            durationMillis = 380,
+            delayMillis = (index * 45).coerceAtMost(130),
+            easing = FastOutSlowInEasing
+        ),
+        label = "staggered_$index"
+    )
+
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val offsetYPx = remember(density) { with(density) { 35.dp.toPx() } }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
+    return this
+        .onGloballyPositioned { coordinates ->
+            if (!isVisibleOnScreen) {
+                val y = coordinates.positionInRoot().y
+                if (y < screenHeightPx - 20f) {
+                    if (y <= 0) skipAnimation = true
+                    isVisibleOnScreen = true
+                }
+            }
+        }
+        .fillMaxWidth()
+        .graphicsLayer {
+            alpha = progress
+            translationY = if (skipAnimation) 0f else (1f - progress) * offsetYPx
+        }
+}

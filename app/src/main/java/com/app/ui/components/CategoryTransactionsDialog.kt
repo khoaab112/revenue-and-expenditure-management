@@ -20,6 +20,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.os.Build
+import androidx.compose.runtime.remember
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import com.app.R
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
@@ -160,12 +169,33 @@ fun CategoryTransactionsDialog(
 
         // Transaction List Content
         if (filteredTxs.isEmpty()) {
-            Box(
+            val context = LocalContext.current
+            val imageLoader = remember(context) {
+                ImageLoader.Builder(context)
+                    .components {
+                        if (Build.VERSION.SDK_INT >= 28) {
+                            add(ImageDecoderDecoder.Factory())
+                        } else {
+                            add(GifDecoder.Factory())
+                        }
+                    }
+                    .build()
+            }
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
-                contentAlignment = Alignment.Center
+                    .padding(vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
+                AsyncImage(
+                    model = R.drawable.no_transaction,
+                    contentDescription = "Không có giao dịch",
+                    imageLoader = imageLoader,
+                    modifier = Modifier.size(110.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Không có giao dịch nào trong kỳ hạn mức này.",
                     fontSize = 13.sp,

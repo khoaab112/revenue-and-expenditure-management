@@ -1,4 +1,5 @@
-# Quản Lý Chi Tiêu (Finance Manager)
+
+# Monii - Quản Lý Chi Tiêu (Finance Manager)
 
 Đây là mã nguồn dự án ứng dụng Android quản lý tài chính cá nhân toàn diện, giúp bạn dễ dàng theo dõi dòng tiền, kiểm soát ngân sách và tối ưu hóa thói quen chi tiêu. Ứng dụng được thiết kế với giao diện hiện đại, trực quan mang lại trải nghiệm mượt mà, được xây dựng hoàn toàn bằng ngôn ngữ **Kotlin** và bộ công cụ giao diện UI hiện đại **Jetpack Compose**.
 

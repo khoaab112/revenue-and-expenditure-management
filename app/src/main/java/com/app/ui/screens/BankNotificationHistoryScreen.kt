@@ -39,6 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.ui.text.style.TextOverflow
+import android.os.Build.VERSION.SDK_INT
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import com.app.R
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.NotificationLog
@@ -274,11 +281,7 @@ fun BankNotificationHistoryScreen(
                     )
                 ) {
                     if (isCheckingNotifications) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            strokeWidth = 2.dp
-                        )
+                        com.app.ui.components.AppLoadingIndicator(size = 24.dp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Đang quét...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     } else {
@@ -399,11 +402,25 @@ fun BankNotificationHistoryScreen(
                                     .padding(vertical = 24.dp, horizontal = 16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.FactCheck,
+                                val context = LocalContext.current
+                                val imageLoader = remember(context) {
+                                    ImageLoader.Builder(context)
+                                        .components {
+                                            if (SDK_INT >= 28) {
+                                                add(ImageDecoderDecoder.Factory())
+                                            } else {
+                                                add(GifDecoder.Factory())
+                                            }
+                                        }
+                                        .build()
+                                }
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(R.drawable.cat_pookie)
+                                        .build(),
+                                    imageLoader = imageLoader,
                                     contentDescription = "All done",
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(44.dp)
+                                    modifier = Modifier.size(100.dp)
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
@@ -461,7 +478,7 @@ fun BankNotificationHistoryScreen(
                         }
                     }
 
-                    items(pendingGroups, key = { it.log1.timestamp }) { group ->
+                    items(pendingGroups, key = { "pending_" + it.log1.timestamp + "_" + it.log1.text.hashCode() }) { group ->
                         if (group.type == "TRANSFER_PAIR") {
                             PendingTransferPairItem(
                                 logExpense = group.log1,
@@ -1043,9 +1060,12 @@ fun PendingLogItem(
     val events by viewModel.allEvents.collectAsState()
     
     val activeEvents = remember(log.timestamp, events) {
-        val now = log.timestamp
-        events.filter {
-            now >= it.startDate && (it.endDate == null || now <= it.endDate + 86400000L - 1)
+        val nowLog = log.timestamp
+        val nowCurrent = System.currentTimeMillis()
+        events.filter { ev ->
+            (nowLog >= ev.startDate && (ev.endDate == null || nowLog <= ev.endDate + 86400000L - 1)) ||
+            (nowCurrent >= ev.startDate && (ev.endDate == null || nowCurrent <= ev.endDate + 86400000L - 1)) ||
+            (ev.endDate == null || nowCurrent <= ev.endDate + 86400000L - 1)
         }.sortedWith(compareBy<com.app.data.Event> {
             if (it.endDate != null) 0 else 1
         }.thenBy {
@@ -1058,7 +1078,10 @@ fun PendingLogItem(
     }
     
     var selectedEventId by remember(log, activeEvents) {
-        mutableStateOf(activeEvents.firstOrNull()?.id)
+        val autoMatch = activeEvents.firstOrNull { ev ->
+            log.timestamp >= ev.startDate && (ev.endDate == null || log.timestamp <= ev.endDate + 86400000L - 1)
+        }
+        mutableStateOf(autoMatch?.id ?: activeEvents.firstOrNull()?.id)
     }
 
     var showEventPicker by remember(log) { mutableStateOf(false) }
@@ -1348,13 +1371,20 @@ fun PendingLogItem(
                                         )
                                     } else {
                                         val selectedWallet = wallets.find { it.id == selectedWalletId }
+                                        val walletColor = if (selectedWallet != null) {
+                                            try { FormatHelper.parseColor(selectedWallet.colorHex) } catch (e: Exception) { MaterialTheme.colorScheme.primary }
+                                        } else {
+                                            Color(0xFFE8EAF6)
+                                        }
                                         
                                         Card(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .height(42.dp)
                                                 .clickable { showWalletPicker = true },
-                                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EAF6)),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (selectedWallet != null) walletColor.copy(alpha = 0.15f) else Color(0xFFE8EAF6)
+                                            ),
                                             shape = RoundedCornerShape(8.dp),
                                         ) {
                                             Row(
@@ -1372,7 +1402,7 @@ fun PendingLogItem(
                                                         Icon(
                                                             imageVector = IconMapper.getIconByName(selectedWallet.iconName),
                                                             contentDescription = "Icon",
-                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            tint = walletColor,
                                                             modifier = Modifier.size(16.dp)
                                                         )
                                                     }
@@ -1380,7 +1410,7 @@ fun PendingLogItem(
                                                         text = selectedWallet?.name ?: "Chọn ví...",
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 13.sp,
-                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        color = if (selectedWallet != null) walletColor else MaterialTheme.colorScheme.onSurface,
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
@@ -1388,7 +1418,7 @@ fun PendingLogItem(
                                                 Icon(
                                                     imageVector = Icons.Default.KeyboardArrowDown,
                                                     contentDescription = "Mở rộng",
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    tint = if (selectedWallet != null) walletColor else MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                         }
@@ -1493,7 +1523,7 @@ fun PendingLogItem(
                             }
 
                             // EVENT DROPDOWN BOX
-                            if (activeEvents.isNotEmpty()) {
+                            if (events.isNotEmpty()) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
@@ -1525,13 +1555,20 @@ fun PendingLogItem(
                                     Box(modifier = Modifier.weight(0.65f)) {
                                         Box(modifier = Modifier.fillMaxWidth()) {
                                             val selectedEvent = events.find { it.id == selectedEventId }
+                                            val eventColor = if (selectedEvent != null) {
+                                                try { FormatHelper.parseColor(selectedEvent.colorHex) } catch (e: Exception) { Color(0xFFE65100) }
+                                            } else {
+                                                Color(0xFFE65100)
+                                            }
                                             
                                             Card(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .height(42.dp)
                                                     .clickable { showEventPicker = true },
-                                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = if (selectedEvent != null) eventColor.copy(alpha = 0.15f) else Color(0xFFFFF3E0)
+                                                ),
                                                 shape = RoundedCornerShape(8.dp),
                                             ) {
                                                 Row(
@@ -1548,14 +1585,14 @@ fun PendingLogItem(
                                                         Icon(
                                                             imageVector = Icons.Default.Event,
                                                             contentDescription = "Event Icon",
-                                                            tint = Color(0xFFE65100),
+                                                            tint = if (selectedEvent != null) eventColor else Color(0xFFE65100),
                                                             modifier = Modifier.size(16.dp)
                                                         )
                                                         Text(
                                                             text = selectedEvent?.name ?: "Không gắn",
                                                             fontWeight = FontWeight.Bold,
                                                             fontSize = 13.sp,
-                                                            color = Color(0xFFE65100),
+                                                            color = if (selectedEvent != null) eventColor else Color(0xFFE65100),
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
@@ -1563,7 +1600,7 @@ fun PendingLogItem(
                                                     Icon(
                                                         imageVector = Icons.Default.KeyboardArrowDown,
                                                         contentDescription = "Mở rộng",
-                                                        tint = Color(0xFFE65100)
+                                                        tint = if (selectedEvent != null) eventColor else Color(0xFFE65100)
                                                     )
                                                 }
                                             }
@@ -1638,8 +1675,8 @@ fun PendingLogItem(
                                                             )
                                                         }
 
-                                                        // Option: All Active Events
-                                                        activeEvents.forEach { ev ->
+                                                        // Option: All Events (Including newly created ones)
+                                                        events.sortedByDescending { it.startDate }.forEach { ev ->
                                                     val evColor = try {
                                                         Color(android.graphics.Color.parseColor(ev.colorHex))
                                                     } catch (e: Exception) {
@@ -1790,8 +1827,11 @@ fun PendingLogItem(
                                         color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(0.25f)
                                     )
+                                    val formattedAmount = remember(customAmountStr) {
+                                        FormatHelper.formatInputNumber(customAmountStr)
+                                    }
                                     BasicTextField(
-                                        value = customAmountStr,
+                                        value = formattedAmount,
                                         onValueChange = { input ->
                                             val filtered = input.filter { it.isDigit() }
                                             if (filtered.length <= 12) {
@@ -1801,6 +1841,7 @@ fun PendingLogItem(
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         textStyle = TextStyle(
                                             fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
                                         ),
                                         singleLine = true,

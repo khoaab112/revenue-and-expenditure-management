@@ -24,9 +24,23 @@ Các quy tắc dưới đây chỉ có tác dụng trong phạm vi dự án này
   - **Hiển thị lỗi trực tiếp**: Không âm thầm bỏ qua hay chỉ thông báo chung chung. Bắt buộc hiển thị thông báo lỗi rõ ràng ngay bên dưới ô input bị lỗi (`supportingText = { Text("...", color = MaterialTheme.colorScheme.error) }`).
   - **Nổi bật ô input lỗi**: Đánh dấu ô input sai bằng thuộc tính `isError = true` (viền đỏ nổi bật) để người dùng dễ dàng nhận biết và chỉnh sửa ngay lập tức.
 
-## 5. Quy tắc Kiểm thử (Testing Rules)
-- **Phát triển tính năng mới (Feature):** 
-  - **Bắt buộc viết test cho:** Business logic, Data transformation, Validation, Calculation, State management.
-  - **Không bắt buộc với:** UI layout đơn giản, Animation, Styling.
-- **Sửa lỗi (Bug Fixes):** Bắt buộc phải chạy và kiểm tra lại Unit Test. Nếu việc sửa bug làm hỏng Unit Test cũ (test case fail), **không được tự ý sửa test case** mà phải phân tích lý do: do logic cũ sai, hay do test case viết sai, từ đó báo cáo lại để có hướng xử lý triệt để.
-- **Tính an toàn tuyệt đối:** Tất cả các test case đều **không được can thiệp vào logic của app hiện có**, **không sửa code gốc** của dự án đang chạy, và **không làm sai lệch dữ liệu** của app. Bộ test case này chỉ là một công cụ kiểm thử độc lập (tích hợp bên ngoài) để xác minh tính đúng đắn của logic mà không gây ảnh hưởng đến production code.
+## 5. Quy tắc Quản lý Hoạt ảnh & Re-render (Animation & Re-render Protection Rules)
+- **Bảo vệ màn cũ (Prevent Re-animation on Navigation to Sub-screens)**: Các hiệu ứng chuyển động/xuất hiện (staggered entrance, chart path drawing, count-up percentage, list item animations) CHỈ ĐƯỢC RENDER/ANIMATE 1 LẦN duy nhất khi người dùng vào màn hình lần đầu hoặc khi dữ liệu (data/filter) thực sự có thay đổi.
+- Khi người dùng điều hướng từ màn hình chính sang các màn hình con (sub-screens / sub-destinations không thuộc 5 tab menu chính) hoặc mở các Dialog/BottomSheet rồi back về màn hình cũ, các hiệu ứng KHÔNG ĐƯỢC tự động chạy lại nếu dữ liệu màn đó không đổi. Sử dụng `rememberSaveable`, `hasAnimated` flag hoặc `seenKeys` để ghi nhớ và bỏ qua animation khi back lại màn cũ.
+
+## 6. Quy tắc Commit Message (Git Commit Rules)
+- **Quyền hạn thực hiện**: AI **TUYỆT ĐỐI KHÔNG** tự ý chạy lệnh `git commit` sau các bước sửa code. Quy tắc bên dưới CHỈ áp dụng KHI người dùng có yêu cầu AI tạo commit.
+- **Định dạng chuẩn**: Bắt buộc tạo commit message theo cấu trúc:
+  `<branch> (<type>): <message>`
+- **Yêu cầu đối với `<message>`**:
+  - Bắt buộc viết bằng **Tiếng Anh (English)**.
+  - Phải ngắn gọn, tối ưu nằm trên **1 dòng duy nhất**.
+  - Tóm tắt đúng trọng tâm, không viết quá chi tiết hay dài dòng.
+- **Các `<type>` thường dùng**: `feat` (tính năng), `fix` (sửa lỗi), `docs` (tài liệu), `style` (giao diện/format), `refactor` (tối ưu code), `chore` (cấu hình/thư viện).
+- **Ví dụ**:
+  - `main (feat): add savings vault management screen`
+  - `feature/report (fix): fix total revenue calculation bug`
+
+
+
+

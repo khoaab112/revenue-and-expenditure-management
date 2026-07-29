@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.ghichepthuchi.pfmkt"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "3.0.5"
+    versionCode = 6
+    versionName = "4.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -101,6 +101,8 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
+  implementation(libs.coil.gif)
+  implementation("io.coil-kt:coil-svg:2.7.0")
   implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
   implementation(libs.kotlinx.coroutines.android)

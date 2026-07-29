@@ -118,8 +118,8 @@ object ExcelExportHelper {
 
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/csv"
-            putExtra(Intent.EXTRA_SUBJECT, "Báo cáo Ghi chép Thu chi")
-            putExtra(Intent.EXTRA_TEXT, "Gửi bạn báo cáo dữ liệu thu chi từ ứng dụng Ghi chép Thu chi.")
+            putExtra(Intent.EXTRA_SUBJECT, "Báo cáo Sổ Thu Chi")
+            putExtra(Intent.EXTRA_TEXT, "Gửi bạn báo cáo dữ liệu thu chi từ ứng dụng Sổ Thu Chi.")
             putExtra(Intent.EXTRA_STREAM, fileUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }

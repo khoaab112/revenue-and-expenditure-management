@@ -1,6 +1,8 @@
 package com.app.ui.components
 
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,15 +12,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import com.app.R
+import com.app.ui.NotificationType
 
 /**
  * Reusable Dialog Button configuration
@@ -39,6 +50,7 @@ fun AppNotificationDialog(
     showDialog: Boolean,
     title: String = "Thông báo",
     content: String,
+    type: NotificationType? = null,
     confirmButton: DialogButtonConfig? = null,
     cancelButton: DialogButtonConfig? = null,
     onDismissRequest: () -> Unit = {},
@@ -78,12 +90,48 @@ fun AppNotificationDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = title,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF191C24)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            val context = LocalContext.current
+                            val inferredGif = when {
+                                type == NotificationType.SUCCESS || title.contains("Thành công", true) || title.contains("Hoàn tất", true) -> R.drawable.success
+                                type == NotificationType.WARNING || title.contains("Cảnh báo", true) || title.contains("Chú ý", true) || title.contains("Xóa", true) -> R.drawable.warning
+                                type == NotificationType.ERROR || title.contains("Lỗi", true) || title.contains("Thất bại", true) -> R.drawable.error
+                                else -> null
+                            }
+
+                            if (inferredGif != null) {
+                                val imageLoader = remember(context) {
+                                    ImageLoader.Builder(context)
+                                        .components {
+                                            if (Build.VERSION.SDK_INT >= 28) {
+                                                add(ImageDecoderDecoder.Factory())
+                                            } else {
+                                                add(GifDecoder.Factory())
+                                            }
+                                        }
+                                        .build()
+                                }
+                                val painter = rememberAsyncImagePainter(
+                                    model = ImageRequest.Builder(context).data(inferredGif).build(),
+                                    imageLoader = imageLoader
+                                )
+                                Image(
+                                    painter = painter,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+
+                            Text(
+                                text = title,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF191C24)
+                            )
+                        }
                         if (showCloseIcon) {
                             Box(
                                 modifier = Modifier

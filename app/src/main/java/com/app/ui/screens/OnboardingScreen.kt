@@ -16,7 +16,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
+import android.os.Build
+import androidx.compose.foundation.Image
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,8 +40,26 @@ fun OnboardingScreen(
     viewModel: FinanceViewModel,
     onComplete: () -> Unit
 ) {
-    val context = LocalContext.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val syncStatus by viewModel.syncStatus.collectAsState()
+    
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+            }
+            .build()
+    }
+    val welcomeGifPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(R.drawable.welcome)
+            .build(),
+        imageLoader = gifImageLoader
+    )
     
     var isWaitingForSync by remember { mutableStateOf(false) }
 
@@ -189,13 +214,13 @@ fun OnboardingScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 24.dp, vertical = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                        .padding(horizontal = 24.dp, vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Spacer(modifier = Modifier.weight(0.8f))
+                    // Flexible space at the top to center content
+                    Spacer(modifier = Modifier.weight(1f))
 
-                    // Header Title "Chào Mừng"
+                    // 1. Header Title "Chào Mừng"
                     Text(
                         text = "Chào Mừng",
                         fontSize = 32.sp,
@@ -203,7 +228,17 @@ fun OnboardingScreen(
                         color = Color(0xFF111827),
                         textAlign = TextAlign.Center
                     )
-                    
+
+                    Spacer(modifier = Modifier.height(16.dp)) // Shrinked space
+
+                    // 2. Cat GIF Animation
+                    Image(
+                        painter = welcomeGifPainter,
+                        contentDescription = "Welcome Animation",
+                        modifier = Modifier.size(135.dp)
+                    )
+
+                    // Fixed small space between GIF and Action Buttons
                     Spacer(modifier = Modifier.height(40.dp))
                     
                     // 1. Primary Filled Blue Button "Người dùng mới"
@@ -355,7 +390,8 @@ fun OnboardingScreen(
                             )
                         }
                     }
-
+                    
+                    // Flexible space at the bottom to center content
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
@@ -378,7 +414,7 @@ fun OnboardingScreen(
                             modifier = Modifier.padding(28.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            CircularProgressIndicator(color = Color(0xFF3B82F6))
+                            com.app.ui.components.AppLoadingIndicator(size = 56.dp)
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
                                 text = "Đang kiểm tra dữ liệu đám mây...",

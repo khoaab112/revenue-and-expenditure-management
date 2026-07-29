@@ -24,6 +24,16 @@ import com.app.data.Transaction
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.North
+import androidx.compose.material.icons.filled.South
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,23 +69,66 @@ fun TimelineScreen(
                 Text(text = "Chưa có giao dịch", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            val seenKeys = remember { mutableSetOf<String>() }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
+                contentPadding = PaddingValues(bottom = 40.dp, top = 8.dp)
             ) {
                 item {
-                    TimelineDayHeaderUpdated(
-                        dateStr = initialDateStr,
-                        totalIncome = totalIncome,
-                        totalExpense = totalExpense
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TimelineDailySummaryTable(dayTransactions = dayTransactions)
+                    Box(modifier = Modifier.staggeredEntrance(0, "header", seenKeys)) {
+                        TimelineDayHeaderCards(
+                            dateStr = initialDateStr,
+                            totalIncome = totalIncome,
+                            totalExpense = totalExpense
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Box(modifier = Modifier.staggeredEntrance(1, "summary_table", seenKeys)) {
+                        TimelineDailySummaryTable(dayTransactions = dayTransactions)
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
                 
-                itemsIndexed(dayTransactions, key = { _, tx -> tx.id }) { index, tx -> 
-                    TimelineTransactionUpdated(tx = tx, isLast = index == dayTransactions.size - 1)
+                itemsIndexed(dayTransactions, key = { index, tx -> "${tx.id}_${tx.timestamp}_$index" }) { index, tx -> 
+                    Box(modifier = Modifier.staggeredEntrance(2 + index, "tx_${tx.id}_${tx.timestamp}_$index", seenKeys)) {
+                        TimelineTransactionUpdated(tx = tx, isLast = index == dayTransactions.size - 1)
+                    }
+                }
+
+                if (dayTransactions.isNotEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .staggeredEntrance(2 + dayTransactions.size, "footer", seenKeys)
+                                .padding(top = 16.dp, bottom = 32.dp, start = 32.dp, end = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                HorizontalDivider(
+                                    modifier = Modifier.weight(1f),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                    thickness = 1.dp
+                                )
+                                Text(
+                                    text = "Hết",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.weight(1f),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                    thickness = 1.dp
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -89,27 +142,35 @@ fun TimelineDayHeaderUpdated(dateStr: String, totalIncome: Double, totalExpense:
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = dateStr,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Column(horizontalAlignment = Alignment.End) {
+        // Left Column: Date and Expense (Chi)
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(
+                text = dateStr,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onBackground
+            )
             if (totalExpense > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "-${FormatHelper.formatVND(totalExpense)}",
                     fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onBackground
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF44336)
                 )
             }
+        }
+
+        // Right Column: Income (Thu)
+        Column(horizontalAlignment = Alignment.End) {
             if (totalIncome > 0) {
                 Text(
                     text = "+${FormatHelper.formatVND(totalIncome)}",
                     fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onBackground
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4CAF50)
                 )
             }
         }
@@ -212,6 +273,144 @@ fun TimelineTransactionUpdated(tx: Transaction, isLast: Boolean) {
 }
 
 @Composable
+fun TimelineDayHeaderCards(
+    dateStr: String,
+    totalIncome: Double,
+    totalExpense: Double
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 1. Centered Date Pill (Nút ngày hình viên thuốc - đã bỏ mũi tên trỏ xuống)
+        Surface(
+            shape = CircleShape,
+            color = Color(0xFFEDE9FE),
+            modifier = Modifier.padding(bottom = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Event,
+                    contentDescription = "Ngày",
+                    tint = Color(0xFF6D28D9),
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = dateStr,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF6D28D9)
+                )
+            }
+        }
+
+        // 2. Summary Cards Row (2 Thẻ Tổng thu & Tổng chi thu nhỏ ~40%)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Left Card: Tổng thu
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFF8FAFC),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFDCFCE7)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.South,
+                            contentDescription = "Tổng thu",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Tổng thu",
+                            fontSize = 10.5.sp,
+                            color = Color(0xFF64748B),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Text(
+                            text = if (totalIncome > 0) "+${FormatHelper.formatVND(totalIncome)}" else "0 đ",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF16A34A),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            // Right Card: Tổng chi
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFFFF5F5),
+                border = BorderStroke(1.dp, Color(0xFFFEE2E2))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFEE2E2)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.North,
+                            contentDescription = "Tổng chi",
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Tổng chi",
+                            fontSize = 10.5.sp,
+                            color = Color(0xFF64748B),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Text(
+                            text = if (totalExpense > 0) "-${FormatHelper.formatVND(totalExpense)}" else "0 đ",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFDC2626),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
     val categoryStats = remember(dayTransactions) {
         dayTransactions.filter { it.type != "TRANSFER" }
@@ -239,27 +438,28 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 8.dp)
-            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
-            .clip(RoundedCornerShape(8.dp))
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        // Header Row
+        // Table Column Headers Row (Thu / Chi)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.weight(0.8f).fillMaxHeight().padding(8.dp)) 
-            
+            Box(modifier = Modifier.weight(0.9f).fillMaxHeight().padding(8.dp)) 
+
             if (hasIncome) {
                 Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(borderColor))
                 Box(
                     modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Thu", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Thu", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
             if (hasExpense) {
@@ -268,18 +468,18 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
                     modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Chi", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Chi", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
         }
-        
+
         HorizontalDivider(color = borderColor)
 
-        // Data Rows
+        // Category Breakdown Rows
         categoryStats.forEachIndexed { index, stat ->
             val (cat, income, expense) = stat
             val rowBgColor = try {
-                FormatHelper.parseColor(cat.third).copy(alpha = 0.15f)
+                FormatHelper.parseColor(cat.third).copy(alpha = 0.12f)
             } catch (e: Exception) {
                 Color.Transparent
             }
@@ -292,13 +492,13 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
             ) {
                 // Category Col
                 Row(
-                    modifier = Modifier.weight(0.8f).fillMaxHeight().padding(8.dp),
+                    modifier = Modifier.weight(0.9f).fillMaxHeight().padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(22.dp)
                             .clip(CircleShape)
                             .background(FormatHelper.parseColor(cat.third)),
                         contentAlignment = Alignment.Center
@@ -307,12 +507,15 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
                             imageVector = IconMapper.getIconByName(cat.second),
                             contentDescription = cat.first,
                             tint = Color.White,
-                            modifier = Modifier.size(12.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                     Text(
                         text = cat.first, 
-                        fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -323,12 +526,14 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
                         modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp),
                         contentAlignment = Alignment.CenterEnd
                     ) {
-                        Text(
-                            text = if (income > 0) FormatHelper.formatVND(income) else "",
-                            fontSize = 12.sp,
-                            color = Color(0xFF2E7D32),
-                            fontWeight = FontWeight.Medium
-                        )
+                        if (income > 0) {
+                            Text(
+                                text = FormatHelper.formatVND(income),
+                                fontSize = 12.sp,
+                                color = Color(0xFF2E7D32),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 
@@ -339,12 +544,14 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
                         modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp),
                         contentAlignment = Alignment.CenterEnd
                     ) {
-                        Text(
-                            text = if (expense > 0) FormatHelper.formatVND(expense) else "",
-                            fontSize = 12.sp,
-                            color = Color(0xFFC62828),
-                            fontWeight = FontWeight.Medium
-                        )
+                        if (expense > 0) {
+                            Text(
+                                text = FormatHelper.formatVND(expense),
+                                fontSize = 12.sp,
+                                color = Color(0xFFC62828),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -353,7 +560,7 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
             }
         }
 
-        // Dedicated Transfer Row
+        // Internal Transfer Row (Nội bộ)
         if (hasTransfer) {
             val transferBgColor = Color(0xFF2196F3).copy(alpha = 0.1f)
             Row(
@@ -365,13 +572,13 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
             ) {
                 // Category Col (Nội bộ)
                 Row(
-                    modifier = Modifier.weight(0.8f).fillMaxHeight().padding(8.dp),
+                    modifier = Modifier.weight(0.9f).fillMaxHeight().padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(22.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF2196F3)),
                         contentAlignment = Alignment.Center
@@ -380,18 +587,21 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
                             imageVector = Icons.AutoMirrored.Filled.CompareArrows,
                             contentDescription = "Chuyển khoản nội bộ",
                             tint = Color.White,
-                            modifier = Modifier.size(12.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                     Text(
                         text = "Nội bộ", 
-                        fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
                 Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(borderColor))
                 
-                // Merged Cell of weight(2f) spanning both Thu and Chi
+                // Merged Cell spanning both Thu and Chi
                 Box(
                     modifier = Modifier
                         .weight(2f)
@@ -409,4 +619,47 @@ fun TimelineDailySummaryTable(dayTransactions: List<Transaction>) {
             }
         }
     }
+}
+
+@Composable
+private fun Modifier.staggeredEntrance(
+    index: Int,
+    key: String,
+    seenKeys: MutableSet<String>
+): Modifier {
+    val alreadySeen = remember(key) { seenKeys.contains(key) }
+    var isVisibleOnScreen by remember { mutableStateOf(alreadySeen) }
+    var skipAnimation by remember { mutableStateOf(alreadySeen) }
+
+    val progress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVisibleOnScreen) 1f else 0f,
+        animationSpec = if (skipAnimation) androidx.compose.animation.core.snap()
+        else androidx.compose.animation.core.tween(
+            durationMillis = 380,
+            delayMillis = (index * 45).coerceAtMost(180),
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        ),
+        label = "timeline_staggered_$index"
+    )
+
+    val density = LocalDensity.current
+    val offsetYPx = remember(density) { with(density) { 35.dp.toPx() } }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+
+    return this
+        .onGloballyPositioned { coordinates ->
+            if (!isVisibleOnScreen) {
+                val y = coordinates.positionInRoot().y
+                if (y < screenHeightPx - 20f) {
+                    if (y <= 0) skipAnimation = true
+                    seenKeys.add(key)
+                    isVisibleOnScreen = true
+                }
+            }
+        }
+        .fillMaxWidth()
+        .graphicsLayer {
+            alpha = progress
+            translationY = if (skipAnimation) 0f else (1f - progress) * offsetYPx
+        }
 }

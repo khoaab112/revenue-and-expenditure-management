@@ -1,5 +1,7 @@
 package com.app.ui.components
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -7,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +20,8 @@ import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -25,12 +30,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.Image
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.SvgDecoder
+import coil.request.ImageRequest
 import com.app.data.Event
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
@@ -44,10 +57,16 @@ fun StripedProgressIndicator(
     trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
     stripeColor: Color = Color.White.copy(alpha = 0.3f)
 ) {
+    val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 850, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+        label = "eventProgressAnim"
+    )
+
     androidx.compose.foundation.Canvas(modifier = modifier) {
         val width = size.width
         val height = size.height
-        val progressWidth = width * progress.coerceIn(0f, 1f)
+        val progressWidth = width * animatedProgress
 
         // Draw track
         drawRoundRect(
@@ -57,7 +76,7 @@ fun StripedProgressIndicator(
         )
 
         // Draw progress
-        if (progress > 0f) {
+        if (animatedProgress > 0f) {
             drawRoundRect(
                 color = color,
                 size = size.copy(width = progressWidth),
@@ -183,6 +202,48 @@ fun EventStatusChip(statusStyle: EventStatusStyle) {
     }
 }
 
+@Composable
+private fun Modifier.staggeredEntrance(
+    index: Int,
+    key: String,
+    seenKeys: MutableList<String>
+): Modifier {
+    val alreadySeen = remember(key) { seenKeys.contains(key) }
+    var cardVisible by rememberSaveable(key) { mutableStateOf(alreadySeen) }
+
+    LaunchedEffect(key) {
+        if (!alreadySeen) {
+            cardVisible = true
+            seenKeys.add(key)
+        }
+    }
+
+    val alphaProgress by animateFloatAsState(
+        targetValue = if (cardVisible || alreadySeen) 1f else 0f,
+        animationSpec = if (alreadySeen) snap() else tween(
+            durationMillis = 400,
+            delayMillis = (index * 50).coerceAtMost(250),
+            easing = LinearOutSlowInEasing
+        ),
+        label = "event_stagger_alpha_$index"
+    )
+
+    val offsetYProgress by animateDpAsState(
+        targetValue = if (cardVisible || alreadySeen) 0.dp else 24.dp,
+        animationSpec = if (alreadySeen) snap() else tween(
+            durationMillis = 400,
+            delayMillis = (index * 50).coerceAtMost(250),
+            easing = LinearOutSlowInEasing
+        ),
+        label = "event_stagger_offset_$index"
+    )
+
+    return this.graphicsLayer {
+        alpha = alphaProgress
+        translationY = offsetYProgress.toPx()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EventManagementScreen(
@@ -191,6 +252,11 @@ fun EventManagementScreen(
 ) {
     val events by viewModel.allEvents.collectAsState()
     val transactions by viewModel.dailyTransactions.collectAsState()
+
+    val seenKeys = rememberSaveable(saver = listSaver(
+        save = { it.toList() },
+        restore = { mutableStateListOf<String>().apply { addAll(it) } }
+    )) { mutableStateListOf<String>() }
 
     var showAddEventDialog by remember { mutableStateOf(false) }
     var eventToEdit by remember { mutableStateOf<Event?>(null) }
@@ -211,7 +277,55 @@ fun EventManagementScreen(
         )
     }
 
+    val context = LocalContext.current
+    val gifImageLoader = remember(context) {
+        ImageLoader.Builder(context)
+            .components {
+                add(SvgDecoder.Factory())
+            }
+            .build()
+    }
+
+    val calendarSvgPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(com.app.R.raw.calendar_rafiki)
+            .build(),
+        imageLoader = gifImageLoader
+    )
+
     Scaffold(
+        topBar = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 3.dp,
+                tonalElevation = 1.dp
+            ) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "SỰ KIỆN",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 20.sp,
+                            letterSpacing = 0.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Quay lại",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            }
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddEventDialog = true },
@@ -225,7 +339,21 @@ fun EventManagementScreen(
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             if (events.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Chưa có sự kiện nào.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Image(
+                            painter = calendarSvgPainter,
+                            contentDescription = "No events SVG",
+                            modifier = Modifier.size(180.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Hãy thiết lập sự kiện",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
@@ -233,18 +361,78 @@ fun EventManagementScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(sortedEvents) { event ->
-                        val eventTransactions = transactions.filter { it.eventId == event.id }
-                        val totalSpent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-                        val statusStyle = getEventStatusStyle(event, totalSpent)
+                    itemsIndexed(
+                        items = sortedEvents,
+                        key = { _, event -> event.id },
+                        contentType = { _, _ -> "event_card" }
+                    ) { index, event ->
+                        val eventTransactions = remember(event.id, transactions) {
+                            transactions.filter { it.eventId == event.id }
+                        }
+                        val totalSpent = remember(eventTransactions) {
+                            eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                        }
+                        val statusStyle = remember(event, totalSpent) {
+                            getEventStatusStyle(event, totalSpent)
+                        }
                         val limit = event.limitAmount ?: 0.0
-                        val eventColor = try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
+                        val eventColor = remember(event.colorHex) {
+                            try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
+                        }
                         val now = System.currentTimeMillis()
-                        val isPast = getEventPriority(event, totalSpent, now) == 5
+                        val isPast = remember(event, totalSpent, now) {
+                            getEventPriority(event, totalSpent, now) == 5
+                        }
+
+                        val cardKey = "event_card_${event.id}_${event.name}"
+                        val alreadySeen = remember(cardKey) { seenKeys.contains(cardKey) }
+                        var isCardVisible by rememberSaveable(cardKey) { mutableStateOf(alreadySeen) }
+
+                        LaunchedEffect(cardKey) {
+                            if (!alreadySeen) {
+                                isCardVisible = true
+                                seenKeys.add(cardKey)
+                            }
+                        }
+
+                        val actualEndTime = event.endDate?.let { it + 86400000L - 1 }
+                        val targetTimeProgress = if (actualEndTime == null) {
+                            0.4f
+                        } else if (now < event.startDate) {
+                            0f
+                        } else if (now >= actualEndTime) {
+                            1f
+                        } else {
+                            val totalDuration = (actualEndTime - event.startDate).toFloat()
+                            val elapsed = (now - event.startDate).toFloat()
+                            if (totalDuration > 0) (elapsed / totalDuration).coerceIn(0f, 1f) else 0f
+                        }
+
+                        val targetPercent = if (limit > 0) ((totalSpent / limit) * 100).toInt().coerceIn(0, 100) else 0
+                        val targetSafeProgress = if (limit > 0) (totalSpent / limit).toFloat().coerceIn(0f, 1f) else 0f
+
+                        val animTimeProgress by animateFloatAsState(
+                            targetValue = if (isCardVisible || alreadySeen) targetTimeProgress else 0f,
+                            animationSpec = if (alreadySeen) snap() else tween(650, easing = LinearOutSlowInEasing),
+                            label = "event_time_progress_$index"
+                        )
+
+                        val animSafeProgress by animateFloatAsState(
+                            targetValue = if (isCardVisible || alreadySeen) targetSafeProgress else 0f,
+                            animationSpec = if (alreadySeen) snap() else tween(650, easing = LinearOutSlowInEasing),
+                            label = "event_safe_progress_$index"
+                        )
+
+                        val animPercent by animateIntAsState(
+                            targetValue = if (isCardVisible || alreadySeen) targetPercent else 0,
+                            animationSpec = if (alreadySeen) snap() else tween(650, easing = LinearOutSlowInEasing),
+                            label = "event_percent_$index"
+                        )
 
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .staggeredEntrance(index, cardKey, seenKeys)
                                 .then(if (isPast) Modifier.alpha(0.55f) else Modifier),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -309,8 +497,8 @@ fun EventManagementScreen(
                                             val diffDays = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diffMillis)
                                             if (diffDays > 0) "Còn $diffDays ngày" else "Chưa diễn ra"
                                         } else {
-                                            val actualEndTime = event.endDate + 86400000L - 1
-                                            val diffMillis = actualEndTime - now
+                                            val actualEndTimeVal = event.endDate + 86400000L - 1
+                                            val diffMillis = actualEndTimeVal - now
                                             val diffDays = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diffMillis)
                                             if (diffMillis < 0) {
                                                 "Đã hết hạn"
@@ -349,22 +537,9 @@ fun EventManagementScreen(
 
                                     Spacer(modifier = Modifier.height(8.dp))
 
-                                    // Thanh line ngang: Thời gian hết hạn
-                                    val actualEndTime = event.endDate?.let { it + 86400000L - 1 }
-                                    val timeProgress = if (actualEndTime == null) {
-                                        0.4f
-                                    } else if (now < event.startDate) {
-                                        0f
-                                    } else if (now >= actualEndTime) {
-                                        1f
-                                    } else {
-                                        val totalDuration = (actualEndTime - event.startDate).toFloat()
-                                        val elapsed = (now - event.startDate).toFloat()
-                                        if (totalDuration > 0) (elapsed / totalDuration).coerceIn(0f, 1f) else 0f
-                                    }
-
+                                    // Thanh line ngang: Thời gian hết hạn (Animated)
                                     StripedProgressIndicator(
-                                        progress = timeProgress,
+                                        progress = animTimeProgress,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(8.dp)
@@ -437,22 +612,19 @@ fun EventManagementScreen(
 
                                         Spacer(modifier = Modifier.width(12.dp))
 
-                                        val percent = if (limit > 0) ((totalSpent / limit) * 100).toInt().coerceIn(0, 100) else 0
-                                        val safeProgress = if (limit > 0) (totalSpent / limit).toFloat().coerceIn(0f, 1f) else 0f
-
                                         Box(
                                             modifier = Modifier.size(44.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             CircularProgressIndicator(
-                                                progress = { safeProgress },
+                                                progress = { animSafeProgress },
                                                 modifier = Modifier.fillMaxSize(),
                                                 color = eventColor,
                                                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
                                                 strokeWidth = 4.dp
                                             )
                                             Text(
-                                                text = "$percent%",
+                                                text = "$animPercent%",
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = eventColor
@@ -468,120 +640,101 @@ fun EventManagementScreen(
         }
     }
 
-    // Modal Bottom Sheet for 3-dots menu action
+    // Modal Bottom Sheet cho menu 3 chấm (Tuân thủ 100% quy tắc hệ thống)
     if (showBottomSheetEvent != null) {
         val event = showBottomSheetEvent!!
         val sheetTitleColor = try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
 
-        ModalBottomSheet(
+        AppModalBottomSheet(
             onDismissRequest = { showBottomSheetEvent = null },
+            title = event.name,
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.surface
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 24.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                // 1. Xem chi tiết & danh sách giao dịch
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = event.name,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = sheetTitleColor
-                    )
-                    IconButton(onClick = { showBottomSheetEvent = null }) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Xem chi tiết
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
                         .clickable {
                             val target = event
                             showBottomSheetEvent = null
                             eventToView = target
                         }
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Info,
-                        contentDescription = "Chi tiết",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        contentDescription = null,
+                        tint = sheetTitleColor,
                         modifier = Modifier.size(22.dp)
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
                     Text(
-                        text = "Chi tiết sự kiện",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
+                        text = "Xem chi tiết & danh sách giao dịch",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
-                // Sửa sự kiện
+                // 2. Chỉnh sửa thông tin sự kiện
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
                         .clickable {
                             val target = event
                             showBottomSheetEvent = null
                             eventToEdit = target
                         }
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
-                        contentDescription = "Sửa",
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(22.dp)
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
                     Text(
-                        text = "Sửa sự kiện",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
+                        text = "Chỉnh sửa thông tin sự kiện",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
-                // Xóa sự kiện
+                // 3. Xóa sự kiện
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
                         .clickable {
                             val target = event
                             showBottomSheetEvent = null
                             eventToDelete = target
                         }
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Xóa",
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(22.dp)
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
                     Text(
                         text = "Xóa sự kiện",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
@@ -589,78 +742,171 @@ fun EventManagementScreen(
         }
     }
 
+    // Modal Chi tiết sự kiện (Tuân thủ Rule 3 với AppModalBottomSheet)
     if (eventToView != null) {
         val event = eventToView!!
         val eventTransactions = transactions.filter { it.eventId == event.id }
         val limit = event.limitAmount ?: 0.0
         val spent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+        val eventColor = try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
 
-        AlertDialog(
+        AppModalBottomSheet(
             onDismissRequest = { eventToView = null },
-            title = { Text(text = event.name, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (event.description.isNotBlank()) {
-                        Text(event.description, fontSize = 14.sp)
+            title = event.name,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            footer = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { eventToView = null },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Đóng", fontWeight = FontWeight.Bold)
                     }
-                    val startStr = FormatHelper.formatDate(event.startDate)
-                    val endStr = event.endDate?.let { FormatHelper.formatDate(it) } ?: "Không giới hạn"
-                    Text("Thời gian: $startStr - $endStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                    Button(
+                        onClick = {
+                            val target = event
+                            eventToView = null
+                            eventToEdit = target
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Chỉnh sửa", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (event.description.isNotBlank()) {
+                    Text(
+                        text = event.description,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-                    if (limit > 0) {
-                        Text("Tiến độ chi tiêu:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                // Thời gian
+                val startStr = FormatHelper.formatDate(event.startDate)
+                val endStr = event.endDate?.let { FormatHelper.formatDate(it) } ?: "Không giới hạn"
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = null,
+                        tint = eventColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Thời gian: $startStr - $endStr",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Tiến độ chi tiêu
+                if (limit > 0) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Tiến độ chi tiêu", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                text = "${FormatHelper.formatVND(spent)} / ${FormatHelper.formatVND(limit)}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = eventColor
+                            )
+                        }
                         val progress = (spent / limit).toFloat().coerceIn(0f, 1f)
                         StripedProgressIndicator(
                             progress = progress,
-                            modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
-                            color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { MaterialTheme.colorScheme.primary },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(5.dp)),
+                            color = if (progress >= 0.9f) MaterialTheme.colorScheme.error else eventColor,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
-                        Text(
-                            text = "${FormatHelper.formatVND(spent)} / ${FormatHelper.formatVND(limit)}",
-                            fontSize = 12.sp,
-                            modifier = Modifier.align(Alignment.End)
-                        )
-                    } else {
-                        Text("Đã chi: ${FormatHelper.formatVND(spent)}", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
                     }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Tổng đã chi", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(FormatHelper.formatVND(spent), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = eventColor)
+                    }
+                }
+
+                // Lịch sử giao dịch liên quan
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Lịch sử giao dịch (${eventTransactions.size})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
 
                     if (eventTransactions.isNotEmpty()) {
-                        Text("Lịch sử giao dịch liên quan:", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
-                        LazyColumn(
-                            modifier = Modifier.heightIn(max = 200.dp),
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            items(eventTransactions.sortedByDescending { it.timestamp }) { tx ->
+                            eventTransactions.sortedByDescending { it.timestamp }.forEach { tx ->
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(tx.categoryName, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        Text(tx.categoryName, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                         Text(FormatHelper.formatDate(tx.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
                                     }
                                     Text(
                                         text = "${if (tx.type == "EXPENSE") "-" else "+"}${FormatHelper.formatVND(tx.amount)}",
-                                        color = if (tx.type == "EXPENSE") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                        color = if (tx.type == "EXPENSE") MaterialTheme.colorScheme.error else Color(0xFF00E676),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp
                                     )
                                 }
-                                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                             }
                         }
                     } else {
-                        Text("Chưa có giao dịch.", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                        Text(
+                            text = "Chưa có giao dịch nào liên kết với sự kiện này.",
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { eventToView = null }) {
-                    Text("Đóng")
-                }
             }
-        )
+        }
     }
 
     if (showAddEventDialog || eventToEdit != null) {
@@ -1138,27 +1384,25 @@ fun EventManagementScreen(
 
     if (eventToDelete != null) {
         val event = eventToDelete!!
-        AlertDialog(
-            onDismissRequest = { eventToDelete = null },
-            title = { Text("Xóa sự kiện?", fontWeight = FontWeight.Bold) },
-            text = { Text("Bạn có chắc chắn muốn xóa sự kiện '${event.name}'? Các giao dịch sẽ KHÔNG bị xóa, nhưng sẽ không còn gắn với sự kiện này nữa.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deleteEvent(event)
-                        viewModel.showSuccessNotification("Đã xóa sự kiện")
-                        eventToDelete = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Xóa", color = MaterialTheme.colorScheme.onError)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { eventToDelete = null }) {
-                    Text("Thoát", color = MaterialTheme.colorScheme.onSurface)
-                }
-            }
+        AppNotificationDialog(
+            showDialog = true,
+            title = "Xác nhận xóa sự kiện?",
+            content = "Bạn có chắc chắn muốn xóa sự kiện '${event.name}'? Các giao dịch trong sự kiện sẽ KHÔNG bị xóa mà chỉ được gỡ liên kết khỏi sự kiện này.",
+            cancelButton = DialogButtonConfig(
+                text = "HỦY",
+                action = { eventToDelete = null }
+            ),
+            confirmButton = DialogButtonConfig(
+                text = "XÓA SỰ KIỆN",
+                action = {
+                    viewModel.deleteEvent(event)
+                    viewModel.showSuccessNotification("Đã xóa sự kiện thành công!")
+                    eventToDelete = null
+                },
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = Color.White
+            ),
+            onDismissRequest = { eventToDelete = null }
         )
     }
 }

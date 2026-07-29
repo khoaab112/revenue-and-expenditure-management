@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +34,13 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import android.os.Build
+import androidx.compose.ui.platform.LocalContext
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalFocusManager
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
@@ -89,6 +99,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainContent(
     viewModel: FinanceViewModel,
@@ -215,7 +226,7 @@ fun MainContent(
                 }
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    text = "Ghi Chép Thu Chi",
+                    text = "Sổ Thu Chi",
                     fontWeight = FontWeight.Bold,
                     fontSize = 22.sp,
                     color = MaterialTheme.colorScheme.onBackground
@@ -227,11 +238,7 @@ fun MainContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(28.dp))
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(32.dp)
-                )
+                com.app.ui.components.AppLoadingIndicator(size = 64.dp)
             }
         }
     } else if (!isAppUnlocked) {
@@ -246,6 +253,7 @@ fun MainContent(
     } else {
         val hasSeenOnboarding by viewModel.hasSeenOnboarding.collectAsState()
         val isDatabaseEmpty by viewModel.isDatabaseEmpty.collectAsState()
+        var showDonateModal by remember { mutableStateOf(false) }
 
         if (!hasSeenOnboarding) {
             com.app.ui.screens.OnboardingScreen(
@@ -364,15 +372,6 @@ fun MainContent(
 
                     // Screen container with Header and #D9D9D9 background
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && currentRoute != Routes.BUDGET_GOAL && currentRoute != Routes.WALLETS) {
-                            AppHeader(
-                                currentRoute = currentRoute,
-                                canPop = canPop,
-                                onNavigateBack = { handleBackNavigation() },
-                                viewModel = viewModel,
-                                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) }
-                            )
-                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -381,6 +380,7 @@ fun MainContent(
                             NavHostContainer(
                                 navController = navController,
                                 viewModel = viewModel,
+                                onOpenDonateModal = { showDonateModal = true },
                                 modifier = Modifier
                             )
                         }
@@ -396,24 +396,11 @@ fun MainContent(
                     }
                 }
 
-                // Adaptive portrait layout: Standard Scaffold + Top AppHeader + Bottom Navigation Bar
+                // Adaptive portrait layout: Standard Scaffold + Bottom Navigation Bar
                 Scaffold(
                     modifier = modifier.fillMaxSize(),
                     contentWindowInsets = WindowInsets(0.dp),
-                    topBar = {
-                        if (currentRoute != Routes.CATEGORY_MANAGEMENT && 
-                            currentRoute != Routes.BUDGET_GOAL && 
-                            currentRoute != Routes.WALLETS && 
-                            currentRoute != Routes.BANK_NOTIFICATION_HISTORY) {
-                            AppHeader(
-                                currentRoute = currentRoute,
-                                canPop = canPop,
-                                onNavigateBack = { handleBackNavigation() },
-                                viewModel = viewModel,
-                                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) }
-                            )
-                        }
-                    },
+                    topBar = {},
                     bottomBar = {
                         NavigationBar {
                             navigationItems.forEach { item ->
@@ -512,10 +499,35 @@ fun MainContent(
                         NavHostContainer(
                             navController = navController,
                             viewModel = viewModel,
+                            onOpenDonateModal = { showDonateModal = true },
                             modifier = Modifier
                         )
 
                     // -------------------- POPUPS AND DIALOGS --------------------
+                    if (showDonateModal) {
+                        com.app.ui.components.AppModalBottomSheet(
+                            onDismissRequest = { showDonateModal = false },
+                            title = "Ủng hộ",
+                            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_donate_qr),
+                                    contentDescription = "Mã QR Ủng hộ",
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.95f)
+                                        .clip(RoundedCornerShape(16.dp)),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.FillWidth
+                                )
+                            }
+                        }
+                    }
+
                     if (showPermissionErrorPopup) {
                         androidx.compose.ui.window.Dialog(
                             onDismissRequest = { showPermissionErrorPopup = false }
@@ -818,19 +830,33 @@ fun MainContent(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = when (notification.type) {
-                                                NotificationType.SUCCESS -> Icons.Default.CheckCircle
-                                                NotificationType.WARNING -> Icons.Default.Warning
-                                                NotificationType.ERROR -> Icons.Default.Error
-                                            },
-                                            contentDescription = null,
-                                            tint = when (notification.type) {
-                                                NotificationType.SUCCESS -> Color(0xFF2E7D32)
-                                                NotificationType.WARNING -> Color(0xFFF57F17)
-                                                NotificationType.ERROR -> Color(0xFFC62828)
-                                            },
-                                            modifier = Modifier.size(24.dp)
+                                        val context = LocalContext.current
+                                        val gifRes = when (notification.type) {
+                                            NotificationType.SUCCESS -> R.drawable.success
+                                            NotificationType.WARNING -> R.drawable.warning
+                                            NotificationType.ERROR -> R.drawable.error
+                                        }
+                                        val imageLoader = remember(context) {
+                                            ImageLoader.Builder(context)
+                                                .components {
+                                                    if (Build.VERSION.SDK_INT >= 28) {
+                                                        add(ImageDecoderDecoder.Factory())
+                                                    } else {
+                                                        add(GifDecoder.Factory())
+                                                    }
+                                                }
+                                                .build()
+                                        }
+                                        val painter = rememberAsyncImagePainter(
+                                            model = ImageRequest.Builder(context)
+                                                .data(gifRes)
+                                                .build(),
+                                            imageLoader = imageLoader
+                                        )
+                                        Image(
+                                            painter = painter,
+                                            contentDescription = notification.type.name,
+                                            modifier = Modifier.size(36.dp)
                                         )
                                         
                                         Column(modifier = Modifier.weight(1f)) {
@@ -877,6 +903,7 @@ fun MainContent(
 fun NavHostContainer(
     navController: androidx.navigation.NavHostController,
     viewModel: FinanceViewModel,
+    onOpenDonateModal: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val startScreen by viewModel.startScreen.collectAsState()
@@ -899,24 +926,34 @@ fun NavHostContainer(
     ) {
         composable(Routes.DASHBOARD) {
             val canPop = navController.previousBackStackEntry != null
-            DashboardScreen(
-                viewModel = viewModel,
-                onNavigateBack = if (canPop) { { navController.popBackStack() } } else null,
-                onNavigateToWallets = { wallet ->
-                    if (wallet != null) {
-                        viewModel.setFocusedWalletId(wallet.id)
-                    }
-                    navController.navigate(Routes.WALLETS)
-                },
-                onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
-                onNavigateToStats = { navController.navigate(Routes.STATS) },
-                onNavigateToBudget = { navController.navigate(Routes.BUDGET_GOAL) },
-                onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
-                onNavigateToBankNotifications = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
-                onNavigateToDebtBook = { tabIdx -> navController.navigate("${Routes.DEBT_BOOK}?tab=$tabIdx") },
-                onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
-                onNavigateToEvents = { navController.navigate(Routes.EVENTS) }
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppHeader(
+                    currentRoute = Routes.DASHBOARD,
+                    canPop = canPop,
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onOpenDonateModal = onOpenDonateModal
+                )
+                DashboardScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = if (canPop) { { navController.popBackStack() } } else null,
+                    onNavigateToWallets = { wallet ->
+                        if (wallet != null) {
+                            viewModel.setFocusedWalletId(wallet.id)
+                        }
+                        navController.navigate(Routes.WALLETS)
+                    },
+                    onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
+                    onNavigateToStats = { navController.navigate(Routes.STATS) },
+                    onNavigateToBudget = { navController.navigate(Routes.BUDGET_GOAL) },
+                    onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
+                    onNavigateToBankNotifications = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
+                    onNavigateToDebtBook = { tabIdx -> navController.navigate("${Routes.DEBT_BOOK}?tab=$tabIdx") },
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onNavigateToEvents = { navController.navigate(Routes.EVENTS) }
+                )
+            }
         }
 
         composable(
@@ -953,22 +990,69 @@ fun NavHostContainer(
         }
 
         composable(Routes.HISTORY) {
-            HistoryScreen(
-                viewModel = viewModel,
-                onNavigateToTimeline = { dateStr -> 
-                    navController.navigate("${Routes.TIMELINE}/${android.net.Uri.encode(dateStr)}")
-                }
-            )
+            val canPop = navController.previousBackStackEntry != null
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppHeader(
+                    currentRoute = Routes.HISTORY,
+                    canPop = canPop,
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onOpenDonateModal = onOpenDonateModal
+                )
+                HistoryScreen(
+                    viewModel = viewModel,
+                    onNavigateToTimeline = { dateStr -> 
+                        navController.navigate("${Routes.TIMELINE}/${android.net.Uri.encode(dateStr)}")
+                    }
+                )
+            }
         }
 
         composable(Routes.STATS) {
-            ReportsScreen(
-                viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() }
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppHeader(
+                    currentRoute = Routes.STATS,
+                    canPop = true,
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onOpenDonateModal = onOpenDonateModal
+                )
+                ReportsScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
 
-        composable(Routes.BUDGET_GOAL) {
+        composable(
+            route = Routes.BUDGET_GOAL,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            }
+        ) {
             BudgetGoalScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
@@ -976,21 +1060,68 @@ fun NavHostContainer(
         }
 
         composable(Routes.SAVINGS_VAULT) {
-            com.app.ui.screens.SavingsVaultScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppHeader(
+                    currentRoute = Routes.SAVINGS_VAULT,
+                    canPop = true,
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onOpenDonateModal = onOpenDonateModal
+                )
+                com.app.ui.screens.SavingsVaultScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
+            }
         }
 
-        composable(Routes.SETTINGS) {
-            SettingsScreen(
-                viewModel = viewModel,
-                onNavigateToBankNotificationHistory = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
-                onNavigateToEvents = { navController.navigate(Routes.EVENTS) },
-                onNavigateToStats = { navController.navigate(Routes.STATS) },
-                onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
-                onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) },
-                onNavigateToWalletManagement = { navController.navigate(Routes.WALLET_MANAGEMENT) },
-                onNavigateToCategoryManagement = { navController.navigate(Routes.CATEGORY_MANAGEMENT) },
-                onNavigateToBudgetGoal = { navController.navigate(Routes.BUDGET_GOAL) }
-            )
+        composable(
+            route = Routes.SETTINGS,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeIn(animationSpec = tween(300))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                ) + fadeOut(animationSpec = tween(300))
+            }
+        ) {
+            val canPop = navController.previousBackStackEntry != null
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppHeader(
+                    currentRoute = Routes.SETTINGS,
+                    canPop = canPop,
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onOpenDonateModal = onOpenDonateModal
+                )
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onNavigateToBankNotificationHistory = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
+                    onNavigateToEvents = { navController.navigate(Routes.EVENTS) },
+                    onNavigateToStats = { navController.navigate(Routes.STATS) },
+                    onNavigateToSavings = { navController.navigate(Routes.SAVINGS_VAULT) },
+                    onNavigateToDebtBook = { navController.navigate(Routes.DEBT_BOOK) },
+                    onNavigateToWalletManagement = { navController.navigate(Routes.WALLET_MANAGEMENT) },
+                    onNavigateToCategoryManagement = { navController.navigate(Routes.CATEGORY_MANAGEMENT) },
+                    onNavigateToBudgetGoal = { navController.navigate(Routes.BUDGET_GOAL) }
+                )
+            }
         }
 
         composable(
@@ -1065,11 +1196,21 @@ fun NavHostContainer(
         ) { backStackEntry ->
             val tabStr = backStackEntry.arguments?.getString("tab") ?: "0"
             val initialTab = tabStr.toIntOrNull() ?: 0
-            com.app.ui.screens.DebtBookScreen(
-                viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() },
-                initialTab = initialTab
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppHeader(
+                    currentRoute = Routes.DEBT_BOOK,
+                    canPop = true,
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onOpenDonateModal = onOpenDonateModal
+                )
+                com.app.ui.screens.DebtBookScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    initialTab = initialTab
+                )
+            }
         }
 
         composable(Routes.AI_ADVISOR) {
@@ -1085,7 +1226,33 @@ fun NavHostContainer(
             )
         }
 
-        composable(Routes.EVENTS) {
+        composable(
+            route = Routes.EVENTS,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(320)
+                ) + fadeIn(animationSpec = tween(320))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(320)
+                ) + fadeOut(animationSpec = tween(320))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(320)
+                ) + fadeIn(animationSpec = tween(320))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(320)
+                ) + fadeOut(animationSpec = tween(320))
+            }
+        ) {
             com.app.ui.components.EventManagementScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
@@ -1104,11 +1271,21 @@ fun NavHostContainer(
             arguments = listOf(androidx.navigation.navArgument("dateStr") { type = androidx.navigation.NavType.StringType })
         ) { backStackEntry ->
             val dateStr = backStackEntry.arguments?.getString("dateStr") ?: ""
-            TimelineScreen(
-                viewModel = viewModel,
-                onNavigateBack = { navController.popBackStack() },
-                initialDateStr = dateStr
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppHeader(
+                    currentRoute = Routes.TIMELINE,
+                    canPop = true,
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onOpenDonateModal = onOpenDonateModal
+                )
+                TimelineScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    initialDateStr = dateStr
+                )
+            }
         }
 
         composable(
@@ -1135,15 +1312,25 @@ fun NavHostContainer(
                 ) + fadeOut(animationSpec = tween(250))
             }
         ) {
-            AddTransactionScreen(
-                viewModel = viewModel,
-                onSuccess = {
-                    navController.navigate(Routes.HISTORY) {
-                        popUpTo(Routes.ADD_TRANSACTION) { inclusive = false }
-                        launchSingleTop = true
+            Column(modifier = Modifier.fillMaxSize()) {
+                AppHeader(
+                    currentRoute = Routes.ADD_TRANSACTION,
+                    canPop = true,
+                    onNavigateBack = { navController.popBackStack() },
+                    viewModel = viewModel,
+                    onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
+                    onOpenDonateModal = onOpenDonateModal
+                )
+                AddTransactionScreen(
+                    viewModel = viewModel,
+                    onSuccess = {
+                        navController.navigate(Routes.HISTORY) {
+                            popUpTo(Routes.ADD_TRANSACTION) { inclusive = false }
+                            launchSingleTop = true
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }
@@ -1162,6 +1349,7 @@ fun AppHeader(
     onNavigateBack: () -> Unit,
     viewModel: FinanceViewModel? = null,
     onNavigateToAIAdvisor: (() -> Unit)? = null,
+    onOpenDonateModal: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val customTitle = viewModel?.customTopBarTitle?.collectAsState()?.value
@@ -1213,6 +1401,19 @@ fun AppHeader(
                 }
             },
             actions = {
+                if (baseRoute == Routes.SETTINGS && onOpenDonateModal != null) {
+                    IconButton(
+                        onClick = onOpenDonateModal,
+                        modifier = Modifier.testTag("app_header_donate_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "Ủng hộ",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
                 if (baseRoute == Routes.DASHBOARD && onNavigateToAIAdvisor != null) {
                     IconButton(
                         onClick = onNavigateToAIAdvisor,

@@ -1,6 +1,7 @@
 package com.app.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,6 +29,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +54,13 @@ import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.CustomMoneyInputField
 import com.app.service.GeminiAdvisorService
+import android.os.Build
+import androidx.compose.foundation.Image
+import coil.ImageLoader
+import coil.compose.rememberAsyncImagePainter
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -71,6 +81,48 @@ fun isNotificationServiceEnabled(context: android.content.Context): Boolean {
     return false
 }
 
+@Composable
+private fun Modifier.staggeredEntrance(
+    index: Int,
+    key: String,
+    seenKeys: MutableList<String>
+): Modifier {
+    val alreadySeen = remember(key) { seenKeys.contains(key) }
+    var cardVisible by rememberSaveable(key) { mutableStateOf(alreadySeen) }
+
+    LaunchedEffect(key) {
+        if (!alreadySeen) {
+            cardVisible = true
+            seenKeys.add(key)
+        }
+    }
+
+    val alphaProgress by animateFloatAsState(
+        targetValue = if (cardVisible || alreadySeen) 1f else 0f,
+        animationSpec = if (alreadySeen) snap() else tween(
+            durationMillis = 400,
+            delayMillis = (index * 50).coerceAtMost(250),
+            easing = LinearOutSlowInEasing
+        ),
+        label = "settings_stagger_alpha_$index"
+    )
+
+    val offsetYProgress by animateDpAsState(
+        targetValue = if (cardVisible || alreadySeen) 0.dp else 24.dp,
+        animationSpec = if (alreadySeen) snap() else tween(
+            durationMillis = 400,
+            delayMillis = (index * 50).coerceAtMost(250),
+            easing = LinearOutSlowInEasing
+        ),
+        label = "settings_stagger_offset_$index"
+    )
+
+    return this.graphicsLayer {
+        alpha = alphaProgress
+        translationY = offsetYProgress.toPx()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -86,6 +138,11 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val seenKeys = rememberSaveable(saver = listSaver(
+        save = { it.toList() },
+        restore = { mutableStateListOf<String>().apply { addAll(it) } }
+    )) { mutableStateListOf<String>() }
+
     val isPinEnabled by viewModel.isPinEnabled.collectAsState()
 
     val startScreen by viewModel.startScreen.collectAsState()
@@ -172,6 +229,25 @@ fun SettingsScreen(
             com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)
         }
 
+        val gifImageLoader = remember(context) {
+            ImageLoader.Builder(context)
+                .components {
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        add(ImageDecoderDecoder.Factory())
+                    } else {
+                        add(GifDecoder.Factory())
+                    }
+                }
+                .build()
+        }
+
+        val userAvatarGifPainter = rememberAsyncImagePainter(
+            model = ImageRequest.Builder(context)
+                .data(com.app.R.drawable.user_avatar)
+                .build(),
+            imageLoader = gifImageLoader
+        )
+
         // =============================================================
         // SECTION 1: Đồng bộ google
         // =============================================================
@@ -179,11 +255,12 @@ fun SettingsScreen(
             text = "Đồng bộ google",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            modifier = Modifier.staggeredEntrance(0, "settings_txt_sync", seenKeys)
         )
 
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().staggeredEntrance(1, "settings_card_sync", seenKeys),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -380,7 +457,8 @@ fun SettingsScreen(
             text = "Thiết lập",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            modifier = Modifier.staggeredEntrance(1, "settings_txt_setup", seenKeys)
         )
 
         Card(
@@ -407,6 +485,7 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
+                        .staggeredEntrance(2, "setup_item_wallets", seenKeys)
                         .clickable { onNavigateToWalletManagement() }
                         .testTag("manage_wallets_item")
                 )
@@ -430,6 +509,7 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
+                        .staggeredEntrance(3, "setup_item_categories", seenKeys)
                         .clickable { onNavigateToCategoryManagement() }
                         .testTag("manage_categories_item")
                 )
@@ -453,6 +533,7 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
+                        .staggeredEntrance(4, "setup_item_budget", seenKeys)
                         .clickable { onNavigateToBudgetGoal() }
                         .testTag("manage_budget_goal_item")
                 )
@@ -476,13 +557,14 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
+                        .staggeredEntrance(5, "setup_item_events", seenKeys)
                         .clickable { onNavigateToEvents() }
                         .testTag("manage_events_item")
                 )
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                // 4. Tiết kiệm
+                // 5. Tiết kiệm
                 ListItem(
                     headlineContent = { Text("Tiết kiệm", fontWeight = FontWeight.Bold) },
                     leadingContent = {
@@ -499,13 +581,14 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
+                        .staggeredEntrance(6, "setup_item_savings", seenKeys)
                         .clickable { onNavigateToSavings() }
                         .testTag("manage_savings_item")
                 )
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                // 5. Sổ nợ
+                // 6. Sổ nợ
                 ListItem(
                     headlineContent = { Text("Sổ nợ", fontWeight = FontWeight.Bold) },
                     leadingContent = {
@@ -522,13 +605,14 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
+                        .staggeredEntrance(7, "setup_item_debt", seenKeys)
                         .clickable { onNavigateToDebtBook() }
                         .testTag("manage_debt_book_item")
                 )
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                // 6. Thống kê & báo cáo
+                // 7. Thống kê & báo cáo
                 ListItem(
                     headlineContent = { Text("Thống kê & báo cáo", fontWeight = FontWeight.Bold) },
                     leadingContent = {
@@ -545,6 +629,7 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     },
                     modifier = Modifier
+                        .staggeredEntrance(8, "setup_item_stats", seenKeys)
                         .clickable { onNavigateToStats() }
                         .testTag("navigate_stats_item")
                 )
@@ -558,11 +643,12 @@ fun SettingsScreen(
             text = "Hệ thống",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            modifier = Modifier.staggeredEntrance(9, "settings_txt_system", seenKeys)
         )
 
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().staggeredEntrance(10, "settings_card_system", seenKeys),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -750,6 +836,7 @@ fun SettingsScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .staggeredEntrance(6, "settings_txt_dev", seenKeys)
                 .clickable { isDeveloperExpanded = !isDeveloperExpanded }
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
