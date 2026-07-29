@@ -292,14 +292,28 @@ fun EventManagementScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    itemsIndexed(sortedEvents, key = { _, event -> event.id }) { index, event ->
-                        val eventTransactions = transactions.filter { it.eventId == event.id }
-                        val totalSpent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-                        val statusStyle = getEventStatusStyle(event, totalSpent)
+                    itemsIndexed(
+                        items = sortedEvents,
+                        key = { _, event -> event.id },
+                        contentType = { _, _ -> "event_card" }
+                    ) { index, event ->
+                        val eventTransactions = remember(event.id, transactions) {
+                            transactions.filter { it.eventId == event.id }
+                        }
+                        val totalSpent = remember(eventTransactions) {
+                            eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+                        }
+                        val statusStyle = remember(event, totalSpent) {
+                            getEventStatusStyle(event, totalSpent)
+                        }
                         val limit = event.limitAmount ?: 0.0
-                        val eventColor = try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
+                        val eventColor = remember(event.colorHex) {
+                            try { Color(android.graphics.Color.parseColor(event.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
+                        }
                         val now = System.currentTimeMillis()
-                        val isPast = getEventPriority(event, totalSpent, now) == 5
+                        val isPast = remember(event, totalSpent, now) {
+                            getEventPriority(event, totalSpent, now) == 5
+                        }
 
                         val cardKey = "event_card_${event.id}_${event.name}"
                         val alreadySeen = remember(cardKey) { seenKeys.contains(cardKey) }

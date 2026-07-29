@@ -139,6 +139,177 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val _geminiApiKey = MutableStateFlow("")
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
 
+    private val _chatMessages = MutableStateFlow<List<com.app.service.GeminiAdvisorService.ChatMessage>>(
+        listOf(
+            com.app.service.GeminiAdvisorService.ChatMessage(
+                role = "model",
+                text = "Xin chào! Tôi là Trợ lý Cố vấn Tài chính AI của Monii. 💡\n\nTôi có thể giúp bạn phân tích chi tiêu, kiểm soát ngân sách, theo dõi các khoản nợ và đề xuất kế hoạch quản lý tài chính hiệu quả.\n\nBạn có thể chạm vào **biểu tượng mẫu câu** ở bên trái thanh nhập hoặc tự đặt câu hỏi tài chính cho tôi!"
+            )
+        )
+    )
+    val chatMessages: StateFlow<List<com.app.service.GeminiAdvisorService.ChatMessage>> = _chatMessages.asStateFlow()
+
+    private val _isChatLoading = MutableStateFlow(false)
+    val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
+
+    fun sendAIChatMessage(messageText: String) {
+        val trimmed = messageText.trim()
+        if (trimmed.isBlank() || _isChatLoading.value) return
+
+        val userMsg = com.app.service.GeminiAdvisorService.ChatMessage(
+            role = "user",
+            text = trimmed
+        )
+        val currentHistory = _chatMessages.value
+        _chatMessages.value = currentHistory + userMsg
+        _isChatLoading.value = true
+
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val apiKey = geminiApiKey.value
+            val financialContext = buildFinancialContextSummary()
+            val aiReplyText = com.app.service.GeminiAdvisorService.sendChatMessage(
+                history = currentHistory,
+                userMessage = trimmed,
+                financialContext = financialContext,
+                customApiKey = apiKey
+            )
+
+            val aiMsg = com.app.service.GeminiAdvisorService.ChatMessage(
+                role = "model",
+                text = aiReplyText
+            )
+            _chatMessages.value = _chatMessages.value + aiMsg
+            _isChatLoading.value = false
+        }
+    }
+
+    fun clearAIChatHistory() {
+        _chatMessages.value = listOf(
+            com.app.service.GeminiAdvisorService.ChatMessage(
+                role = "model",
+                text = "Xin chào! Tôi là Trợ lý Cố vấn Tài chính AI của Monii. 💡\n\nTôi có thể giúp bạn phân tích chi tiêu, kiểm soát ngân sách, theo dõi các khoản nợ và đề xuất kế hoạch quản lý tài chính hiệu quả.\n\nBạn có thể chạm vào **biểu tượng mẫu câu** ở bên trái thanh nhập hoặc tự đặt câu hỏi tài chính cho tôi!"
+            )
+        )
+    }
+
+    private fun buildFinancialContextSummary(): String {
+        val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+        val monthSdf = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        val currentMonthStr = monthSdf.format(Date())
+
+        // 1. Wallets & Total Balance
+        val wallets = allWallets.value
+        val totalBalance = wallets.sumOf { it.balance }
+        val walletsText = if (wallets.isEmpty()) "Chưa có ví tiền nào"
+        else wallets.joinToString("\n") { w ->
+            val typeStr = when (w.type) {
+                "CASH" -> "Tiền mặt"
+                "BANK" -> "Tài khoản Ngân hàng"
+                "WALLET" -> "Ví điện tử"
+                "SAVINGS" -> "Sổ tiết kiệm"
+                "CREDIT" -> "Thẻ tín dụng"
+                else -> w.type
+            }
+            "- Ví '${w.name}' ($typeStr): ${FormatHelper.formatVND(w.balance)}"
+        }
+
+        // 2. Transactions & Period Breakdown
+        val allTxs = allTransactions.value
+        val currentMonthTxs = allTxs.filter {
+            val txMonth = monthSdf.format(Date(it.timestamp))
+            txMonth == currentMonthStr
+        }
+
+        val totalIncomeMonth = currentMonthTxs.filter { it.type == "INCOME" }.sumOf { it.amount }
+        val totalExpenseMonth = currentMonthTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+
+        // Expenses by category for current month
+        val expenseByCatMonth = currentMonthTxs.filter { it.type == "EXPENSE" }
+            .groupBy { it.categoryName }
+            .mapValues { entry -> entry.value.sumOf { it.amount } }
+            .entries.sortedByDescending { it.value }
+            .joinToString("\n") { "- Hạng mục '${it.key}': ${FormatHelper.formatVND(it.value)}" }
+
+        // Recent 40 transactions with details (notes, date, amount, category, wallet)
+        val recentTxsText = if (allTxs.isEmpty()) "Chưa có lịch sử giao dịch"
+        else allTxs.take(40).joinToString("\n") { tx ->
+            val typeLabel = if (tx.type == "INCOME") "THU" else if (tx.type == "EXPENSE") "CHI" else "CHUYỂN TIỀN"
+            val dateStr = sdf.format(Date(tx.timestamp))
+            val noteStr = if (tx.note.isNotBlank()) " | Ghi chú: '${tx.note}'" else ""
+            "- [$dateStr] [$typeLabel] ${FormatHelper.formatVND(tx.amount)} | Hạng mục: '${tx.categoryName}' | Ví: '${tx.walletName}'$noteStr"
+        }
+
+        // 3. Budgets
+        val budgets = allBudgets.value
+        val budgetsText = if (budgets.isEmpty()) "Chưa thiết lập ngân sách hạn mức nào"
+        else budgets.joinToString("\n") { b ->
+            val remaining = b.limitAmount - b.spentAmount
+            val statusStr = if (remaining < 0) "VƯỢT HẠN MỨC ${FormatHelper.formatVND(-remaining)}" else "Còn lại ${FormatHelper.formatVND(remaining)}"
+            "- Hạn mức '${b.categoryName}': Giới hạn ${FormatHelper.formatVND(b.limitAmount)} | Đã tiêu ${FormatHelper.formatVND(b.spentAmount)} ($statusStr) [Tháng ${b.month}]"
+        }
+
+        // 4. Debts & Loans
+        val debts = allDebts.value
+        val debtsText = if (debts.isEmpty()) "Không có khoản nợ hay cho vay nào"
+        else debts.joinToString("\n") { d ->
+            val debtTypeLabel = if (d.type == "DEBT") "Tôi vay của" else "Tôi cho vay"
+            val dueStr = d.dueDate?.let { " | Hạn trả: ${sdf.format(Date(it))}" } ?: ""
+            val statusLabel = if (d.status == "COMPLETED") "Đã hoàn thành" else "Đang theo dõi"
+            val noteStr = if (d.note.isNotBlank()) " | Ghi chú: '${d.note}'" else ""
+            "- [$statusLabel] $debtTypeLabel '${d.personName}': Tổng ${FormatHelper.formatVND(d.totalAmount)}, Còn nợ lại ${FormatHelper.formatVND(d.remainingAmount)}$dueStr$noteStr"
+        }
+
+        // 5. Savings Goals
+        val savingsGoals = allSavingsGoals.value
+        val savingsGoalsText = if (savingsGoals.isEmpty()) "Chưa có mục tiêu tích lũy/tiết kiệm nào"
+        else savingsGoals.joinToString("\n") { g ->
+            val targetDateStr = sdf.format(Date(g.targetDate))
+            val progress = if (g.targetAmount > 0) ((g.currentAmount / g.targetAmount) * 100).toInt() else 0
+            "- Mục tiêu '${g.name}': Đã tích lũy ${FormatHelper.formatVND(g.currentAmount)} / ${FormatHelper.formatVND(g.targetAmount)} ($progress%) | Hạn chót: $targetDateStr"
+        }
+
+        // 6. Events
+        val events = allEvents.value
+        val eventsText = if (events.isEmpty()) "Chưa có sự kiện/chuyến đi nào"
+        else events.joinToString("\n") { e ->
+            val eventTxs = allTxs.filter { it.eventId == e.id }
+            val spent = eventTxs.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+            val limitStr = e.limitAmount?.let { " | Hạn mức: ${FormatHelper.formatVND(it)}" } ?: ""
+            "- Sự kiện '${e.name}': Đã chi ${FormatHelper.formatVND(spent)}$limitStr"
+        }
+
+        return """
+            ================ TÀI CHÍNH NỘI BỘ THỜI GIAN THỰC CỦA NGƯỜI DÙNG ================
+
+            1. TỔNG SỐ DƯ & DANH SÁCH VÍ TIỀN:
+            - Tổng số dư khả dụng toàn bộ ví: ${FormatHelper.formatVND(totalBalance)}
+            $walletsText
+
+            2. THU CHI THÁNG HIỆN TẠI ($currentMonthStr):
+            - Tổng thu nhập tháng này: ${FormatHelper.formatVND(totalIncomeMonth)}
+            - Tổng chi tiêu tháng này: ${FormatHelper.formatVND(totalExpenseMonth)}
+            - Chi tiết chi tiêu theo từng hạng mục tháng này:
+            ${if (expenseByCatMonth.isBlank()) "Chưa có chi tiêu tháng này" else expenseByCatMonth}
+
+            3. TÌNH HÌNH HẠN MỨC NGÂN SÁCH CHI TIÊU:
+            $budgetsText
+
+            4. SỔ THEO DÕI NỢ & CHO VAY:
+            $debtsText
+
+            5. MỤC TIÊU TÍCH LŨY / TIẾT KIỆM:
+            $savingsGoalsText
+
+            6. SỰ KIỆN / CHUYẾN ĐỊNH KỲ:
+            $eventsText
+
+            7. LỊCH SỬ 40 GIAO DỊCH GẦN ĐÂY NHẤT (CHI TIẾT NGÀY, HẠNG MỤC, VÍ, GHI CHÚ):
+            $recentTxsText
+
+            ================================================================================
+        """.trimIndent()
+    }
+
     private val _advisorResult = MutableStateFlow<com.app.service.GeminiAdvisorService.AdvisorResult?>(null)
     val advisorResult: StateFlow<com.app.service.GeminiAdvisorService.AdvisorResult?> = _advisorResult.asStateFlow()
 
@@ -247,48 +418,61 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val dao = database.financeDao()
         repository = FinanceRepository(dao, database)
 
-        // Base states
+        // Base states with distinctUntilChanged() optimization to avoid duplicate emissions
         allWallets = repository.allWallets
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         isDatabaseEmpty = repository.allWallets
             .map { it.isEmpty() }
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
         allTransactions = repository.allTransactions
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         dailyWallets = repository.allWallets
             .map { list -> list.filter { it.type != "SAVINGS" } }
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         savingsWallets = repository.allWallets
             .map { list -> list.filter { it.type == "SAVINGS" } }
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         dailyTransactions = combine(repository.allTransactions, repository.allWallets) { txs, wts ->
             val savingsIds = wts.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
             txs.filter { it.walletId !in savingsIds || (it.destinationWalletId != null && it.destinationWalletId !in savingsIds) }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         savingsTransactions = combine(repository.allTransactions, repository.allWallets) { txs, wts ->
             val savingsIds = wts.filter { it.type == "SAVINGS" }.map { it.id }.toSet()
             txs.filter { it.walletId in savingsIds || (it.destinationWalletId != null && it.destinationWalletId in savingsIds) }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         allBudgets = repository.getAllBudgets()
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         allSavingsGoals = repository.allSavingsGoals
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         allEvents = repository.allEvents
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         allDebts = repository.allDebts
+            .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-        // Setup filter flow
+        // Setup filter flow with distinctUntilChanged()
         val filterCriteriaFlow = combine(
             _searchQuery,
             _selectedTypeFilter,
@@ -297,14 +481,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             _filterEndDate
         ) { q, t, c, s, e ->
             FilterCriteria(q, t, c, s, e)
-        }
+        }.distinctUntilChanged()
 
         filteredTransactions = combine(
             dailyTransactions,
             filterCriteriaFlow
         ) { txs, criteria ->
             txs.filter { tx ->
-                val matchesQuery = tx.note.contains(criteria.query, ignoreCase = true) ||
+                val matchesQuery = criteria.query.isEmpty() ||
+                        tx.note.contains(criteria.query, ignoreCase = true) ||
                         tx.categoryName.contains(criteria.query, ignoreCase = true) ||
                         tx.walletName.contains(criteria.query, ignoreCase = true)
                 val matchesType = criteria.type == "ALL" || tx.type == criteria.type
@@ -314,7 +499,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
                 matchesQuery && matchesType && matchesCategory && matchesStart && matchesEnd
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
         // Check settings and default data
         viewModelScope.launch {

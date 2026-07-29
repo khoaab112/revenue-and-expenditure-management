@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.app.data.Categories
 import com.app.data.FinanceCategory
 import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
@@ -140,6 +141,7 @@ fun CategoryManagementScreen(
     var categoryToDelete by remember { mutableStateOf<FinanceCategory?>(null) }
     var categoryToEdit by remember { mutableStateOf<FinanceCategory?>(null) }
     var showTreeDialog by remember { mutableStateOf(false) }
+    var showSyncSystemCategoriesSheet by remember { mutableStateOf(false) }
 
     // Scroll state for list view
     val scrollState = rememberScrollState()
@@ -287,6 +289,9 @@ fun CategoryManagementScreen(
                                 }
                             } else {
                                 Row {
+                                    IconButton(onClick = { showSyncSystemCategoriesSheet = true }) {
+                                        Icon(imageVector = Icons.Default.CloudDownload, contentDescription = "Tải danh mục hệ thống")
+                                    }
                                     IconButton(onClick = { showTreeDialog = true }) {
                                         Icon(imageVector = Icons.Default.AccountTree, contentDescription = "Sơ đồ")
                                     }
@@ -513,13 +518,17 @@ fun CategoryManagementScreen(
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 rootListState.forEachIndexed { index, cat ->
-                                    val colorValue = try {
-                                        FormatHelper.parseColor(cat.colorHex)
-                                    } catch (e: Exception) {
-                                        Color(0xFF4CAF50)
+                                    val colorValue = remember(cat.colorHex) {
+                                        try {
+                                            FormatHelper.parseColor(cat.colorHex)
+                                        } catch (e: Exception) {
+                                            Color(0xFF4CAF50)
+                                        }
                                     }
-                                    val childrenCount = categoriesList.count {
-                                        it.parentName?.lowercase() == cat.name.lowercase()
+                                    val childrenCount = remember(cat.name, categoriesList) {
+                                        categoriesList.count {
+                                            it.parentName?.lowercase() == cat.name.lowercase()
+                                        }
                                     }
 
                                     val isDragged = rootDraggedIndex == index
@@ -1160,6 +1169,208 @@ fun CategoryManagementScreen(
                 ) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = null, tint = Color(0xFFF44336))
                     Text("Xóa danh mục", color = Color(0xFFF44336), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    // ModalBottomSheet: Tải bổ sung danh mục mặc định từ hệ thống
+    if (showSyncSystemCategoriesSheet) {
+        val missingCategories = remember(categoriesList) {
+            val existingNames = categoriesList.map { it.name.trim().lowercase() }.toSet()
+            Categories.list.filter { sysCat ->
+                sysCat.name.trim().lowercase() !in existingNames
+            }
+        }
+
+        var selectedCategoryNames by remember(missingCategories) {
+            mutableStateOf(missingCategories.map { it.name }.toSet())
+        }
+
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        AppModalBottomSheet(
+            onDismissRequest = { showSyncSystemCategoriesSheet = false },
+            title = "Bổ sung danh mục hệ thống",
+            sheetState = sheetState,
+            footer = if (missingCategories.isNotEmpty()) {
+                {
+                    Button(
+                        onClick = {
+                            val toAdd = missingCategories.filter { it.name in selectedCategoryNames }
+                            if (toAdd.isNotEmpty()) {
+                                toAdd.forEach { cat ->
+                                    viewModel.addCategory(
+                                        name = cat.name,
+                                        iconName = cat.iconName,
+                                        colorHex = cat.colorHex,
+                                        type = cat.type,
+                                        parentName = cat.parentName
+                                    )
+                                }
+                                viewModel.showSuccessNotification("Đã bổ sung ${toAdd.size} danh mục mới thành công!")
+                            }
+                            showSyncSystemCategoriesSheet = false
+                        },
+                        enabled = selectedCategoryNames.isNotEmpty(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("confirm_import_system_categories_btn"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF3B30),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Thêm ${selectedCategoryNames.size} danh mục đã chọn",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            } else null
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (missingCategories.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF34C759),
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Text(
+                            text = "Bạn đã có đầy đủ tất cả danh mục của hệ thống!",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Text(
+                            text = "Không có danh mục mới nào cần bổ sung.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Dưới đây là các danh mục hệ thống chưa có trong tài khoản của bạn. Nhấp vào danh mục để chọn hoặc bỏ chọn:",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Lưới hiển thị dạng 2 cột (Grid Layout)
+                    val rows = remember(missingCategories) { missingCategories.chunked(2) }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        rows.forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                rowItems.forEach { cat ->
+                                    val isSelected = cat.name in selectedCategoryNames
+                                    val catColor = remember(cat.colorHex) {
+                                        try { FormatHelper.parseColor(cat.colorHex) } catch (e: Exception) { Color(0xFF4CAF50) }
+                                    }
+
+                                    Surface(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .then(
+                                                if (isSelected) {
+                                                    Modifier.border(2.dp, Color(0xFFFF3B30), RoundedCornerShape(14.dp))
+                                                } else {
+                                                    Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+                                                }
+                                            )
+                                            .clickable {
+                                                selectedCategoryNames = if (isSelected) {
+                                                    selectedCategoryNames - cat.name
+                                                } else {
+                                                    selectedCategoryNames + cat.name
+                                                }
+                                            },
+                                        color = if (isSelected) Color(0xFFFF3B30).copy(alpha = 0.06f) else MaterialTheme.colorScheme.surface,
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clip(CircleShape)
+                                                    .background(catColor.copy(alpha = 0.15f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = IconMapper.getIconByName(cat.iconName),
+                                                    contentDescription = cat.name,
+                                                    tint = catColor,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = cat.name,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    text = if (cat.type == "INCOME") "Khoản thu" else if (cat.type == "EXPENSE") "Khoản chi" else "Dùng chung",
+                                                    fontSize = 11.sp,
+                                                    color = if (cat.type == "INCOME") Color(0xFF34C759) else Color(0xFFFF3B30)
+                                                )
+                                            }
+
+                                            if (isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CheckCircle,
+                                                    contentDescription = "Đã chọn",
+                                                    tint = Color(0xFFFF3B30),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (rowItems.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

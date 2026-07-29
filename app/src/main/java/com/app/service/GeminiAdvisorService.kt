@@ -15,6 +15,13 @@ import kotlinx.coroutines.withContext
 object GeminiAdvisorService {
     private const val TAG = "GeminiAdvisorService"
 
+    data class ChatMessage(
+        val id: String = java.util.UUID.randomUUID().toString(),
+        val role: String, // "user" or "model"
+        val text: String,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
     const val DEFAULT_PROMPT = """Bạn là Trợ lý tài chính AI chuyên nghiệp tại Việt Nam. Dưới đây là thông tin tài chính hiện tại của người dùng:
 
 1. Các ví / tài khoản hiện tại:
@@ -398,5 +405,106 @@ Nếu không nhận diện được bất kỳ giao dịch nào, hãy trả về
             success = false,
             errorMessage = lastErrorMsg
         )
+    }
+
+    suspend fun sendChatMessage(
+        history: List<ChatMessage>,
+        userMessage: String,
+        financialContext: String,
+        customApiKey: String? = null
+    ): String = withContext(Dispatchers.IO) {
+        val apiKey = if (!customApiKey.isNullOrBlank()) customApiKey else BuildConfig.GEMINI_API_KEY
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY" || apiKey.contains("PLACEHOLDER")) {
+            return@withContext "Chưa cài đặt Gemini API Key! Vui lòng vào phần Cài đặt để nhập API Key cá nhân của bạn trước khi trò chuyện."
+        }
+
+        val systemInstruction = """Bạn là Trợ lý Cố vấn Tài chính AI chuyên nghiệp, cá nhân hóa sâu và thông minh thuộc ứng dụng Quản lý Thu Chi Monii.
+
+================ DỮ LIỆU TÀI CHÍNH NỘI BỘ THỜI GIAN THỰC CỦA NGƯỜI DÙNG ================
+$financialContext
+=======================================================================================
+
+QUY TẮC PHẢN HỒI BẮT BUỘC (LƯU Ý NGHIÊM NGẶT):
+1. TRUY XUẤT VÀ SỬ DỤNG DỮ LIỆU THỰC TẾ: Bạn được cung cấp đầy đủ thông tin thời gian thực về các ví tiền, số dư khả dụng, giao dịch gần đây (kèm ghi chú, ngày giờ), ngân sách hạn mức, sổ nợ và mục tiêu tích lũy của người dùng ở trên. Khi người dùng đặt câu hỏi (ví dụ: "Tôi còn bao nhiêu tiền", "Chi tiêu Ăn uống thế nào", "Hôm qua tiêu gì", "Tôi nợ ai", "Nhận xét chi tiêu", "Dự báo tương lai kinh tế"...), bạn BẮT BUỘC phải trích xuất trực tiếp con số tiền, tên danh mục, tên ví, ghi chú và thời gian thực tế từ DỮ LIỆU NỘI BỘ NÊU TRÊN để trả lời chính xác, cá nhân hóa 100%.
+2. NHẬN XÉT & DỰ BÁO THẲNG THẮN: Khi người dùng yêu cầu đánh giá, nhận xét thẳng thắn hoặc dự báo kinh tế tương lai, hãy đưa ra phân tích chân thật dựa trên tốc độ tiêu tiền và số dư thực tế của họ (chỉ ra nếu họ chi tiêu vượt thu nhập, cảnh báo nguy cơ cạn kiệt tài khoản sau bao nhiêu ngày, hoặc đề xuất con số chi tiêu tối đa mỗi ngày).
+3. BẢO VỆ CHUYÊN MÔN TÀI CHÍNH: Bạn CHỈ tập trung trả lời các thắc mắc về TÀI CHÍNH CÁ NHÂN, CHI TIÊU, NGÂN SÁCH, SỔ NỢ, TIẾT KIỆM, ĐẦU TƯ hoặc DỮ LIỆU THU CHI NÊU TRÊN. Nếu người dùng hỏi những chủ đề KHÔNG liên quan tới tài chính/tiền bạc (thời tiết, giải trí, tin tức, lập trình...), bạn hãy từ chối lịch sự:
+*"Tôi là Trợ lý Cố vấn Tài chính của Monii. Tôi chỉ có thể tư vấn các vấn đề liên quan đến quản lý chi tiêu, tài chính cá nhân và dữ liệu thu chi thực tế của bạn. Bạn hãy đặt câu hỏi về tài chính nhé!"*
+4. TÔ ĐẬM TỪ KHÓA BẰNG DẤU SAO KÉP: Bắt buộc bọc các con số tiền, tên danh mục, tên ví, thời gian, từ khóa tài chính bằng `**` (ví dụ: "**500.000đ**", "**Ăn uống**", "**Ví Tiền mặt**", "**cạn tiền trong 5 ngày**").
+5. TRẢ LỜI RÀNH MẠCH: Phân tách ý rõ ràng bằng dấu gạch đầu dòng ngắn gọn, súc tích."""
+
+        val contentsArray = JSONArray()
+        val recentHistory = history.takeLast(8)
+
+        for (item in recentHistory) {
+            val obj = JSONObject().apply {
+                put("role", if (item.role == "model") "model" else "user")
+                val parts = JSONArray().apply {
+                    put(JSONObject().apply { put("text", item.text) })
+                }
+                put("parts", parts)
+            }
+            contentsArray.put(obj)
+        }
+
+        val currentObj = JSONObject().apply {
+            put("role", "user")
+            val parts = JSONArray().apply {
+                put(JSONObject().apply { put("text", "$systemInstruction\n\n[CÂU HỎI THỜI GIAN THỰC NÀY CỦA NGƯỜI DÙNG]:\n$userMessage") })
+            }
+            put("parts", parts)
+        }
+        contentsArray.put(currentObj)
+
+        val models = listOf(
+            "gemini-flash-latest",
+            "gemini-flash-lite-latest",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-pro-latest"
+        )
+
+        var lastErrorMsg = "Không thể kết nối tới AI. Vui lòng kiểm tra lại mạng hoặc API Key."
+
+        for (currentModel in models) {
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/$currentModel:generateContent?key=$apiKey"
+            try {
+                val jsonRequest = JSONObject().apply {
+                    put("contents", contentsArray)
+                }
+                val requestBody = jsonRequest.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                val request = Request.Builder()
+                    .url(url)
+                    .post(requestBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val bodyStr = response.body?.string() ?: ""
+                    if (response.isSuccessful) {
+                        val jsonResponse = JSONObject(bodyStr)
+                        val candidates = jsonResponse.optJSONArray("candidates")
+                        if (candidates != null && candidates.length() > 0) {
+                            val candidate = candidates.getJSONObject(0)
+                            val content = candidate.optJSONObject("content")
+                            val parts = content?.optJSONArray("parts")
+                            if (parts != null && parts.length() > 0) {
+                                val replyText = parts.getJSONObject(0).optString("text", "")
+                                if (replyText.isNotBlank()) {
+                                    return@withContext replyText
+                                }
+                            }
+                        }
+                    } else {
+                        Log.e(TAG, "Chat request failed for $currentModel: $bodyStr")
+                        lastErrorMsg = "Lỗi phản hồi AI (${response.code}). Vui lòng thử lại sau."
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Chat connection exception for $currentModel", e)
+                lastErrorMsg = "Lỗi kết nối AI: ${e.localizedMessage ?: "Không thể hoàn tất yêu cầu."}"
+            }
+        }
+
+        return@withContext lastErrorMsg
     }
 }
