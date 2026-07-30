@@ -28,6 +28,7 @@ data class Transaction(
     val walletName: String,
     val type: String, // INCOME, EXPENSE, TRANSFER
     val amount: Double,
+    val categoryId: Int? = null,
     val categoryName: String,
     val categoryIcon: String,
     val categoryColor: String,
@@ -59,6 +60,7 @@ data class Budget(
     val categoryIcon: String,
     val categoryColor: String,
     val limitAmount: Double,
+    val categoryId: Int? = null,
     val spentAmount: Double = 0.0,
     val month: String, // Format: "YYYY-MM"
     val isRecurring: Boolean = false
