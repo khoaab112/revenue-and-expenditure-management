@@ -42,7 +42,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.data.Transaction
-import com.app.ui.FinanceViewModel
 import android.os.Build
 import androidx.compose.foundation.Image
 import coil.ImageLoader
@@ -62,7 +61,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -120,9 +119,9 @@ fun ReportsScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         if (selectedMainTab == "TREND") {
-            TrendReportContent(viewModel = viewModel)
+            TrendReportContent(transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel)
         } else {
-            DistributionReportContent(viewModel = viewModel)
+            DistributionReportContent(transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel)
         }
     }
 }
@@ -132,7 +131,7 @@ fun ReportsScreen(
 // ==========================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TrendReportContent(viewModel: FinanceViewModel) {
+fun TrendReportContent(transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel) {
     var selectedPeriod by remember { mutableStateOf("WEEK") } // "WEEK", "MONTH", "YEAR", "5YEARS"
     var periodOffset by remember { mutableStateOf(0) }
 
@@ -157,8 +156,8 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
         imageLoader = gifImageLoader
     )
 
-    val allTransactions by viewModel.dailyTransactions.collectAsState()
-    val savingsWallets by viewModel.savingsWallets.collectAsState()
+    val allTransactions by transactionViewModel.dailyTransactions.collectAsState()
+    val savingsWallets by walletViewModel.savingsWallets.collectAsState()
     val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
 
     // Calculate Date Range based on Period and Offset
@@ -275,7 +274,7 @@ fun TrendReportContent(viewModel: FinanceViewModel) {
         if (prevExpense > 0) ((totalExpense - prevExpense) / prevExpense * 100) else 0.0
     }
 
-    val categoriesList by viewModel.categoriesList.collectAsState()
+    val categoriesList by transactionViewModel.categoriesList.collectAsState()
 
     fun getRootCategory(catName: String): com.app.data.FinanceCategory {
         var currentCat = categoriesList.find { it.name.equals(catName, ignoreCase = true) }
@@ -1238,7 +1237,7 @@ data class ChartBucket(
 // TAB 2: PHÂN BỔ (DISTRIBUTION REPORT CONTENT)
 // ==========================================
 @Composable
-fun DistributionReportContent(viewModel: FinanceViewModel) {
+fun DistributionReportContent(transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val gifImageLoader = remember(context) {
         ImageLoader.Builder(context)
@@ -1260,7 +1259,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
         imageLoader = gifImageLoader
     )
 
-    val transactions by viewModel.dailyTransactions.collectAsState()
+    val transactions by transactionViewModel.dailyTransactions.collectAsState()
     val currentRealMonthStr = remember {
         Calendar.getInstance().let { cal ->
             String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
@@ -1293,7 +1292,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
         }
     }
 
-    val savingsWallets by viewModel.savingsWallets.collectAsState()
+    val savingsWallets by walletViewModel.savingsWallets.collectAsState()
     val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
 
     val financialSummary = remember(monthTransactions, savingsWalletIds) {
@@ -1302,7 +1301,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
 
     val totalExpenses = financialSummary.realExpense
     val totalIncome = financialSummary.realIncome
-    val categoriesList by viewModel.categoriesList.collectAsState()
+    val categoriesList by transactionViewModel.categoriesList.collectAsState()
 
     fun getRootCategory(catName: String): com.app.data.FinanceCategory {
         var currentCat = categoriesList.find { it.name.equals(catName, ignoreCase = true) }
@@ -1387,7 +1386,7 @@ fun DistributionReportContent(viewModel: FinanceViewModel) {
         com.app.ui.components.CategoryTransactionsDialog(
             categoryName = selectedCategoryForHistory!!,
             monthKey = distributionMonth,
-            viewModel = viewModel,
+            transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
             onDismiss = { selectedCategoryForHistory = null }
         )
     }

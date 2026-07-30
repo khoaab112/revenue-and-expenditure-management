@@ -94,6 +94,64 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
     }
 }
 
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `categories` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, 
+                `name` TEXT NOT NULL, 
+                `iconName` TEXT NOT NULL, 
+                `colorHex` TEXT NOT NULL, 
+                `type` TEXT NOT NULL, 
+                `parentName` TEXT, 
+                `isCustom` INTEGER NOT NULL,
+                `displayOrder` INTEGER NOT NULL
+            )
+        """.trimIndent())
+
+        // Insert default categories
+        val defaultCategories = com.app.data.Categories.list
+        for ((index, cat) in defaultCategories.withIndex()) {
+            db.execSQL(
+                "INSERT INTO categories (name, iconName, colorHex, type, parentName, isCustom, displayOrder) VALUES (?, ?, ?, ?, ?, 0, ?)",
+                arrayOf(cat.name, cat.iconName, cat.colorHex, cat.type, cat.parentName, index)
+            )
+        }
+
+        // Migrate custom categories
+        val cursor = db.query("SELECT value FROM settings WHERE `key` = 'custom_categories'")
+        var customCatsStr = ""
+        if (cursor.moveToFirst()) {
+            customCatsStr = cursor.getString(0)
+        }
+        cursor.close()
+
+        if (customCatsStr.isNotEmpty()) {
+            val parts = customCatsStr.split(";;")
+            var customIndex = defaultCategories.size
+            for (p in parts) {
+                if (p.isBlank()) continue
+                val segs = p.split("|")
+                if (segs.size >= 4) {
+                    val name = segs[0]
+                    val icon = segs[1]
+                    val color = segs[2]
+                    val type = segs[3]
+                    val parentName = if (segs.size >= 5 && segs[4].isNotEmpty()) segs[4] else null
+                    
+                    db.execSQL(
+                        "INSERT INTO categories (name, iconName, colorHex, type, parentName, isCustom, displayOrder) VALUES (?, ?, ?, ?, ?, 1, ?)",
+                        arrayOf(name, icon, color, type, parentName, customIndex++)
+                    )
+                }
+            }
+        }
+        
+        // Delete the setting
+        db.execSQL("DELETE FROM settings WHERE `key` = 'custom_categories'")
+    }
+}
+
 @Database(
     entities = [
         Wallet::class,
@@ -102,9 +160,10 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         SavingsGoal::class,
         AppSetting::class,
         Event::class,
-        Debt::class
+        Debt::class,
+        CategoryEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -121,7 +180,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "finance_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                     .build()
                 INSTANCE = instance
                 instance

@@ -42,7 +42,6 @@ import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalFocusManager
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.AppNotification
 import com.app.ui.NotificationType
@@ -68,7 +67,13 @@ object Routes {
 }
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: FinanceViewModel by viewModels()
+    
+    private val transactionViewModel: com.app.ui.viewmodels.TransactionViewModel by viewModels()
+    private val walletViewModel: com.app.ui.viewmodels.WalletViewModel by viewModels()
+    private val settingsViewModel: com.app.ui.viewmodels.SettingsViewModel by viewModels()
+    private val syncViewModel: com.app.ui.viewmodels.SyncViewModel by viewModels()
+    private val aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel by viewModels()
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,7 +81,7 @@ class MainActivity : ComponentActivity() {
         val openBankNotifications = intent?.getBooleanExtra("OPEN_BANK_NOTIFICATIONS", false) ?: false
         setContent {
             MyApplicationTheme {
-                MainContent(viewModel = viewModel, forceStartWithBankNotifications = openBankNotifications)
+                MainContent(transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel, forceStartWithBankNotifications = openBankNotifications)
             }
         }
     }
@@ -86,32 +91,32 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         // Note: Full recomposition will happen if we pass state, but this simple approach is fine
         // if the app is heavily recreated.
-        // Actually to handle onNewIntent reliably during foreground, we can just send an event to viewModel.
+        // Actually to handle onNewIntent reliably during foreground, we can just send an event to settingsViewModel.
         if (intent.getBooleanExtra("OPEN_BANK_NOTIFICATIONS", false)) {
-            viewModel.triggerOpenBankNotifications()
+            syncViewModel.triggerOpenBankNotifications()
         }
     }
 
     override fun onStop() {
         super.onStop()
         // Gracefully lock app if PIN protection is active to enforce background security protection
-        viewModel.lockApp()
+        settingsViewModel.lockApp()
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainContent(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     modifier: Modifier = Modifier,
     forceStartWithBankNotifications: Boolean = false
 ) {
     val navController = rememberNavController()
-    val isAppUnlocked by viewModel.isAppUnlocked.collectAsState()
-    val isLoadingSettings by viewModel.isLoadingSettings.collectAsState()
-    val startScreen by viewModel.startScreen.collectAsState()
+    val isAppUnlocked by settingsViewModel.isAppUnlocked.collectAsState()
+    val isLoadingSettings by settingsViewModel.isLoadingSettings.collectAsState()
+    val startScreen by settingsViewModel.startScreen.collectAsState()
     
-    val openBankNotificationsEvent by viewModel.openBankNotificationsEvent.collectAsState()
+    val openBankNotificationsEvent by syncViewModel.openBankNotificationsEvent.collectAsState()
 
     // Observe active routes
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -133,7 +138,7 @@ fun MainContent(
             navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) {
                 launchSingleTop = true
             }
-            viewModel.consumeOpenBankNotificationsEvent()
+            syncViewModel.consumeOpenBankNotificationsEvent()
         }
     }
 
@@ -145,8 +150,8 @@ fun MainContent(
     }
 
     val context = androidx.compose.ui.platform.LocalContext.current
-    val notificationLogs by viewModel.notificationLogs.collectAsState()
-    val notificationReaderEnabled by viewModel.notificationReaderEnabled.collectAsState()
+    val notificationLogs by settingsViewModel.notificationLogs.collectAsState()
+    val notificationReaderEnabled by settingsViewModel.notificationReaderEnabled.collectAsState()
 
     val pendingCount = remember(notificationLogs) {
         notificationLogs.count { it.status == "PENDING" }
@@ -170,11 +175,11 @@ fun MainContent(
                     kotlinx.coroutines.delay(1000)
                 }
 
-                viewModel.scanNotificationsManual(
+                syncViewModel.scanNotificationsManual(
                     context = context,
                     onSuccess = { count ->
                         if (count > 0) {
-                            val activePending = viewModel.notificationLogs.value.filter { it.status == "PENDING" }.take(count)
+                            val activePending = settingsViewModel.notificationLogs.value.filter { it.status == "PENDING" }.take(count)
                             scannedLogsList = activePending
                             showScanResultPopup = true
                         }
@@ -248,17 +253,17 @@ fun MainContent(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            PinLockScreen(viewModel = viewModel)
+            PinLockScreen(transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel)
         }
     } else {
-        val hasSeenOnboarding by viewModel.hasSeenOnboarding.collectAsState()
-        val isDatabaseEmpty by viewModel.isDatabaseEmpty.collectAsState()
+        val hasSeenOnboarding by settingsViewModel.hasSeenOnboarding.collectAsState()
+        val isDatabaseEmpty by settingsViewModel.isDatabaseEmpty.collectAsState()
         var showDonateModal by remember { mutableStateOf(false) }
 
         if (!hasSeenOnboarding) {
             com.app.ui.screens.OnboardingScreen(
-                viewModel = viewModel,
-                onComplete = { viewModel.setHasSeenOnboarding(true) }
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
+                onComplete = { settingsViewModel.setHasSeenOnboarding(true) }
             )
         } else {
             // App is unlocked -> display primary dashboard or nested modules
@@ -362,9 +367,9 @@ fun MainContent(
                     }
 
                     val handleBackNavigation = {
-                        val customTitle = viewModel.customTopBarTitle.value
+                        val customTitle = settingsViewModel.customTopBarTitle.value
                         if (customTitle != null) {
-                            viewModel.setCustomTopBarTitle(null)
+                            settingsViewModel.setCustomTopBarTitle(null)
                         } else {
                             navController.popBackStack()
                         }
@@ -379,7 +384,7 @@ fun MainContent(
                         ) {
                             NavHostContainer(
                                 navController = navController,
-                                viewModel = viewModel,
+                                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                                 onOpenDonateModal = { showDonateModal = true },
                                 modifier = Modifier
                             )
@@ -388,9 +393,9 @@ fun MainContent(
                 }
             } else {
                 val handleBackNavigation = {
-                    val customTitle = viewModel.customTopBarTitle.value
+                    val customTitle = settingsViewModel.customTopBarTitle.value
                     if (customTitle != null) {
-                        viewModel.setCustomTopBarTitle(null)
+                        settingsViewModel.setCustomTopBarTitle(null)
                     } else {
                         navController.popBackStack()
                     }
@@ -498,7 +503,7 @@ fun MainContent(
                     ) {
                         NavHostContainer(
                             navController = navController,
-                            viewModel = viewModel,
+                            transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                             onOpenDonateModal = { showDonateModal = true },
                             modifier = Modifier
                         )
@@ -624,7 +629,7 @@ fun MainContent(
                                                     val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
                                                     context.startActivity(intent)
                                                 } catch (e: Exception) {
-                                                    viewModel.showErrorNotification("Không thể mở cài đặt")
+                                                    settingsViewModel.showErrorNotification("Không thể mở cài đặt")
                                                 }
                                             },
                                             modifier = Modifier.weight(1f),
@@ -776,7 +781,7 @@ fun MainContent(
             }
 
             // Custom Global Notifications Overlay - Displayed in top-right corner
-            val appNotifications by viewModel.appNotifications.collectAsState()
+            val appNotifications by settingsViewModel.appNotifications.collectAsState()
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -902,11 +907,11 @@ fun MainContent(
 @Composable
 fun NavHostContainer(
     navController: androidx.navigation.NavHostController,
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onOpenDonateModal: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val startScreen by viewModel.startScreen.collectAsState()
+    val startScreen by settingsViewModel.startScreen.collectAsState()
     NavHost(
         navController = navController,
         startDestination = startScreen,
@@ -931,16 +936,16 @@ fun NavHostContainer(
                     currentRoute = Routes.DASHBOARD,
                     canPop = canPop,
                     onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
                     onOpenDonateModal = onOpenDonateModal
                 )
                 DashboardScreen(
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateBack = if (canPop) { { navController.popBackStack() } } else null,
                     onNavigateToWallets = { wallet ->
                         if (wallet != null) {
-                            viewModel.setFocusedWalletId(wallet.id)
+                            walletViewModel.setFocusedWalletId(wallet.id)
                         }
                         navController.navigate(Routes.WALLETS)
                     },
@@ -984,7 +989,7 @@ fun NavHostContainer(
             }
         ) {
             WalletsScreen(
-                viewModel = viewModel,
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -996,12 +1001,12 @@ fun NavHostContainer(
                     currentRoute = Routes.HISTORY,
                     canPop = canPop,
                     onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
                     onOpenDonateModal = onOpenDonateModal
                 )
                 HistoryScreen(
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToTimeline = { dateStr -> 
                         navController.navigate("${Routes.TIMELINE}/${android.net.Uri.encode(dateStr)}")
                     }
@@ -1015,12 +1020,12 @@ fun NavHostContainer(
                     currentRoute = Routes.STATS,
                     canPop = true,
                     onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
                     onOpenDonateModal = onOpenDonateModal
                 )
                 ReportsScreen(
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
@@ -1054,7 +1059,7 @@ fun NavHostContainer(
             }
         ) {
             BudgetGoalScreen(
-                viewModel = viewModel,
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -1065,11 +1070,11 @@ fun NavHostContainer(
                     currentRoute = Routes.SAVINGS_VAULT,
                     canPop = true,
                     onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
                     onOpenDonateModal = onOpenDonateModal
                 )
-                com.app.ui.screens.SavingsVaultScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
+                com.app.ui.screens.SavingsVaultScreen(transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel, onNavigateBack = { navController.popBackStack() })
             }
         }
 
@@ -1106,12 +1111,12 @@ fun NavHostContainer(
                     currentRoute = Routes.SETTINGS,
                     canPop = canPop,
                     onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
                     onOpenDonateModal = onOpenDonateModal
                 )
                 SettingsScreen(
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToBankNotificationHistory = { navController.navigate(Routes.BANK_NOTIFICATION_HISTORY) },
                     onNavigateToEvents = { navController.navigate(Routes.EVENTS) },
                     onNavigateToStats = { navController.navigate(Routes.STATS) },
@@ -1152,7 +1157,7 @@ fun NavHostContainer(
             }
         ) {
             WalletManagementScreen(
-                viewModel = viewModel,
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -1185,7 +1190,7 @@ fun NavHostContainer(
             }
         ) {
             CategoryManagementScreen(
-                viewModel = viewModel,
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -1201,12 +1206,12 @@ fun NavHostContainer(
                     currentRoute = Routes.DEBT_BOOK,
                     canPop = true,
                     onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
                     onOpenDonateModal = onOpenDonateModal
                 )
                 com.app.ui.screens.DebtBookScreen(
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateBack = { navController.popBackStack() },
                     initialTab = initialTab
                 )
@@ -1215,7 +1220,7 @@ fun NavHostContainer(
 
         composable(Routes.AI_ADVISOR) {
             com.app.ui.screens.AIAdvisorScreen(
-                viewModel = viewModel,
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToSettings = {
                     navController.navigate(Routes.SETTINGS) {
@@ -1254,14 +1259,14 @@ fun NavHostContainer(
             }
         ) {
             com.app.ui.components.EventManagementScreen(
-                viewModel = viewModel,
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                 onBack = { navController.popBackStack() }
             )
         }
 
         composable(Routes.BANK_NOTIFICATION_HISTORY) {
             BankNotificationHistoryScreen(
-                viewModel = viewModel,
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
@@ -1276,12 +1281,12 @@ fun NavHostContainer(
                     currentRoute = Routes.TIMELINE,
                     canPop = true,
                     onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
                     onOpenDonateModal = onOpenDonateModal
                 )
                 TimelineScreen(
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateBack = { navController.popBackStack() },
                     initialDateStr = dateStr
                 )
@@ -1317,12 +1322,12 @@ fun NavHostContainer(
                     currentRoute = Routes.ADD_TRANSACTION,
                     canPop = true,
                     onNavigateBack = { navController.popBackStack() },
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onNavigateToAIAdvisor = { navController.navigate(Routes.AI_ADVISOR) },
                     onOpenDonateModal = onOpenDonateModal
                 )
                 AddTransactionScreen(
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     onSuccess = {
                         navController.navigate(Routes.HISTORY) {
                             popUpTo(Routes.ADD_TRANSACTION) { inclusive = false }
@@ -1347,12 +1352,12 @@ fun AppHeader(
     currentRoute: String,
     canPop: Boolean,
     onNavigateBack: () -> Unit,
-    viewModel: FinanceViewModel? = null,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel? = null,
     onNavigateToAIAdvisor: (() -> Unit)? = null,
     onOpenDonateModal: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val customTitle = viewModel?.customTopBarTitle?.collectAsState()?.value
+    val customTitle = settingsViewModel?.customTopBarTitle?.collectAsState()?.value
     val baseRoute = currentRoute.substringBefore("?")
     val title = customTitle ?: when {
         baseRoute == Routes.DASHBOARD -> "TỔNG QUAN"
@@ -1427,13 +1432,13 @@ fun AppHeader(
                     }
                 }
 
-                if ((baseRoute == Routes.STATS || baseRoute == Routes.HISTORY) && viewModel != null) {
+                if ((baseRoute == Routes.STATS || baseRoute == Routes.HISTORY) && true) {
                     val exportContext = androidx.compose.ui.platform.LocalContext.current
-                    val activeMonth by viewModel.activeMonth.collectAsState()
-                    val transactions by viewModel.dailyTransactions.collectAsState()
-                    val historyFilteredTransactions by viewModel.filteredTransactions.collectAsState()
-                    val eventsList by viewModel.allEvents.collectAsState()
-                    val debtsList by viewModel.allDebts.collectAsState()
+                    val activeMonth by transactionViewModel.activeMonth.collectAsState()
+                    val transactions by transactionViewModel.dailyTransactions.collectAsState()
+                    val historyFilteredTransactions by transactionViewModel.filteredTransactions.collectAsState()
+                    val eventsList by transactionViewModel.allEvents.collectAsState()
+                    val debtsList by transactionViewModel.allDebts.collectAsState()
                     
                     IconButton(
                         onClick = {
@@ -1448,8 +1453,8 @@ fun AppHeader(
                                     transactions = monthTxs,
                                     events = eventsList,
                                     debts = debtsList,
-                                    onWarning = { viewModel.showWarningNotification(it) },
-                                    onError = { viewModel.showErrorNotification(it) }
+                                    onWarning = { settingsViewModel.showWarningNotification(it) },
+                                    onError = { settingsViewModel.showErrorNotification(it) }
                                 )
                             } else {
                                 com.app.ui.ExcelExportHelper.exportTransactionsToCsv(
@@ -1457,8 +1462,8 @@ fun AppHeader(
                                     transactions = historyFilteredTransactions,
                                     events = eventsList,
                                     debts = debtsList,
-                                    onWarning = { viewModel.showWarningNotification(it) },
-                                    onError = { viewModel.showErrorNotification(it) }
+                                    onWarning = { settingsViewModel.showWarningNotification(it) },
+                                    onError = { settingsViewModel.showErrorNotification(it) }
                                 )
                             }
                         },

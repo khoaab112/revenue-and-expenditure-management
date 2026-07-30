@@ -44,7 +44,6 @@ import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import androidx.compose.ui.layout.ContentScale
 import com.app.R
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.CustomMoneyInputField
@@ -54,7 +53,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SavingsVaultScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -71,9 +70,9 @@ fun SavingsVaultScreen(
             }
             .build()
     }
-    val dailyWallets by viewModel.dailyWallets.collectAsState()
-    val savingsWallets by viewModel.savingsWallets.collectAsState()
-    val savingsTransactions by viewModel.savingsTransactions.collectAsState()
+    val dailyWallets by walletViewModel.dailyWallets.collectAsState()
+    val savingsWallets by walletViewModel.savingsWallets.collectAsState()
+    val savingsTransactions by transactionViewModel.savingsTransactions.collectAsState()
     
     val sortedVaults = remember(savingsWallets) {
         savingsWallets.sortedWith(compareBy<com.app.data.Wallet> { it.isClosed }.thenByDescending { it.createdAt })
@@ -247,7 +246,7 @@ fun SavingsVaultScreen(
                     Button(
                         onClick = {
                             if (!hasBalance || closeVaultTargetWalletId != null) {
-                                viewModel.closeSavingsVault(vault, closeVaultTargetWalletId)
+                                walletViewModel.closeSavingsVault(vault, closeVaultTargetWalletId)
                                 if (selectedVaultDetails?.id == vault.id) {
                                     selectedVaultDetails = null
                                 }
@@ -283,7 +282,7 @@ fun SavingsVaultScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteWallet(vault)
+                        walletViewModel.deleteWallet(vault)
                         if (selectedVaultDetails?.id == vault.id) {
                             selectedVaultDetails = null
                         }
@@ -308,7 +307,7 @@ fun SavingsVaultScreen(
         com.app.ui.components.AddSavingsVaultSheet(
             onDismiss = { showQuickAddWallet = false },
             onAddSavingsVault = { name, initialBalance, targetAmount, color, icon ->
-                viewModel.addWallet(
+                walletViewModel.addWallet(
                     name = name,
                     type = "SAVINGS",
                     initialBalance = initialBalance,
@@ -316,7 +315,7 @@ fun SavingsVaultScreen(
                     iconName = icon,
                     targetAmount = targetAmount
                 )
-                viewModel.showSuccessNotification("Thêm sổ tiết kiệm thành công!")
+                settingsViewModel.showSuccessNotification("Thêm sổ tiết kiệm thành công!")
                 showQuickAddWallet = false
             }
         )
@@ -831,7 +830,7 @@ fun SavingsVaultScreen(
                                         selectedDailyWalletId = selectedDailyWalletId,
                                         onSelectedDailyWalletIdChange = { selectedDailyWalletId = it },
                                         focusManager = focusManager,
-                                        viewModel = viewModel
+                                        transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel
                                     )
                                 }
                             }
@@ -863,7 +862,7 @@ fun VaultInlineDetailsContent(
     selectedDailyWalletId: Int?,
     onSelectedDailyWalletIdChange: (Int?) -> Unit,
     focusManager: FocusManager,
-    viewModel: FinanceViewModel
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel
 ) {
     val specificVaultTxs = remember(savingsTransactions, vault) {
         savingsTransactions.filter { it.walletId == vault.id || it.destinationWalletId == vault.id }
@@ -1180,7 +1179,7 @@ fun VaultInlineDetailsContent(
                                 
                                 if (isDeposit) {
                                     if (selectedDailyWalletId != null) {
-                                        viewModel.addTransaction(
+                                        transactionViewModel.addTransaction(
                                             walletId = selectedDailyWalletId,
                                             type = "TRANSFER",
                                             amount = amount,
@@ -1190,7 +1189,7 @@ fun VaultInlineDetailsContent(
                                             destinationWalletId = tgtWalletId
                                         )
                                     } else {
-                                        viewModel.addTransaction(
+                                        transactionViewModel.addTransaction(
                                             walletId = tgtWalletId,
                                             type = "INCOME",
                                             amount = amount,
@@ -1201,7 +1200,7 @@ fun VaultInlineDetailsContent(
                                     }
                                 } else {
                                     if (selectedDailyWalletId != null) {
-                                        viewModel.addTransaction(
+                                        transactionViewModel.addTransaction(
                                             walletId = tgtWalletId,
                                             type = "TRANSFER",
                                             amount = amount,
@@ -1211,7 +1210,7 @@ fun VaultInlineDetailsContent(
                                             destinationWalletId = selectedDailyWalletId
                                         )
                                     } else {
-                                        viewModel.addTransaction(
+                                        transactionViewModel.addTransaction(
                                             walletId = tgtWalletId,
                                             type = "EXPENSE",
                                             amount = amount,
@@ -1226,9 +1225,9 @@ fun VaultInlineDetailsContent(
                                 onNoteChange("")
                                 onSelectedDailyWalletIdChange(null)
                                 focusManager.clearFocus()
-                                viewModel.showSuccessNotification("Giao dịch thành công!")
+                                settingsViewModel.showSuccessNotification("Giao dịch thành công!")
                             } else {
-                                viewModel.showWarningNotification("Vui lòng nhập số tiền hợp lệ")
+                                settingsViewModel.showWarningNotification("Vui lòng nhập số tiền hợp lệ")
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(46.dp),

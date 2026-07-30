@@ -1,5 +1,10 @@
 package com.app.ui.components
 
+import com.app.data.*
+import com.app.ui.*
+
+import com.app.ui.viewmodels.*
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing

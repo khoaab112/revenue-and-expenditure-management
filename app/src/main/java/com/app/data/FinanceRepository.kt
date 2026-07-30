@@ -59,30 +59,18 @@ class FinanceRepository(
         val id = dao.insertTransaction(transaction)
         
         // 2. Adjust Wallet Balance
-        val wallet = dao.getWalletById(transaction.walletId)
-        if (wallet != null) {
-            val newBalance = when (transaction.type) {
-                "EXPENSE" -> wallet.balance - transaction.amount
-                "INCOME" -> wallet.balance + transaction.amount
-                "TRANSFER" -> wallet.balance - transaction.amount
-                "ADJUSTMENT" -> {
-                    if (transaction.note.contains("tăng")) {
-                        wallet.balance + transaction.amount
-                    } else {
-                        wallet.balance - transaction.amount
-                    }
-                }
-                else -> wallet.balance
-            }
-            dao.updateWallet(wallet.copy(balance = newBalance))
+        val amountToAdjust = when (transaction.type) {
+            "EXPENSE" -> -transaction.amount
+            "INCOME" -> transaction.amount
+            "TRANSFER" -> -transaction.amount
+            "ADJUSTMENT" -> if (transaction.note.contains("tăng")) transaction.amount else -transaction.amount
+            else -> 0.0
         }
+        dao.adjustWalletBalance(transaction.walletId, amountToAdjust)
 
         // Handle TRANSFER destination wallet
         if (transaction.type == "TRANSFER" && transaction.destinationWalletId != null) {
-            val destWallet = dao.getWalletById(transaction.destinationWalletId)
-            if (destWallet != null) {
-                dao.updateWallet(destWallet.copy(balance = destWallet.balance + transaction.amount))
-            }
+            dao.adjustWalletBalance(transaction.destinationWalletId, transaction.amount)
         }
 
         // 3. Update Budget if it's an Expense
@@ -99,30 +87,18 @@ class FinanceRepository(
 
     private suspend fun deleteTransactionInternal(transaction: Transaction) {
         // 1. Revert Wallet Balance
-        val wallet = dao.getWalletById(transaction.walletId)
-        if (wallet != null) {
-            val newBalance = when (transaction.type) {
-                "EXPENSE" -> wallet.balance + transaction.amount
-                "INCOME" -> wallet.balance - transaction.amount
-                "TRANSFER" -> wallet.balance + transaction.amount
-                "ADJUSTMENT" -> {
-                    if (transaction.note.contains("tăng")) {
-                        wallet.balance - transaction.amount
-                    } else {
-                        wallet.balance + transaction.amount
-                    }
-                }
-                else -> wallet.balance
-            }
-            dao.updateWallet(wallet.copy(balance = newBalance))
+        val amountToRevert = when (transaction.type) {
+            "EXPENSE" -> transaction.amount
+            "INCOME" -> -transaction.amount
+            "TRANSFER" -> transaction.amount
+            "ADJUSTMENT" -> if (transaction.note.contains("tăng")) -transaction.amount else transaction.amount
+            else -> 0.0
         }
+        dao.adjustWalletBalance(transaction.walletId, amountToRevert)
 
         // Handle TRANSFER destination wallet revert
         if (transaction.type == "TRANSFER" && transaction.destinationWalletId != null) {
-            val destWallet = dao.getWalletById(transaction.destinationWalletId)
-            if (destWallet != null) {
-                dao.updateWallet(destWallet.copy(balance = destWallet.balance - transaction.amount))
-            }
+            dao.adjustWalletBalance(transaction.destinationWalletId, -transaction.amount)
         }
 
         // 2. Revert Budget if Expense
@@ -148,30 +124,18 @@ class FinanceRepository(
         val oldTransaction = dao.getTransactionById(newTransaction.id) ?: return
 
         // 1. Revert old transaction wallet balance
-        val oldWallet = dao.getWalletById(oldTransaction.walletId)
-        if (oldWallet != null) {
-            val revertedBalance = when (oldTransaction.type) {
-                "EXPENSE" -> oldWallet.balance + oldTransaction.amount
-                "INCOME" -> oldWallet.balance - oldTransaction.amount
-                "TRANSFER" -> oldWallet.balance + oldTransaction.amount
-                "ADJUSTMENT" -> {
-                    if (oldTransaction.note.contains("tăng")) {
-                        oldWallet.balance - oldTransaction.amount
-                    } else {
-                        oldWallet.balance + oldTransaction.amount
-                    }
-                }
-                else -> oldWallet.balance
-            }
-            dao.updateWallet(oldWallet.copy(balance = revertedBalance))
+        val amountToRevert = when (oldTransaction.type) {
+            "EXPENSE" -> oldTransaction.amount
+            "INCOME" -> -oldTransaction.amount
+            "TRANSFER" -> oldTransaction.amount
+            "ADJUSTMENT" -> if (oldTransaction.note.contains("tăng")) -oldTransaction.amount else oldTransaction.amount
+            else -> 0.0
         }
+        dao.adjustWalletBalance(oldTransaction.walletId, amountToRevert)
 
         // Revert old transaction destination wallet balance
         if (oldTransaction.type == "TRANSFER" && oldTransaction.destinationWalletId != null) {
-            val oldDestWallet = dao.getWalletById(oldTransaction.destinationWalletId)
-            if (oldDestWallet != null) {
-                dao.updateWallet(oldDestWallet.copy(balance = oldDestWallet.balance - oldTransaction.amount))
-            }
+            dao.adjustWalletBalance(oldTransaction.destinationWalletId, -oldTransaction.amount)
         }
 
         // Revert old transaction budget spending
@@ -180,33 +144,18 @@ class FinanceRepository(
         }
 
         // 2. Apply new transaction wallet balance
-        val newWallet = dao.getWalletById(newTransaction.walletId)
-        if (newWallet != null) {
-            // Need to fetch fresh wallet state since it might be the same wallet as oldWallet, which has changed balance!
-            val freshWallet = dao.getWalletById(newTransaction.walletId) ?: newWallet
-            val appliedBalance = when (newTransaction.type) {
-                "EXPENSE" -> freshWallet.balance - newTransaction.amount
-                "INCOME" -> freshWallet.balance + newTransaction.amount
-                "TRANSFER" -> freshWallet.balance - newTransaction.amount
-                "ADJUSTMENT" -> {
-                    if (newTransaction.note.contains("tăng")) {
-                        freshWallet.balance + newTransaction.amount
-                    } else {
-                        freshWallet.balance - newTransaction.amount
-                    }
-                }
-                else -> freshWallet.balance
-            }
-            dao.updateWallet(freshWallet.copy(balance = appliedBalance))
+        val amountToApply = when (newTransaction.type) {
+            "EXPENSE" -> -newTransaction.amount
+            "INCOME" -> newTransaction.amount
+            "TRANSFER" -> -newTransaction.amount
+            "ADJUSTMENT" -> if (newTransaction.note.contains("tăng")) newTransaction.amount else -newTransaction.amount
+            else -> 0.0
         }
+        dao.adjustWalletBalance(newTransaction.walletId, amountToApply)
 
         // Apply new transaction destination wallet balance
         if (newTransaction.type == "TRANSFER" && newTransaction.destinationWalletId != null) {
-            // Fetch fresh destination wallet because it might be the same as the source wallet or old destination wallet
-            val freshDestWallet = dao.getWalletById(newTransaction.destinationWalletId)
-            if (freshDestWallet != null) {
-                dao.updateWallet(freshDestWallet.copy(balance = freshDestWallet.balance + newTransaction.amount))
-            }
+            dao.adjustWalletBalance(newTransaction.destinationWalletId, newTransaction.amount)
         }
 
         // Apply new transaction budget spending
@@ -320,12 +269,31 @@ class FinanceRepository(
     suspend fun updateSavingsGoal(goal: SavingsGoal) = dao.updateSavingsGoal(goal)
     suspend fun deleteSavingsGoal(goal: SavingsGoal) = dao.deleteSavingsGoal(goal)
 
+    // --- Categories ---
+    val allCategories: Flow<List<CategoryEntity>> = dao.getAllCategories()
+    suspend fun insertCategory(category: CategoryEntity): Long = dao.insertCategory(category)
+    suspend fun updateCategory(category: CategoryEntity) = dao.updateCategory(category)
+    suspend fun deleteCategory(category: CategoryEntity) = dao.deleteCategory(category)
+    suspend fun getCategoryByName(name: String): CategoryEntity? = dao.getCategoryByName(name)
+
     // --- Settings ---
     suspend fun getAllSettings(): List<AppSetting> = dao.getAllSettings()
     suspend fun getSetting(key: String): AppSetting? = dao.getSetting(key)
     fun observeSetting(key: String): Flow<AppSetting?> = dao.observeSetting(key)
     suspend fun saveSetting(key: String, value: String) {
         dao.insertSetting(AppSetting(key, value))
+    }
+    
+    suspend fun setGoogleAccountEmail(email: String) {
+        saveSetting("google_account_email", email)
+    }
+    
+    suspend fun getGoogleAccountEmail(): String? {
+        return getSetting("google_account_email")?.value
+    }
+    
+    suspend fun clearGoogleAccountEmail() {
+        saveSetting("google_account_email", "")
     }
 
     // --- Events ---

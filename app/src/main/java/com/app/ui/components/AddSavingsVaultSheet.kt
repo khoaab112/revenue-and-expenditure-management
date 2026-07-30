@@ -1,5 +1,10 @@
 package com.app.ui.components
 
+import com.app.data.*
+import com.app.ui.*
+
+import com.app.ui.viewmodels.*
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

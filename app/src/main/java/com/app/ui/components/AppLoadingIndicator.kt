@@ -1,5 +1,10 @@
 package com.app.ui.components
 
+import com.app.data.*
+import com.app.ui.*
+
+import com.app.ui.viewmodels.*
+
 import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size

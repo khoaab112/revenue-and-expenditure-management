@@ -46,7 +46,6 @@ import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import com.app.R
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.NotificationLog
 import com.app.ui.IconMapper
@@ -99,21 +98,21 @@ fun groupPendingNotifications(pendingLogs: List<NotificationLog>): List<PendingG
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun BankNotificationHistoryScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val notificationLogs by viewModel.notificationLogs.collectAsState()
-    val wallets by viewModel.dailyWallets.collectAsState()
-    val categories by viewModel.categoriesList.collectAsState()
+    val notificationLogs by settingsViewModel.notificationLogs.collectAsState()
+    val wallets by walletViewModel.dailyWallets.collectAsState()
+    val categories by transactionViewModel.categoriesList.collectAsState()
 
     var selectedFilterStatus by remember { mutableStateOf("ALL") }
     var searchQuery by remember { mutableStateOf("") }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     // Group "Thông báo" state
-    val notificationReaderEnabled by viewModel.notificationReaderEnabled.collectAsState()
+    val notificationReaderEnabled by settingsViewModel.notificationReaderEnabled.collectAsState()
     val isServiceEnabled = remember(context) { isNotificationServiceEnabled(context) }
     var isPermitted by remember { mutableStateOf(isServiceEnabled) }
     
@@ -255,19 +254,19 @@ fun BankNotificationHistoryScreen(
                         isCheckingNotifications = true
                         coroutineScope.launch {
                             delay(1200)
-                            viewModel.scanNotificationsManual(
+                            settingsViewModel.scanNotificationsManual(
                                 context = context,
                                 onSuccess = { count ->
                                     isCheckingNotifications = false
                                     if (count > 0) {
-                                        viewModel.showSuccessNotification("Quét thành công! Đã thêm $count giao dịch.")
+                                        settingsViewModel.showSuccessNotification("Quét thành công! Đã thêm $count giao dịch.")
                                     } else {
-                                        viewModel.showWarningNotification("Quét xong! Không tìm thấy thông báo mới.")
+                                        settingsViewModel.showWarningNotification("Quét xong! Không tìm thấy thông báo mới.")
                                     }
                                 },
                                 onError = { errorMessage ->
                                     isCheckingNotifications = false
-                                    viewModel.showErrorNotification(errorMessage)
+                                    settingsViewModel.showErrorNotification(errorMessage)
                                 }
                             )
                         }
@@ -448,7 +447,7 @@ fun BankNotificationHistoryScreen(
                             Button(
                                 onClick = {
                                     if (wallets.isEmpty()) {
-                                        viewModel.showWarningNotification("Vui lòng tạo ví tài khoản trước!")
+                                        settingsViewModel.showWarningNotification("Vui lòng tạo ví tài khoản trước!")
                                     } else {
                                         bulkSelectedWalletId = wallets.firstOrNull()?.id ?: 0
                                         showBulkApproveDialog = true
@@ -484,14 +483,14 @@ fun BankNotificationHistoryScreen(
                                 logExpense = group.log1,
                                 logIncome = group.log2!!,
                                 wallets = wallets,
-                                viewModel = viewModel
+                                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel
                             )
                         } else {
                             PendingLogItem(
                                 log = group.log1,
                                 wallets = wallets,
                                 categories = categories,
-                                viewModel = viewModel
+                                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel
                             )
                         }
                     }
@@ -726,7 +725,7 @@ fun BankNotificationHistoryScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.clearNotificationLogs()
+                        settingsViewModel.clearNotificationLogs()
                         showClearConfirmDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -778,11 +777,11 @@ fun BankNotificationHistoryScreen(
                     onClick = {
                         val finalWalletId = bulkSelectedWalletId
                         if (finalWalletId != null && finalWalletId != 0) {
-                            viewModel.confirmPendingNotificationLogsBulk(pendingLogs, finalWalletId)
-                            viewModel.showSuccessNotification("Đã phê duyệt hàng loạt thành công!")
+                            settingsViewModel.confirmPendingNotificationLogsBulk(pendingLogs, finalWalletId)
+                            settingsViewModel.showSuccessNotification("Đã phê duyệt hàng loạt thành công!")
                             showBulkApproveDialog = false
                         } else {
-                            viewModel.showWarningNotification("Vui lòng chọn một ví tài khoản!")
+                            settingsViewModel.showWarningNotification("Vui lòng chọn một ví tài khoản!")
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
@@ -807,8 +806,8 @@ fun BankNotificationHistoryScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteNotificationLogsBulk(pendingLogs, deleteCompletely = true)
-                        viewModel.showSuccessNotification("Đã dọn dẹp hàng loạt giao dịch chờ!")
+                        settingsViewModel.deleteNotificationLogsBulk(pendingLogs, deleteCompletely = true)
+                        settingsViewModel.showSuccessNotification("Đã dọn dẹp hàng loạt giao dịch chờ!")
                         showBulkDeleteDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -917,7 +916,7 @@ fun BankNotificationHistoryScreen(
                                 Switch(
                                     checked = notificationReaderEnabled,
                                     onCheckedChange = { isChecked ->
-                                        viewModel.setNotificationReaderEnabled(isChecked)
+                                        settingsViewModel.setNotificationReaderEnabled(isChecked)
                                         if (isChecked) {
                                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                                                 if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -971,7 +970,7 @@ fun BankNotificationHistoryScreen(
                                                     val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
                                                     context.startActivity(intent)
                                                 } catch (e: Exception) {
-                                                    viewModel.showErrorNotification("Không thể mở cài đặt")
+                                                    settingsViewModel.showErrorNotification("Không thể mở cài đặt")
                                                 }
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -1024,13 +1023,13 @@ fun PendingLogItem(
     log: NotificationLog,
     wallets: List<Wallet>,
     categories: List<FinanceCategory>,
-    viewModel: FinanceViewModel
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel
 ) {
     val isExpanded = true
 
     // Smart recommendation logic
     val recommendation = remember(log, wallets) {
-        viewModel.getSmartWalletRecommendation(log, wallets)
+        settingsViewModel.getSmartWalletRecommendation(log, wallets)
     }
     val matchedWallet = recommendation.first
     val confidenceScore = recommendation.second
@@ -1057,7 +1056,7 @@ fun PendingLogItem(
         mutableStateOf(log.note)
     }
 
-    val events by viewModel.allEvents.collectAsState()
+    val events by transactionViewModel.allEvents.collectAsState()
     
     val activeEvents = remember(log.timestamp, events) {
         val nowLog = log.timestamp
@@ -1913,15 +1912,15 @@ fun PendingLogItem(
                                 Button(
                                     onClick = {
                                         if (selectedWalletId == 0) {
-                                            viewModel.showWarningNotification("Vui lòng chọn ví tài chính!")
+                                            settingsViewModel.showWarningNotification("Vui lòng chọn ví tài chính!")
                                             return@Button
                                         }
                                         if (selectedCategoryName.isEmpty()) {
-                                            viewModel.showWarningNotification("Vui lòng chọn danh mục!")
+                                            settingsViewModel.showWarningNotification("Vui lòng chọn danh mục!")
                                             return@Button
                                         }
                                         val finalAmount = customAmountStr.toDoubleOrNull() ?: log.amount
-                                        viewModel.confirmPendingNotificationLog(
+                                        settingsViewModel.confirmPendingNotificationLog(
                                             log = log,
                                             walletId = selectedWalletId,
                                             categoryName = selectedCategoryName,
@@ -1929,7 +1928,7 @@ fun PendingLogItem(
                                             overrideNote = customNoteStr,
                                             overrideEventId = selectedEventId
                                         )
-                                        viewModel.showSuccessNotification("Xác nhận giao dịch thành công!")
+                                        settingsViewModel.showSuccessNotification("Xác nhận giao dịch thành công!")
                                     },
                                     modifier = Modifier
                                         .weight(1f)
@@ -1950,8 +1949,8 @@ fun PendingLogItem(
 
                                 OutlinedButton(
                                     onClick = {
-                                        viewModel.deleteNotificationLog(log)
-                                        viewModel.showSuccessNotification("Đã bỏ qua giao dịch quét!")
+                                        settingsViewModel.deleteNotificationLog(log)
+                                        settingsViewModel.showSuccessNotification("Đã bỏ qua giao dịch quét!")
                                     },
                                     modifier = Modifier
                                         .weight(1f)
@@ -1985,13 +1984,13 @@ fun PendingTransferPairItem(
     logExpense: NotificationLog,
     logIncome: NotificationLog,
     wallets: List<Wallet>,
-    viewModel: FinanceViewModel
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel
 ) {
     val sourceRec = remember(logExpense, wallets) {
-        viewModel.getSmartWalletRecommendation(logExpense, wallets)
+        settingsViewModel.getSmartWalletRecommendation(logExpense, wallets)
     }
     val destRec = remember(logIncome, wallets) {
-        viewModel.getSmartWalletRecommendation(logIncome, wallets)
+        settingsViewModel.getSmartWalletRecommendation(logIncome, wallets)
     }
     
     var selectedSourceWalletId by remember(logExpense, sourceRec.first) {
@@ -2288,15 +2287,15 @@ fun PendingTransferPairItem(
                     Button(
                         onClick = {
                             if (selectedSourceWalletId == 0 || selectedDestWalletId == 0) {
-                                viewModel.showWarningNotification("Vui lòng chọn đầy đủ ví nguồn và ví đích!")
+                                settingsViewModel.showWarningNotification("Vui lòng chọn đầy đủ ví nguồn và ví đích!")
                                 return@Button
                             }
                             if (selectedSourceWalletId == selectedDestWalletId) {
-                                viewModel.showWarningNotification("Ví nguồn và ví đích trùng nhau!")
+                                settingsViewModel.showWarningNotification("Ví nguồn và ví đích trùng nhau!")
                                 return@Button
                             }
                             val finalAmount = customAmountStr.toDoubleOrNull() ?: logExpense.amount
-                            viewModel.confirmPendingInternalTransfer(
+                            settingsViewModel.confirmPendingInternalTransfer(
                                 logExpense = logExpense,
                                 logIncome = logIncome,
                                 sourceWalletId = selectedSourceWalletId,
@@ -2304,7 +2303,7 @@ fun PendingTransferPairItem(
                                 amount = finalAmount,
                                 note = customNoteStr
                             )
-                            viewModel.showSuccessNotification("Duyệt chuyển khoản nội bộ thành công!")
+                            settingsViewModel.showSuccessNotification("Duyệt chuyển khoản nội bộ thành công!")
                         },
                         modifier = Modifier.weight(1f).height(36.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
@@ -2322,8 +2321,8 @@ fun PendingTransferPairItem(
 
                     OutlinedButton(
                         onClick = {
-                            viewModel.deleteNotificationLogsBulk(listOf(logExpense, logIncome), deleteCompletely = true)
-                            viewModel.showSuccessNotification("Đã bỏ qua cặp giao dịch!")
+                            settingsViewModel.deleteNotificationLogsBulk(listOf(logExpense, logIncome), deleteCompletely = true)
+                            settingsViewModel.showSuccessNotification("Đã bỏ qua cặp giao dịch!")
                         },
                         modifier = Modifier.weight(1f).height(36.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828)),

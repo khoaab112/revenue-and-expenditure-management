@@ -23,6 +23,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], instrumentedPackages = ["androidx.room"])
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class FinanceReportTest {
 
     private lateinit var database: AppDatabase

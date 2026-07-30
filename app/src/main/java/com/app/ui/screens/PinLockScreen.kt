@@ -21,15 +21,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.app.ui.FinanceViewModel
 
 @Composable
 fun PinLockScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     modifier: Modifier = Modifier
 ) {
-    val isLocked by viewModel.isAppUnlocked.collectAsState()
-    val correctPinHash by viewModel.savedPinHash.collectAsState()
+    val isLocked by settingsViewModel.isAppUnlocked.collectAsState()
+    val correctPinHash by settingsViewModel.savedPinHash.collectAsState()
 
     var enteredPin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
@@ -146,7 +145,7 @@ fun PinLockScreen(
                                                     enteredPin += key
                                                     errorMessage = ""
                                                     if (enteredPin.length == 4) {
-                                                        val isOk = viewModel.unlockApp(enteredPin)
+                                                        val isOk = settingsViewModel.unlockApp(enteredPin)
                                                         if (!isOk) {
                                                             errorMessage = "Mã PIN không đúng, thử lại!"
                                                             enteredPin = ""

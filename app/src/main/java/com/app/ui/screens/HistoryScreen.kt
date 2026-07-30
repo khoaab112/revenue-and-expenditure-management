@@ -51,7 +51,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,17 +64,17 @@ import com.app.R
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateToTimeline: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val filteredTransactions by viewModel.filteredTransactions.collectAsState()
-    val dailyTransactions by viewModel.dailyTransactions.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val selectedTypeFilter by viewModel.selectedTypeFilter.collectAsState()
-    val selectedCategoryFilter by viewModel.selectedCategoryFilter.collectAsState()
-    val categoriesList by viewModel.categoriesList.collectAsState()
-    val walletsList by viewModel.allWallets.collectAsState()
+    val filteredTransactions by transactionViewModel.filteredTransactions.collectAsState()
+    val dailyTransactions by transactionViewModel.dailyTransactions.collectAsState()
+    val searchQuery by transactionViewModel.searchQuery.collectAsState()
+    val selectedTypeFilter by transactionViewModel.selectedTypeFilter.collectAsState()
+    val selectedCategoryFilter by transactionViewModel.selectedCategoryFilter.collectAsState()
+    val categoriesList by transactionViewModel.categoriesList.collectAsState()
+    val walletsList by walletViewModel.allWallets.collectAsState()
     var editingTransaction by remember { mutableStateOf<Transaction?>(null) }
     var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
 
@@ -90,8 +89,8 @@ fun HistoryScreen(
                 TextButton(
                     onClick = {
                         transactionToDelete?.let { tx ->
-                            viewModel.deleteTransaction(tx)
-                            viewModel.showSuccessNotification("Xóa giao dịch thành công")
+                            transactionViewModel.deleteTransaction(tx)
+                            settingsViewModel.showSuccessNotification("Xóa giao dịch thành công")
                         }
                         transactionToDelete = null
                     }
@@ -182,7 +181,7 @@ fun HistoryScreen(
     ) {
         when (activeTimeFilterMode) {
             "ALL" -> {
-                viewModel.setDateFilterRange(null, null)
+                transactionViewModel.setDateFilterRange(null, null)
             }
             "WEEK" -> {
                 val cal = Calendar.getInstance()
@@ -199,7 +198,7 @@ fun HistoryScreen(
                 cal.set(Calendar.MILLISECOND, 0)
                 val start = cal.timeInMillis
 
-                viewModel.setDateFilterRange(start, end)
+                transactionViewModel.setDateFilterRange(start, end)
             }
             "DAY" -> {
                 val cal = selectedCustomDate ?: Calendar.getInstance()
@@ -221,7 +220,7 @@ fun HistoryScreen(
                 }
                 val end = endCal.timeInMillis
 
-                viewModel.setDateFilterRange(start, end)
+                transactionViewModel.setDateFilterRange(start, end)
             }
             "MONTH" -> {
                 val cal = Calendar.getInstance().apply {
@@ -246,7 +245,7 @@ fun HistoryScreen(
                 }
                 val end = endCal.timeInMillis
 
-                viewModel.setDateFilterRange(start, end)
+                transactionViewModel.setDateFilterRange(start, end)
             }
             "YEAR" -> {
                 val cal = Calendar.getInstance().apply {
@@ -269,7 +268,7 @@ fun HistoryScreen(
                 }
                 val end = endCal.timeInMillis
 
-                viewModel.setDateFilterRange(start, end)
+                transactionViewModel.setDateFilterRange(start, end)
             }
             "RANGE" -> {
                 val sCal = selectedRangeStart
@@ -289,9 +288,9 @@ fun HistoryScreen(
                         set(Calendar.SECOND, 59)
                         set(Calendar.MILLISECOND, 999)
                     }
-                    viewModel.setDateFilterRange(startCal.timeInMillis, endCal.timeInMillis)
+                    transactionViewModel.setDateFilterRange(startCal.timeInMillis, endCal.timeInMillis)
                 } else {
-                    viewModel.setDateFilterRange(null, null)
+                    transactionViewModel.setDateFilterRange(null, null)
                 }
             }
         }
@@ -715,12 +714,12 @@ fun HistoryScreen(
                         // 1. Search Bar
                         OutlinedTextField(
                             value = searchQuery,
-                            onValueChange = { viewModel.setSearchQuery(it) },
+                            onValueChange = { transactionViewModel.setSearchQuery(it) },
                             placeholder = { Text("Tìm kiếm ghi chú, danh mục, ví...", fontSize = 13.sp) },
                             leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search Log", modifier = Modifier.size(20.dp)) },
                             trailingIcon = {
                                 if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                    IconButton(onClick = { transactionViewModel.setSearchQuery("") }) {
                                         Icon(imageVector = Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(20.dp))
                                     }
                                 }
@@ -750,7 +749,7 @@ fun HistoryScreen(
                                 val isSelected = selectedTypeFilter == typeVal
                                 FilterChip(
                                     selected = isSelected,
-                                    onClick = { viewModel.setTypeFilter(typeVal) },
+                                    onClick = { transactionViewModel.setTypeFilter(typeVal) },
                                     label = { Text(name, fontSize = 11.sp) },
                                     modifier = Modifier.testTag("filter_type_$typeVal"),
                                     shape = RoundedCornerShape(8.dp)
@@ -773,7 +772,7 @@ fun HistoryScreen(
                             val isAllCategory = selectedCategoryFilter == "ALL"
                             FilterChip(
                                 selected = isAllCategory,
-                                onClick = { viewModel.setCategoryFilter("ALL") },
+                                onClick = { transactionViewModel.setCategoryFilter("ALL") },
                                 label = { Text("Mọi danh mục", fontSize = 11.sp) },
                                 modifier = Modifier
                                     .weight(1f)
@@ -841,7 +840,7 @@ fun HistoryScreen(
                                                 }
                                             },
                                             onClick = {
-                                                viewModel.setCategoryFilter(cat.name)
+                                                transactionViewModel.setCategoryFilter(cat.name)
                                                 categoryDropdownExpanded = false
                                             }
                                         )
@@ -985,9 +984,9 @@ fun HistoryScreen(
                         if (searchQuery.isNotEmpty() || selectedTypeFilter != "ALL" || selectedCategoryFilter != "ALL" || activeTimeFilterMode != "ALL") {
                             TextButton(
                                 onClick = {
-                                    viewModel.setSearchQuery("")
-                                    viewModel.setTypeFilter("ALL")
-                                    viewModel.setCategoryFilter("ALL")
+                                    transactionViewModel.setSearchQuery("")
+                                    transactionViewModel.setTypeFilter("ALL")
+                                    transactionViewModel.setCategoryFilter("ALL")
                                     activeTimeFilterMode = "ALL"
                                 },
                                 modifier = Modifier.align(Alignment.End)
@@ -1204,7 +1203,7 @@ fun HistoryScreen(
             walletsList = walletsList,
             onDismiss = { editingTransaction = null },
             onSave = { updatedTx ->
-                viewModel.updateTransaction(updatedTx)
+                transactionViewModel.updateTransaction(updatedTx)
                 editingTransaction = null
             }
         )
@@ -1239,7 +1238,7 @@ fun HistoryScreen(
             walletsList = walletsList,
             onDismiss = { showQuickAddDialogByDay = null },
             onSave = { walletId, type, amount, categoryName, categoryIcon, categoryColor, note, timestamp ->
-                viewModel.addTransaction(
+                transactionViewModel.addTransaction(
                     walletId = walletId,
                     type = type,
                     amount = amount,

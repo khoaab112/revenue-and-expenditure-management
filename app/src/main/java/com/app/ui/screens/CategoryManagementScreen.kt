@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.app.data.Categories
 import com.app.data.FinanceCategory
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.AppModalBottomSheet
@@ -114,7 +113,7 @@ private fun Modifier.staggeredEntrance(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryManagementScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -125,7 +124,7 @@ fun CategoryManagementScreen(
     )) { mutableStateListOf<String>() }
 
     val focusManager = LocalFocusManager.current
-    val categoriesList by viewModel.categoriesList.collectAsState()
+    val categoriesList by transactionViewModel.categoriesList.collectAsState()
     
     // Tab State (EXPENSE or INCOME)
     var selectedTypeTab by remember { mutableStateOf("EXPENSE") }
@@ -211,8 +210,8 @@ fun CategoryManagementScreen(
                 text = "XÓA",
                 action = {
                     categoryToDelete?.let { cat ->
-                        viewModel.deleteCategory(cat)
-                        viewModel.showSuccessNotification("Xóa danh mục thành công")
+                        transactionViewModel.deleteCategory(cat)
+                        settingsViewModel.showSuccessNotification("Xóa danh mục thành công")
                     }
                     categoryToDelete = null
                 },
@@ -453,7 +452,7 @@ fun CategoryManagementScreen(
                         var rootDriftY by remember { mutableStateOf(0f) }
 
                         val onRootDragReleased = {
-                            viewModel.updateCategoriesOrder(rootListState.toList(), selectedTypeTab)
+                            transactionViewModel.updateCategoriesOrder(rootListState.toList(), selectedTypeTab)
                             rootDraggedIndex = null
                             rootDriftY = 0f
                         }
@@ -699,7 +698,7 @@ fun CategoryManagementScreen(
                     var driftY by remember { mutableStateOf(0f) }
 
                     val onDragReleased = {
-                        viewModel.updateCategoriesOrder(subListState.toList(), selectedTypeTab)
+                        transactionViewModel.updateCategoriesOrder(subListState.toList(), selectedTypeTab)
                         draggedIndex = null
                         driftY = 0f
                     }
@@ -1047,21 +1046,21 @@ fun CategoryManagementScreen(
                         onClick = {
                             val trimmedName = name.trim()
                             if (trimmedName.isBlank()) {
-                                viewModel.showWarningNotification("Vui lòng nhập tên danh mục!")
+                                settingsViewModel.showWarningNotification("Vui lòng nhập tên danh mục!")
                             } else {
                                 val isDuplicate = categoriesList.any {
                                     (categoryToEdit == null || it.name != categoryToEdit?.name) && it.name.trim().equals(trimmedName, ignoreCase = true)
                                 }
                                 if (isDuplicate) {
-                                    viewModel.showWarningNotification("Tên danh mục '$trimmedName' đã tồn tại! Vui lòng chọn tên khác.")
+                                    settingsViewModel.showWarningNotification("Tên danh mục '$trimmedName' đã tồn tại! Vui lòng chọn tên khác.")
                                 } else {
                                     val finalColor = if (isCustomColorActive) customColorHex else selectedColor
                                     if (categoryToEdit == null) {
-                                        viewModel.addCategory(trimmedName, selectedIcon, finalColor, type, parentName)
-                                        viewModel.showSuccessNotification("Thêm danh mục thành công!")
+                                        transactionViewModel.addCategory(trimmedName, selectedIcon, finalColor, type, parentName)
+                                        settingsViewModel.showSuccessNotification("Thêm danh mục thành công!")
                                     } else {
-                                        viewModel.updateCategory(categoryToEdit!!, trimmedName, selectedIcon, finalColor, type, parentName)
-                                        viewModel.showSuccessNotification("Cập nhật danh mục thành công!")
+                                        transactionViewModel.updateCategory(categoryToEdit!!, trimmedName, selectedIcon, finalColor, type, parentName)
+                                        settingsViewModel.showSuccessNotification("Cập nhật danh mục thành công!")
                                     }
                                     categoryToEdit = null
                                     name = ""
@@ -1227,7 +1226,7 @@ fun CategoryManagementScreen(
                             val toAdd = missingCategories.filter { it.name in selectedCategoryNames }
                             if (toAdd.isNotEmpty()) {
                                 toAdd.forEach { cat ->
-                                    viewModel.addCategory(
+                                    transactionViewModel.addCategory(
                                         name = cat.name,
                                         iconName = cat.iconName,
                                         colorHex = cat.colorHex,
@@ -1235,7 +1234,7 @@ fun CategoryManagementScreen(
                                         parentName = cat.parentName
                                     )
                                 }
-                                viewModel.showSuccessNotification("Đã bổ sung ${toAdd.size} danh mục mới thành công!")
+                                settingsViewModel.showSuccessNotification("Đã bổ sung ${toAdd.size} danh mục mới thành công!")
                             }
                             showSyncSystemCategoriesSheet = false
                         },

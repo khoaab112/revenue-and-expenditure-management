@@ -1,7 +1,7 @@
 package com.app.ui.screens
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.with
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -47,19 +47,18 @@ import androidx.compose.ui.unit.sp
 import com.app.data.Wallet
 import com.app.data.Transaction
 import androidx.compose.ui.text.style.TextOverflow
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun WalletsScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val wallets by viewModel.dailyWallets.collectAsState()
-    val transactions by viewModel.dailyTransactions.collectAsState()
+    val wallets by walletViewModel.dailyWallets.collectAsState()
+    val transactions by transactionViewModel.dailyTransactions.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedWalletForTransactions by remember { mutableStateOf<Wallet?>(null) }
@@ -69,7 +68,7 @@ fun WalletsScreen(
     var pinnedWalletId by remember { mutableStateOf<Int?>(null) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
-    val focusedWalletId by viewModel.focusedWalletId.collectAsState()
+    val focusedWalletId by walletViewModel.focusedWalletId.collectAsState()
 
     val gifImageLoader = remember(context) {
         ImageLoader.Builder(context)
@@ -100,8 +99,8 @@ fun WalletsScreen(
                 TextButton(
                     onClick = {
                         walletToDelete?.let { wallet ->
-                            viewModel.deleteWallet(wallet)
-                            viewModel.showSuccessNotification("Xóa ví thành công")
+                            walletViewModel.deleteWallet(wallet)
+                            settingsViewModel.showSuccessNotification("Xóa ví thành công")
                         }
                         walletToDelete = null
                     }
@@ -125,7 +124,7 @@ fun WalletsScreen(
                 selectedWalletForTransactions = wallet
                 pinnedWalletId = focusedWalletId
             }
-            viewModel.setFocusedWalletId(null) // Consume
+            walletViewModel.setFocusedWalletId(null) // Consume
         } else if (selectedWalletForTransactions == null && wallets.isNotEmpty()) {
             selectedWalletForTransactions = wallets.first()
             pinnedWalletId = wallets.first().id
@@ -370,8 +369,8 @@ fun WalletsScreen(
             com.app.ui.components.AddWalletSheet(
                 onDismiss = { showAddDialog = false },
                 onAddWallet = { name, type, startingBalance, color, icon ->
-                    viewModel.addWallet(name, type, startingBalance, color, icon)
-                    viewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
+                    walletViewModel.addWallet(name, type, startingBalance, color, icon)
+                    settingsViewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
                     showAddDialog = false
                 }
             )
@@ -382,7 +381,7 @@ fun WalletsScreen(
                 wallets = wallets,
                 onDismiss = { showSelectWalletDialog = false },
                 onSave = { walletId, actualBalance ->
-                    viewModel.reconcileWallet(walletId, actualBalance)
+                    walletViewModel.reconcileWallet(walletId, actualBalance)
                     showSelectWalletDialog = false
                 }
             )
@@ -874,9 +873,9 @@ fun AdjustWalletFlowDialog(
                 .fillMaxHeight(0.85f),
             transitionSpec = {
                 if (targetState == AdjustWalletStep.EDIT_WALLET) {
-                    (androidx.compose.animation.slideInHorizontally { width -> width } + androidx.compose.animation.fadeIn()).with(androidx.compose.animation.slideOutHorizontally { width -> -width } + androidx.compose.animation.fadeOut())
+                    (androidx.compose.animation.slideInHorizontally { width -> width } + androidx.compose.animation.fadeIn()) togetherWith (androidx.compose.animation.slideOutHorizontally { width -> -width } + androidx.compose.animation.fadeOut())
                 } else {
-                    (androidx.compose.animation.slideInHorizontally { width -> -width } + androidx.compose.animation.fadeIn()).with(androidx.compose.animation.slideOutHorizontally { width -> width } + androidx.compose.animation.fadeOut())
+                    (androidx.compose.animation.slideInHorizontally { width -> -width } + androidx.compose.animation.fadeIn()) togetherWith (androidx.compose.animation.slideOutHorizontally { width -> width } + androidx.compose.animation.fadeOut())
                 }
             },
             label = "AdjustWalletTransition"

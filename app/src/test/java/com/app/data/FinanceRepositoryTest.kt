@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -420,5 +421,41 @@ class FinanceRepositoryTest {
         // Xóa nợ
         repository.deleteDebt(debt)
         assertEquals(initialWalletBalance, repository.getWalletById(walletId)!!.balance, 0.0)
+    }
+
+    @Test
+    fun `concurrent inserts avoid race condition`() = runTest {
+        val initialBalance = 1000.0
+        val walletId = repository.insertWallet(
+            Wallet(name = "Wallet", type = "CASH", balance = initialBalance, colorHex = "#FFF", iconName = "Payments")
+        ).toInt()
+
+        val jobCount = 100
+        val expenseAmount = 10.0
+
+        // Launch 100 coroutines to simulate concurrent transactions
+        kotlinx.coroutines.coroutineScope {
+            for (i in 0 until jobCount) {
+                launch(kotlinx.coroutines.Dispatchers.IO) {
+                    repository.insertTransaction(
+                        Transaction(
+                            walletId = walletId,
+                            walletName = "Wallet",
+                            type = "EXPENSE",
+                            amount = expenseAmount,
+                            categoryName = "Food",
+                            categoryIcon = "Restaurant",
+                            categoryColor = "#FFF",
+                            note = "Concurrent",
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+        }
+
+        val wallet = repository.getWalletById(walletId)
+        requireNotNull(wallet)
+        assertEquals(0.0, wallet.balance, 0.0)
     }
 }

@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.app.data.Wallet
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.AppNotificationDialog
@@ -41,13 +40,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletManagementScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val wallets by viewModel.allWallets.collectAsState()
+    val wallets by walletViewModel.allWallets.collectAsState()
 
     // Reorder Mode State
     var isReorderMode by remember { mutableStateOf(false) }
@@ -58,7 +57,7 @@ fun WalletManagementScreen(
 
     fun onDragReleased() {
         if (draggedIndex != null) {
-            viewModel.updateWalletsOrder(listState.toList())
+            walletViewModel.updateWalletsOrder(listState.toList())
             draggedIndex = null
             driftY = 0f
         }
@@ -83,7 +82,7 @@ fun WalletManagementScreen(
     var isEditCustomColorActive by remember { mutableStateOf(false) }
     var editCustomColorHex by remember { mutableStateOf("#9C27B0") }
 
-    val customTopBarTitle by viewModel.customTopBarTitle.collectAsState()
+    val customTopBarTitle by settingsViewModel.customTopBarTitle.collectAsState()
 
     // Intercept Back Press when in Add Form mode to gracefully return to list
     BackHandler(enabled = showAddForm) {
@@ -93,9 +92,9 @@ fun WalletManagementScreen(
     // Update TopBar title in MainActivity dynamically
     LaunchedEffect(showAddForm) {
         if (showAddForm) {
-            viewModel.setCustomTopBarTitle("THÊM VÍ MỚI")
+            settingsViewModel.setCustomTopBarTitle("THÊM VÍ MỚI")
         } else {
-            viewModel.setCustomTopBarTitle(null)
+            settingsViewModel.setCustomTopBarTitle(null)
         }
     }
 
@@ -108,7 +107,7 @@ fun WalletManagementScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            viewModel.setCustomTopBarTitle(null)
+            settingsViewModel.setCustomTopBarTitle(null)
         }
     }
 
@@ -125,8 +124,8 @@ fun WalletManagementScreen(
                 text = "XÓA",
                 action = {
                     walletToDelete?.let { wallet ->
-                        viewModel.deleteWallet(wallet)
-                        viewModel.showSuccessNotification("Xóa ví thành công")
+                        walletViewModel.deleteWallet(wallet)
+                        settingsViewModel.showSuccessNotification("Xóa ví thành công")
                     }
                     walletToDelete = null
                 },
@@ -318,13 +317,13 @@ fun WalletManagementScreen(
                     onClick = {
                         val trimmedName = editName.trim()
                         if (trimmedName.isBlank()) {
-                            viewModel.showWarningNotification("Vui lòng nhập tên ví!")
+                            settingsViewModel.showWarningNotification("Vui lòng nhập tên ví!")
                         } else {
                             val isDuplicate = wallets.any {
                                 it.id != walletToEdit!!.id && it.name.trim().equals(trimmedName, ignoreCase = true)
                             }
                             if (isDuplicate) {
-                                viewModel.showWarningNotification("Tên ví '$trimmedName' đã tồn tại! Vui lòng chọn tên khác.")
+                                settingsViewModel.showWarningNotification("Tên ví '$trimmedName' đã tồn tại! Vui lòng chọn tên khác.")
                             } else {
                                 val cleanStr = editBalanceStr.replace(".", "").replace(",", ".")
                                 val parsedBalance = cleanStr.toDoubleOrNull()
@@ -338,8 +337,8 @@ fun WalletManagementScreen(
                                     colorHex = finalColor
                                 )
 
-                                viewModel.updateWallet(updated)
-                                viewModel.showSuccessNotification("Cập nhật thông tin ví thành công")
+                                walletViewModel.updateWallet(updated)
+                                settingsViewModel.showSuccessNotification("Cập nhật thông tin ví thành công")
                                 walletToEdit = null
                             }
                         }
@@ -758,8 +757,8 @@ fun WalletManagementScreen(
             com.app.ui.components.AddWalletSheet(
                 onDismiss = { showAddForm = false },
                 onAddWallet = { walletName, type, startingBalance, color, icon ->
-                    viewModel.addWallet(walletName, type, startingBalance, color, icon)
-                    viewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
+                    walletViewModel.addWallet(walletName, type, startingBalance, color, icon)
+                    settingsViewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
                     showAddForm = false
                 }
             )

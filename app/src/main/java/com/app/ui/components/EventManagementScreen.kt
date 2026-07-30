@@ -1,5 +1,10 @@
 package com.app.ui.components
 
+import com.app.data.*
+import com.app.ui.*
+
+import com.app.ui.viewmodels.*
+
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -45,7 +50,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.app.data.Event
-import com.app.ui.FinanceViewModel
+
 import com.app.ui.FormatHelper
 import java.util.*
 
@@ -247,11 +252,11 @@ private fun Modifier.staggeredEntrance(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EventManagementScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onBack: () -> Unit
 ) {
-    val events by viewModel.allEvents.collectAsState()
-    val transactions by viewModel.dailyTransactions.collectAsState()
+    val events by transactionViewModel.allEvents.collectAsState()
+    val transactions by transactionViewModel.dailyTransactions.collectAsState()
 
     val seenKeys = rememberSaveable(saver = listSaver(
         save = { it.toList() },
@@ -1007,13 +1012,13 @@ fun EventManagementScreen(
                                 return@Button
                             }
                             if (endDate != null && endDate!! < startDate) {
-                                viewModel.showWarningNotification("Ngày kết thúc phải sau ngày bắt đầu!")
+                                transactionViewModel.showWarningNotification("Ngày kết thúc phải sau ngày bắt đầu!")
                                 return@Button
                             }
                             val limit = limitAmountStr.replace(".", "").toDoubleOrNull()
 
                             if (editingEvent != null) {
-                                viewModel.updateEvent(editingEvent.copy(
+                                transactionViewModel.updateEvent(editingEvent.copy(
                                     name = name,
                                     description = description,
                                     startDate = startDate,
@@ -1021,9 +1026,9 @@ fun EventManagementScreen(
                                     limitAmount = limit,
                                     colorHex = selectedColor
                                 ))
-                                viewModel.showSuccessNotification("Cập nhật sự kiện thành công!")
+                                transactionViewModel.showSuccessNotification("Cập nhật sự kiện thành công!")
                             } else {
-                                viewModel.addEvent(
+                                transactionViewModel.addEvent(
                                     name = name,
                                     description = description,
                                     startDate = startDate,
@@ -1031,7 +1036,7 @@ fun EventManagementScreen(
                                     limitAmount = limit,
                                     colorHex = selectedColor
                                 )
-                                viewModel.showSuccessNotification("Thêm sự kiện mới thành công!")
+                                transactionViewModel.showSuccessNotification("Thêm sự kiện mới thành công!")
                             }
                             showAddEventDialog = false
                             eventToEdit = null
@@ -1395,8 +1400,8 @@ fun EventManagementScreen(
             confirmButton = DialogButtonConfig(
                 text = "XÓA SỰ KIỆN",
                 action = {
-                    viewModel.deleteEvent(event)
-                    viewModel.showSuccessNotification("Đã xóa sự kiện thành công!")
+                    transactionViewModel.deleteEvent(event)
+                    transactionViewModel.showSuccessNotification("Đã xóa sự kiện thành công!")
                     eventToDelete = null
                 },
                 containerColor = MaterialTheme.colorScheme.error,

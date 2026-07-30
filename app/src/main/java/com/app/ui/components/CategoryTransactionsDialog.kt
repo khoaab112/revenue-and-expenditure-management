@@ -1,5 +1,10 @@
 package com.app.ui.components
 
+import com.app.data.*
+import com.app.ui.*
+
+import com.app.ui.viewmodels.*
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -29,7 +34,7 @@ import coil.compose.AsyncImage
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import com.app.R
-import com.app.ui.FinanceViewModel
+
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import java.util.*
@@ -39,11 +44,11 @@ import java.util.*
 fun CategoryTransactionsDialog(
     categoryName: String,
     monthKey: String, // format yyyy-MM
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onDismiss: () -> Unit
 ) {
-    val dailyTransactions by viewModel.dailyTransactions.collectAsState()
-    val categories by viewModel.categoriesList.collectAsState()
+    val dailyTransactions by transactionViewModel.dailyTransactions.collectAsState()
+    val categories by transactionViewModel.categoriesList.collectAsState()
 
     // Filter transactions
     val categoryNamesToMatch = mutableSetOf(categoryName)

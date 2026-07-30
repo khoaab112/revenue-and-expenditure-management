@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.sp
 import com.app.data.FinanceCategory
 import com.app.data.Transaction
 import com.app.data.Wallet
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.CustomMoneyInputField
@@ -126,7 +125,7 @@ private fun Modifier.staggeredEntrance(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateToBankNotificationHistory: () -> Unit = {},
     onNavigateToEvents: () -> Unit = {},
     onNavigateToStats: () -> Unit = {},
@@ -143,10 +142,10 @@ fun SettingsScreen(
         restore = { mutableStateListOf<String>().apply { addAll(it) } }
     )) { mutableStateListOf<String>() }
 
-    val isPinEnabled by viewModel.isPinEnabled.collectAsState()
+    val isPinEnabled by settingsViewModel.isPinEnabled.collectAsState()
 
-    val startScreen by viewModel.startScreen.collectAsState()
-    val preferredStartScreen by viewModel.preferredStartScreen.collectAsState()
+    val startScreen by settingsViewModel.startScreen.collectAsState()
+    val preferredStartScreen by settingsViewModel.preferredStartScreen.collectAsState()
     var isPreferredScreenExpanded by remember { mutableStateOf(false) }
     var showPinSetupDialog by remember { mutableStateOf(false) }
     var showEventManagement by remember { mutableStateOf(false) }
@@ -166,19 +165,19 @@ fun SettingsScreen(
     var simText by remember { mutableStateOf("TK 1012938475 +5,000,000 VND luc 14:32. ND: Chuyen khoan luong thang 5") }
     var simPackage by remember { mutableStateOf("com.vietcombank.card") }
 
-    val localBackupLastTime by viewModel.localBackupLastTime.collectAsState()
-    val localBackupCount by viewModel.localBackupCount.collectAsState()
-    val syncStatus by viewModel.syncStatus.collectAsState()
-    val syncProgressLogs by viewModel.syncProgressLogs.collectAsState()
+    val localBackupLastTime by syncViewModel.localBackupLastTime.collectAsState()
+    val localBackupCount by syncViewModel.localBackupCount.collectAsState()
+    val syncStatus by syncViewModel.syncStatus.collectAsState()
+    val syncProgressLogs by syncViewModel.syncProgressLogs.collectAsState()
 
-    val wallets by viewModel.allWallets.collectAsState()
-    val categories by viewModel.categoriesList.collectAsState()
+    val wallets by walletViewModel.allWallets.collectAsState()
+    val categories by transactionViewModel.categoriesList.collectAsState()
 
     val backupFilePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri: android.net.Uri? ->
         uri?.let {
-            viewModel.importLocalBackup(context, it)
+            syncViewModel.importLocalBackup(context, it)
         }
     }
 
@@ -189,7 +188,7 @@ fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        val isCloudSyncEnabled by viewModel.isCloudSyncEnabled.collectAsState()
+        val isCloudSyncEnabled by settingsViewModel.isCloudSyncEnabled.collectAsState()
         val signInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
             contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
         ) { result ->
@@ -198,17 +197,17 @@ fun SettingsScreen(
                     val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
                     task.getResult(com.google.android.gms.common.api.ApiException::class.java)
                     
-                    viewModel.checkDriveBackupConflict(context) { hasConflict ->
+                    syncViewModel.checkDriveBackupConflict(context) { hasConflict ->
                         if (hasConflict) {
                             showCloudRestoreDialog = true
                         } else {
-                            viewModel.toggleCloudSync(true)
+                            syncViewModel.toggleCloudSync(true)
                             com.app.service.CloudSyncWorker.setupPeriodicSync(context)
-                            viewModel.showSuccessNotification("Đã kết nối Google Drive và bật đồng bộ!")
+                            settingsViewModel.showSuccessNotification("Đã kết nối Google Drive và bật đồng bộ!")
                         }
                     }
                 } catch (e: Exception) {
-                    viewModel.showWarningNotification("Lỗi đăng nhập Google: ${e.message}")
+                    settingsViewModel.showWarningNotification("Lỗi đăng nhập Google: ${e.message}")
                 }
             } else {
                 var errorMsg = "Đăng nhập bị hủy."
@@ -220,8 +219,8 @@ fun SettingsScreen(
                 } catch (e: Exception) {
                     // ignore
                 }
-                viewModel.showWarningNotification(errorMsg)
-                viewModel.toggleCloudSync(false)
+                settingsViewModel.showWarningNotification(errorMsg)
+                syncViewModel.toggleCloudSync(false)
             }
         }
 
@@ -389,12 +388,12 @@ fun SettingsScreen(
                             IconButton(
                                 onClick = {
                                     androidx.work.WorkManager.getInstance(context).cancelUniqueWork("CloudSyncService")
-                                    viewModel.toggleCloudSync(false)
+                                    syncViewModel.toggleCloudSync(false)
                                     val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN).build()
                                     com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso).signOut()
-                                    viewModel.clearAllData(context)
-                                    viewModel.setHasSeenOnboarding(false)
-                                    viewModel.showSuccessNotification("Đã đăng xuất tài khoản Google")
+                                    settingsViewModel.clearAllData(context)
+                                    settingsViewModel.setHasSeenOnboarding(false)
+                                    settingsViewModel.showSuccessNotification("Đã đăng xuất tài khoản Google")
                                 }
                             ) {
                                 Icon(
@@ -419,7 +418,7 @@ fun SettingsScreen(
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 Spacer(modifier = Modifier.height(10.dp))
                                 OutlinedButton(
-                                    onClick = { viewModel.backupToDriveNow(context) },
+                                    onClick = { syncViewModel.backupToDriveNow(context) },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp),
                                     colors = ButtonDefaults.outlinedButtonColors(
@@ -673,7 +672,7 @@ fun SettingsScreen(
                     Switch(
                         checked = isPinEnabled,
                         onCheckedChange = { check ->
-                            if (check) showPinSetupDialog = true else viewModel.disablePin()
+                            if (check) showPinSetupDialog = true else settingsViewModel.disablePin()
                         },
                         modifier = Modifier.testTag("pin_protection_switch")
                     )
@@ -736,7 +735,7 @@ fun SettingsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { viewModel.setStartScreen(route) }
+                                        .clickable { settingsViewModel.setStartScreen(route) }
                                         .padding(vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -750,7 +749,7 @@ fun SettingsScreen(
                                     }
                                     RadioButton(
                                         selected = isSelected,
-                                        onClick = { viewModel.setStartScreen(route) }
+                                        onClick = { settingsViewModel.setStartScreen(route) }
                                     )
                                 }
                             }
@@ -780,7 +779,7 @@ fun SettingsScreen(
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         FilledTonalButton(
-                            onClick = { viewModel.openBackupFolder(context) },
+                            onClick = { syncViewModel.openBackupFolder(context) },
                             modifier = Modifier.weight(1f).height(44.dp).testTag("open_folder_button"),
                             shape = RoundedCornerShape(10.dp)
                         ) {
@@ -790,7 +789,7 @@ fun SettingsScreen(
                         }
 
                         Button(
-                            onClick = { viewModel.exportLocalBackup(context) },
+                            onClick = { syncViewModel.exportLocalBackup(context) },
                             modifier = Modifier.weight(1f).height(44.dp).testTag("start_backup_button"),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -884,8 +883,8 @@ fun SettingsScreen(
                         }
                         Button(
                             onClick = {
-                                viewModel.seedSampleData()
-                                viewModel.showSuccessNotification("Đã nạp dữ liệu mẫu thành công!")
+                                settingsViewModel.seedSampleData()
+                                settingsViewModel.showSuccessNotification("Đã nạp dữ liệu mẫu thành công!")
                             },
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.testTag("seed_database_item")
@@ -967,8 +966,8 @@ fun SettingsScreen(
 
                         Button(
                             onClick = {
-                                viewModel.simulateBankNotification(simTitle, simText, simPackage)
-                                viewModel.showSuccessNotification("Mô phỏng thành công! Đã thêm một giao dịch tin nhắn giả lập.")
+                                settingsViewModel.simulateBankNotification(simTitle, simText, simPackage)
+                                settingsViewModel.showSuccessNotification("Mô phỏng thành công! Đã thêm một giao dịch tin nhắn giả lập.")
                             },
                             modifier = Modifier.fillMaxWidth().height(40.dp).testTag("simulate_notification_button"),
                             shape = RoundedCornerShape(8.dp)
@@ -982,7 +981,7 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     // Feature 3: Gemini API Key
-                    val geminiApiKey by viewModel.geminiApiKey.collectAsState()
+                    val geminiApiKey by aiAdvisorViewModel.geminiApiKey.collectAsState()
                     var apiKeyInput by remember { mutableStateOf("") }
                     LaunchedEffect(geminiApiKey) { apiKeyInput = geminiApiKey }
 
@@ -995,7 +994,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Button(
-                        onClick = { viewModel.saveGeminiApiKey(apiKeyInput.trim()) },
+                        onClick = { aiAdvisorViewModel.saveGeminiApiKey(apiKeyInput.trim()) },
                         modifier = Modifier.align(Alignment.End)
                     ) {
                         Text("Lưu API Key")
@@ -1009,11 +1008,11 @@ fun SettingsScreen(
     if (syncStatus.isNotEmpty()) {
         if (syncStatus == "SUCCESS_LOCAL_BACKUP") {
             AlertDialog(
-                onDismissRequest = { viewModel.clearSyncLogs() },
+                onDismissRequest = { syncViewModel.clearSyncLogs() },
                 confirmButton = {
                     Button(
                         onClick = {
-                            viewModel.shareBackupFile(context)
+                            syncViewModel.shareBackupFile(context)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
@@ -1028,7 +1027,7 @@ fun SettingsScreen(
                 },
                 dismissButton = {
                     TextButton(
-                        onClick = { viewModel.clearSyncLogs() },
+                        onClick = { syncViewModel.clearSyncLogs() },
                         modifier = Modifier.testTag("close_backup_confirm_button")
                     ) {
                         Text("Đóng")
@@ -1095,9 +1094,9 @@ fun SettingsScreen(
             )
         } else {
             AlertDialog(
-                onDismissRequest = { viewModel.clearSyncLogs() },
+                onDismissRequest = { syncViewModel.clearSyncLogs() },
                 confirmButton = {
-                    TextButton(onClick = { viewModel.clearSyncLogs() }) {
+                    TextButton(onClick = { syncViewModel.clearSyncLogs() }) {
                         Text("Đã hiểu")
                     }
                 },
@@ -1158,7 +1157,7 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         showClearDataDialog = false
-                        viewModel.clearAllData(context)
+                        settingsViewModel.clearAllData(context)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -1181,7 +1180,7 @@ fun SettingsScreen(
         ModalBottomSheet(
             onDismissRequest = {
                 showCloudRestoreDialog = false
-                viewModel.toggleCloudSync(false)
+                syncViewModel.toggleCloudSync(false)
             },
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface
@@ -1271,8 +1270,8 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         showCloudRestoreDialog = false
-                        viewModel.mergeFromDrive(context)
-                        viewModel.toggleCloudSync(true)
+                        syncViewModel.mergeFromDrive(context)
+                        syncViewModel.toggleCloudSync(true)
                         com.app.service.CloudSyncWorker.setupPeriodicSync(context)
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -1284,7 +1283,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier.padding(vertical = 4.dp)
                     ) {
-                        Icon(Icons.Default.MergeType, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.MergeType, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Hợp nhất dữ liệu (Khuyên dùng)", fontWeight = FontWeight.Bold)
                     }
@@ -1296,8 +1295,8 @@ fun SettingsScreen(
                 OutlinedButton(
                     onClick = {
                         showCloudRestoreDialog = false
-                        viewModel.restoreFromDrive(context)
-                        viewModel.toggleCloudSync(true)
+                        syncViewModel.restoreFromDrive(context)
+                        syncViewModel.toggleCloudSync(true)
                         com.app.service.CloudSyncWorker.setupPeriodicSync(context)
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -1320,9 +1319,9 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         showCloudRestoreDialog = false
-                        viewModel.toggleCloudSync(true)
+                        syncViewModel.toggleCloudSync(true)
                         com.app.service.CloudSyncWorker.setupPeriodicSync(context)
-                        viewModel.showSuccessNotification("Đã bật đồng bộ (Ghi đè dữ liệu đám mây)")
+                        settingsViewModel.showSuccessNotification("Đã bật đồng bộ (Ghi đè dữ liệu đám mây)")
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1343,7 +1342,7 @@ fun SettingsScreen(
         PinSetupDialog(
             onDismiss = { showPinSetupDialog = false },
             onSavePin = { pin ->
-                viewModel.enablePin(pin)
+                settingsViewModel.enablePin(pin)
                 showPinSetupDialog = false
             }
         )
@@ -1420,11 +1419,11 @@ fun PinSetupDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletManagementDialog(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onDismiss: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
-    val wallets by viewModel.allWallets.collectAsState()
+    val wallets by walletViewModel.allWallets.collectAsState()
     
     // New Wallet Form States
     var showAddForm by remember { mutableStateOf(false) }
@@ -1447,8 +1446,8 @@ fun WalletManagementDialog(
                 TextButton(
                     onClick = {
                         walletToDelete?.let { wallet ->
-                            viewModel.deleteWallet(wallet)
-                            viewModel.showSuccessNotification("Xóa ví thành công")
+                            walletViewModel.deleteWallet(wallet)
+                            settingsViewModel.showSuccessNotification("Xóa ví thành công")
                         }
                         walletToDelete = null
                     }
@@ -1532,7 +1531,7 @@ fun WalletManagementDialog(
 
                 SortableWalletList(
                     wallets = wallets,
-                    viewModel = viewModel,
+                    transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                     typeDisplayName = typeDisplayName,
                     onDeleteRequest = { walletToDelete = it }
                 )
@@ -1545,8 +1544,8 @@ fun WalletManagementDialog(
         com.app.ui.components.AddWalletSheet(
             onDismiss = { showAddForm = false },
             onAddWallet = { walletName, type, startingBalance, color, icon ->
-                viewModel.addWallet(walletName, type, startingBalance, color, icon)
-                viewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
+                walletViewModel.addWallet(walletName, type, startingBalance, color, icon)
+                settingsViewModel.showSuccessNotification("Thêm ví/tài khoản thành công!")
                 showAddForm = false
             }
         )
@@ -1556,7 +1555,7 @@ fun WalletManagementDialog(
 @Composable
 fun SortableWalletList(
     wallets: List<Wallet>,
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     typeDisplayName: Map<String, String>,
     onDeleteRequest: (Wallet) -> Unit
 ) {
@@ -1565,7 +1564,7 @@ fun SortableWalletList(
     var driftY by remember { mutableStateOf(0f) }
 
     val onDragReleased = {
-        viewModel.updateWalletsOrder(listState.toList())
+        walletViewModel.updateWalletsOrder(listState.toList())
         draggedIndex = null
         driftY = 0f
     }
@@ -1738,11 +1737,11 @@ fun SortableWalletList(
 // ==========================================
 @Composable
 fun CategoryManagementDialog(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onDismiss: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
-    val categoriesList by viewModel.categoriesList.collectAsState()
+    val categoriesList by transactionViewModel.categoriesList.collectAsState()
     
     // New Category Form States
     var selectedTypeTab by remember { mutableStateOf("EXPENSE") } // EXPENSE, INCOME
@@ -1815,8 +1814,8 @@ fun CategoryManagementDialog(
                 TextButton(
                     onClick = {
                         categoryToDelete?.let { cat ->
-                            viewModel.deleteCategory(cat)
-                            viewModel.showSuccessNotification("Xóa danh mục thành công")
+                            transactionViewModel.deleteCategory(cat)
+                            settingsViewModel.showSuccessNotification("Xóa danh mục thành công")
                         }
                         categoryToDelete = null
                     }
@@ -2034,7 +2033,7 @@ fun CategoryManagementDialog(
                     } else {
                         SortableCategoryList(
                             categories = currentFilterList,
-                            viewModel = viewModel,
+                            transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                             typeTab = selectedTypeTab,
                             onAddSubcategory = { parentNameValue ->
                                 categoryToEdit = null
@@ -2306,18 +2305,18 @@ fun CategoryManagementDialog(
                         onClick = {
                             if (name.isNotBlank()) {
                                 if (categoryToEdit == null) {
-                                    viewModel.addCategory(name, selectedIcon, selectedColor, type, parentName)
-                                    viewModel.showSuccessNotification("Thêm danh mục thành công!")
+                                    transactionViewModel.addCategory(name, selectedIcon, selectedColor, type, parentName)
+                                    settingsViewModel.showSuccessNotification("Thêm danh mục thành công!")
                                 } else {
-                                    viewModel.updateCategory(categoryToEdit!!, name, selectedIcon, selectedColor, type, parentName)
-                                    viewModel.showSuccessNotification("Cập nhật danh mục thành công!")
+                                    transactionViewModel.updateCategory(categoryToEdit!!, name, selectedIcon, selectedColor, type, parentName)
+                                    settingsViewModel.showSuccessNotification("Cập nhật danh mục thành công!")
                                 }
                                 categoryToEdit = null
                                 name = ""
                                 parentName = null
                                 showAddForm = false
                             } else {
-                                viewModel.showWarningNotification("Vui lòng nhập tên danh mục!")
+                                settingsViewModel.showWarningNotification("Vui lòng nhập tên danh mục!")
                             }
                         },
                         modifier = Modifier
@@ -2344,7 +2343,7 @@ fun CategoryManagementDialog(
 @Composable
 fun SortableCategoryList(
     categories: List<FinanceCategory>,
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     typeTab: String,
     onAddSubcategory: (parentName: String) -> Unit,
     onDeleteRequest: (FinanceCategory) -> Unit,
@@ -2356,7 +2355,7 @@ fun SortableCategoryList(
     var driftY by remember { mutableStateOf(0f) }
 
     val onDragReleased = {
-        viewModel.updateCategoriesOrder(listState.toList(), typeTab)
+        transactionViewModel.updateCategoriesOrder(listState.toList(), typeTab)
         draggedIndex = null
         driftY = 0f
     }
@@ -2655,14 +2654,14 @@ fun SortableCategoryList(
  // ==========================================
  @Composable
  fun SavingsManagementDialog(
-     viewModel: FinanceViewModel,
+     transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
      onDismiss: () -> Unit
  ) {
      val focusManager = LocalFocusManager.current
      val context = LocalContext.current
-     val dailyWallets by viewModel.dailyWallets.collectAsState()
-     val savingsWallets by viewModel.savingsWallets.collectAsState()
-     val savingsTransactions by viewModel.savingsTransactions.collectAsState()
+     val dailyWallets by walletViewModel.dailyWallets.collectAsState()
+     val savingsWallets by walletViewModel.savingsWallets.collectAsState()
+     val savingsTransactions by transactionViewModel.savingsTransactions.collectAsState()
      
      // Quick Add Savings Wallet State
      var showQuickAddWallet by remember { mutableStateOf(false) }
@@ -2687,8 +2686,8 @@ fun SortableCategoryList(
                  TextButton(
                      onClick = {
                          savingsWalletToDelete?.let { wallet ->
-                             viewModel.deleteWallet(wallet)
-                             viewModel.showSuccessNotification("Xóa hũ tiết kiệm thành công")
+                             walletViewModel.deleteWallet(wallet)
+                             settingsViewModel.showSuccessNotification("Xóa hũ tiết kiệm thành công")
                          }
                          savingsWalletToDelete = null
                      }
@@ -2796,14 +2795,14 @@ fun SortableCategoryList(
                                 onClick = {
                                     if (newSavingsWalletName.isNotBlank()) {
                                         val initialBalance = newSavingsWalletGoalStr.toDoubleOrNull() ?: 0.0
-                                        viewModel.addWallet(
+                                        walletViewModel.addWallet(
                                             name = newSavingsWalletName,
                                             type = "SAVINGS",
                                             initialBalance = initialBalance,
                                             colorHex = "#9C27B0", // Savings Purple standard
                                             iconName = "Savings"
                                         )
-                                        viewModel.showSuccessNotification("Khởi tạo hũ tích lũy thành công!")
+                                        settingsViewModel.showSuccessNotification("Khởi tạo hũ tích lũy thành công!")
                                         newSavingsWalletName = ""
                                         newSavingsWalletGoalStr = ""
                                         showQuickAddWallet = false
@@ -2967,7 +2966,7 @@ fun SortableCategoryList(
                                         if (isDeposit) {
                                             // 1. Double Entry logic for DEPOSIT
                                             // Add Income transaction on the Savings Wallet
-                                            viewModel.addTransaction(
+                                            transactionViewModel.addTransaction(
                                                 walletId = tgtWalletId,
                                                 type = "INCOME",
                                                 amount = amount,
@@ -2978,7 +2977,7 @@ fun SortableCategoryList(
                                             
                                             // Subtract Expense on the Everyday Source Wallet (if selected)
                                             selectedDailyWalletId?.let { srcId ->
-                                                viewModel.addTransaction(
+                                                transactionViewModel.addTransaction(
                                                     walletId = srcId,
                                                     type = "EXPENSE",
                                                     amount = amount,
@@ -2990,7 +2989,7 @@ fun SortableCategoryList(
                                         } else {
                                             // 2. Double Entry logic for WITHDRAW
                                             // Add Expense transaction on the Savings Wallet
-                                            viewModel.addTransaction(
+                                            transactionViewModel.addTransaction(
                                                 walletId = tgtWalletId,
                                                 type = "EXPENSE",
                                                 amount = amount,
@@ -3001,7 +3000,7 @@ fun SortableCategoryList(
                                             
                                             // Add Income on the Everyday Dest Wallet (if selected)
                                             selectedDailyWalletId?.let { destId ->
-                                                viewModel.addTransaction(
+                                                transactionViewModel.addTransaction(
                                                     walletId = destId,
                                                     type = "INCOME",
                                                     amount = amount,

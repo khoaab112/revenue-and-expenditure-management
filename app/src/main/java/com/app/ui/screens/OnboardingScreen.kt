@@ -1,5 +1,7 @@
 package com.app.ui.screens
 
+import com.app.R
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -29,19 +31,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.app.R
-import com.app.ui.FinanceViewModel
-import com.app.ui.FinanceViewModel.GoogleOnboardingResult
+
+import com.app.ui.viewmodels.SyncViewModel.GoogleOnboardingResult
 import com.app.ui.components.AppNotificationDialog
 import com.app.ui.components.DialogButtonConfig
 
 @Composable
 fun OnboardingScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onComplete: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val syncStatus by viewModel.syncStatus.collectAsState()
+    val syncStatus by syncViewModel.syncStatus.collectAsState()
     
     val gifImageLoader = remember(context) {
         ImageLoader.Builder(context)
@@ -92,13 +93,13 @@ fun OnboardingScreen(
                 task.getResult(com.google.android.gms.common.api.ApiException::class.java)
                 
                 isWaitingForSync = true
-                viewModel.checkAndPerformGoogleSignInOnboarding(context) { onboardingResult ->
+                syncViewModel.checkAndPerformGoogleSignInOnboarding(context) { onboardingResult ->
                     isWaitingForSync = false
-                    if (onboardingResult !is GoogleOnboardingResult.Error) {
-                        viewModel.toggleCloudSync(true)
+                    if (onboardingResult !is com.app.ui.viewmodels.SyncViewModel.GoogleOnboardingResult.Error) {
+                        syncViewModel.toggleCloudSync(true)
                     }
                     when (onboardingResult) {
-                        is GoogleOnboardingResult.ExistingUserSuccess -> {
+                        is com.app.ui.viewmodels.SyncViewModel.GoogleOnboardingResult.ExistingUserSuccess -> {
                             // CASE 2: Đã có thư mục + File hợp lệ
                             triggerNotificationDialog(
                                 title = "Thông báo",
@@ -110,7 +111,7 @@ fun OnboardingScreen(
                                 }
                             )
                         }
-                        is GoogleOnboardingResult.InvalidFileNewUser -> {
+                        is com.app.ui.viewmodels.SyncViewModel.GoogleOnboardingResult.InvalidFileNewUser -> {
                             // CASE 1: Đã có thư mục nhưng không có file hoặc file lỗi định dạng
                             triggerNotificationDialog(
                                 title = "Thông báo",
@@ -122,7 +123,7 @@ fun OnboardingScreen(
                                 }
                             )
                         }
-                        is GoogleOnboardingResult.NoFolderNewUser -> {
+                        is com.app.ui.viewmodels.SyncViewModel.GoogleOnboardingResult.NoFolderNewUser -> {
                             // CASE 3: Không có thư mục -> Coi là New User
                             triggerNotificationDialog(
                                 title = "Thông báo",
@@ -134,18 +135,18 @@ fun OnboardingScreen(
                                 }
                             )
                         }
-                        is GoogleOnboardingResult.Error -> {
-                            viewModel.showWarningNotification(onboardingResult.message)
+                        is com.app.ui.viewmodels.SyncViewModel.GoogleOnboardingResult.Error -> {
+                            settingsViewModel.showWarningNotification(onboardingResult.message)
                         }
                     }
                 }
             } catch (e: Exception) {
                 isWaitingForSync = false
-                viewModel.showWarningNotification("Lỗi đăng nhập Google: ${e.message}")
+                settingsViewModel.showWarningNotification("Lỗi đăng nhập Google: ${e.message}")
             }
         } else {
             isWaitingForSync = false
-            viewModel.showWarningNotification("Đăng nhập bị hủy.")
+            settingsViewModel.showWarningNotification("Đăng nhập bị hủy.")
         }
     }
 
@@ -154,7 +155,7 @@ fun OnboardingScreen(
     ) { uri: android.net.Uri? ->
         uri?.let {
             isWaitingForSync = true
-            viewModel.importLocalBackup(context, it) { success ->
+            syncViewModel.importLocalBackup(context, it) { success ->
                 isWaitingForSync = false
                 if (success) {
                     triggerNotificationDialog(

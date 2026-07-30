@@ -96,3 +96,15 @@ data class Debt(
     val periodicAmount: Double? = null,
     val periodType: String? = null // MONTHLY, WEEKLY, YEARLY
 )
+
+@Entity(tableName = "categories")
+data class CategoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val iconName: String,
+    val colorHex: String,
+    val type: String, // INCOME, EXPENSE, BOTH
+    val parentName: String? = null,
+    val isCustom: Boolean = false,
+    val displayOrder: Int = 0
+)

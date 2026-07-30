@@ -35,7 +35,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.lazy.grid.items
 import com.app.data.Transaction
 import com.app.data.Wallet
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.StripedProgressIndicator
@@ -52,7 +51,7 @@ import com.app.R
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateToWallets: (Wallet?) -> Unit,
     onNavigateToHistory: () -> Unit,
     onNavigateToStats: () -> Unit,
@@ -65,12 +64,12 @@ fun DashboardScreen(
     onNavigateBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val wallets by viewModel.dailyWallets.collectAsState()
-    val transactions by viewModel.dailyTransactions.collectAsState()
-    val savingsWallets by viewModel.savingsWallets.collectAsState()
-    val budgets by viewModel.allBudgets.collectAsState()
-    val events by viewModel.allEvents.collectAsState()
-    val debts by viewModel.allDebts.collectAsState()
+    val wallets by walletViewModel.dailyWallets.collectAsState()
+    val transactions by transactionViewModel.dailyTransactions.collectAsState()
+    val savingsWallets by walletViewModel.savingsWallets.collectAsState()
+    val budgets by transactionViewModel.allBudgets.collectAsState()
+    val events by transactionViewModel.allEvents.collectAsState()
+    val debts by transactionViewModel.allDebts.collectAsState()
     var eventToView by remember { mutableStateOf<com.app.data.Event?>(null) }
     val context = LocalContext.current
     val bellGifImageLoader = remember(context) {
@@ -93,7 +92,7 @@ fun DashboardScreen(
     val currentMonthBudgets = remember(budgets, currentRealMonthStr) {
         budgets.filter { it.month == currentRealMonthStr }
     }
-    val savingsGoals by viewModel.allSavingsGoals.collectAsState()
+    val savingsGoals by transactionViewModel.allSavingsGoals.collectAsState()
 
     val totalBalance = wallets.sumOf { it.balance }
 
@@ -309,7 +308,7 @@ fun DashboardScreen(
         }
 
         // --- Pending Notifications Banner Alert ---
-        val notificationLogs by viewModel.notificationLogs.collectAsState()
+        val notificationLogs by settingsViewModel.notificationLogs.collectAsState()
         val pendingCount = remember(notificationLogs) { notificationLogs.count { it.status == "PENDING" } }
         if (pendingCount > 0) {
             Card(
@@ -371,7 +370,7 @@ fun DashboardScreen(
         }
 
         // --- Active Debts Alert Banner ---
-        val allDebts by viewModel.allDebts.collectAsState()
+        val allDebts by transactionViewModel.allDebts.collectAsState()
         val activeDebtsList = remember(allDebts) { allDebts.filter { it.status == "ACTIVE" && it.remainingAmount > 0 } }
         if (activeDebtsList.isNotEmpty()) {
             val now = System.currentTimeMillis()
@@ -694,7 +693,7 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     activeOrUpcomingEvents.take(2).forEachIndexed { eventIdx, event ->
-                        val eventTransactions = viewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
+                        val eventTransactions = transactionViewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
                         val spentAmount = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
                         val limitAmount = event.limitAmount ?: 0.0
 
@@ -1634,7 +1633,7 @@ fun DashboardScreen(
 
     if (eventToView != null) {
         val event = eventToView!!
-        val eventTransactions = viewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
+        val eventTransactions = transactionViewModel.allTransactions.collectAsState().value.filter { it.eventId == event.id }
         val limit = event.limitAmount ?: 0.0
         val spent = eventTransactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
         

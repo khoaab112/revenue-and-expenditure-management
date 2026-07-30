@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.data.Debt
 import com.app.data.Wallet
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.AppModalBottomSheet
@@ -63,7 +62,7 @@ import com.app.R
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DebtBookScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit,
     initialTab: Int = 0
 ) {
@@ -80,9 +79,9 @@ fun DebtBookScreen(
             .build()
     }
 
-    val debts by viewModel.allDebts.collectAsState()
-    val wallets by viewModel.allWallets.collectAsState()
-    val dailyTransactions by viewModel.dailyTransactions.collectAsState()
+    val debts by transactionViewModel.allDebts.collectAsState()
+    val wallets by walletViewModel.allWallets.collectAsState()
+    val dailyTransactions by transactionViewModel.dailyTransactions.collectAsState()
 
     var selectedTab by remember { mutableStateOf(initialTab) }
     val tabs = listOf("Đi Vay", "Cho Vay")
@@ -224,10 +223,10 @@ fun DebtBookScreen(
                             onIncreaseClick = { debtToIncrease = it },
                             onHistoryClick = { debtForHistory = it },
                             onUpdateDueDate = { targetDebt, newDueDate ->
-                                viewModel.updateDebtDueDate(targetDebt, newDueDate)
+                                transactionViewModel.updateDebtDueDate(targetDebt, newDueDate)
                             },
                             onUpdateCreationDate = { targetDebt, newCreationDate ->
-                                viewModel.updateDebtCreationDate(targetDebt, newCreationDate)
+                                transactionViewModel.updateDebtCreationDate(targetDebt, newCreationDate)
                             },
                             seenKeys = seenKeys.value,
                             modifier = Modifier.staggeredEntrance(
@@ -272,12 +271,12 @@ fun DebtBookScreen(
 
     if (showAddDialog) {
         AddDebtDialog(
-            viewModel = viewModel,
+            transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
             wallets = wallets,
             defaultType = if (selectedTab == 0) "DEBT" else "LOAN",
             onDismiss = { showAddDialog = false },
             onAdd = { personName, amount, type, note, dueDate, walletId, repaymentType, periodicAmount, periodType ->
-                viewModel.addDebt(personName, amount, type, note, dueDate, walletId, repaymentType, periodicAmount, periodType)
+                transactionViewModel.addDebt(personName, amount, type, note, dueDate, walletId, repaymentType, periodicAmount, periodType)
                 showAddDialog = false
             }
         )
@@ -289,7 +288,7 @@ fun DebtBookScreen(
             wallets = wallets,
             onDismiss = { debtToPay = null },
             onPay = { amount, walletId, note ->
-                viewModel.payDebt(debt, amount, walletId, note)
+                transactionViewModel.payDebt(debt, amount, walletId, note)
                 debtToPay = null
             }
         )
@@ -301,7 +300,7 @@ fun DebtBookScreen(
             wallets = wallets,
             onDismiss = { debtToIncrease = null },
             onIncrease = { amount, walletId, note ->
-                viewModel.increaseDebt(debt, amount, walletId, note)
+                transactionViewModel.increaseDebt(debt, amount, walletId, note)
                 debtToIncrease = null
             }
         )
@@ -986,7 +985,7 @@ fun DebtHistoryBottomSheet(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddDebtDialog(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     wallets: List<Wallet>,
     defaultType: String,
     onDismiss: () -> Unit,

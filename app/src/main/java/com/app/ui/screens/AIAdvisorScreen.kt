@@ -36,21 +36,20 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.service.GeminiAdvisorService.ChatMessage
-import com.app.ui.FinanceViewModel
 import com.app.ui.components.AppModalBottomSheet
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AIAdvisorScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val geminiApiKey by viewModel.geminiApiKey.collectAsState()
-    val chatMessages by viewModel.chatMessages.collectAsState()
-    val isChatLoading by viewModel.isChatLoading.collectAsState()
+    val geminiApiKey by aiAdvisorViewModel.geminiApiKey.collectAsState()
+    val chatMessages by aiAdvisorViewModel.chatMessages.collectAsState()
+    val isChatLoading by aiAdvisorViewModel.isChatLoading.collectAsState()
 
     var inputText by remember { mutableStateOf("") }
     var showPromptsSheet by remember { mutableStateOf(false) }
@@ -100,7 +99,7 @@ fun AIAdvisorScreen(
 
                     Row {
                         IconButton(
-                            onClick = { viewModel.clearAIChatHistory() },
+                            onClick = { aiAdvisorViewModel.clearAIChatHistory() },
                             enabled = chatMessages.size > 1
                         ) {
                             Icon(
@@ -297,7 +296,7 @@ fun AIAdvisorScreen(
                             if (canSend) {
                                 val textToSend = inputText
                                 inputText = ""
-                                viewModel.sendAIChatMessage(textToSend)
+                                aiAdvisorViewModel.sendAIChatMessage(textToSend)
                             }
                         },
                         enabled = canSend,
@@ -361,7 +360,7 @@ fun AIAdvisorScreen(
                             .clip(RoundedCornerShape(12.dp))
                             .clickable {
                                 showPromptsSheet = false
-                                viewModel.sendAIChatMessage(prompt)
+                                aiAdvisorViewModel.sendAIChatMessage(prompt)
                             },
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                         shape = RoundedCornerShape(12.dp)

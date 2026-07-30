@@ -21,7 +21,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.data.Transaction
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import androidx.compose.foundation.BorderStroke
@@ -38,11 +37,11 @@ import androidx.compose.ui.platform.LocalDensity
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit,
     initialDateStr: String
 ) {
-    val allTransactions by viewModel.allTransactions.collectAsState()
+    val allTransactions by transactionViewModel.allTransactions.collectAsState()
     
     // Filter for the specific day
     val dayTransactions = remember(allTransactions, initialDateStr) {
@@ -51,7 +50,7 @@ fun TimelineScreen(
             .sortedByDescending { it.timestamp }
     }
     
-    val savingsWallets by viewModel.savingsWallets.collectAsState()
+    val savingsWallets by walletViewModel.savingsWallets.collectAsState()
     val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
     val daySummary = remember(dayTransactions, savingsWalletIds) {
         com.app.ui.calculateRealFinancialSummary(dayTransactions, savingsWalletIds)

@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.app.data.Categories
 import com.app.data.FinanceCategory
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import java.util.Calendar
@@ -60,7 +59,7 @@ data class SmartCategorySuggestion(
 
 @Composable
 fun AddTransactionScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onSuccess: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -76,15 +75,15 @@ fun AddTransactionScreen(
     
 
 
-    val wallets by viewModel.dailyWallets.collectAsState()
-    val categoriesList by viewModel.categoriesList.collectAsState()
-    val allTransactions by viewModel.allTransactions.collectAsState()
+    val wallets by walletViewModel.dailyWallets.collectAsState()
+    val categoriesList by transactionViewModel.categoriesList.collectAsState()
+    val allTransactions by transactionViewModel.allTransactions.collectAsState()
 
     // Transfer Setup
     var isTransfer by remember { mutableStateOf(false) }
     var transferWalletId by remember { mutableStateOf<Int?>(null) }
 
-    val events by viewModel.allEvents.collectAsState()
+    val events by transactionViewModel.allEvents.collectAsState()
     var isEventTransaction by remember { mutableStateOf(false) }
     var selectedEventId by remember { mutableStateOf<Int?>(null) }
 
@@ -648,17 +647,17 @@ fun AddTransactionScreen(
                                                 Button(
                                                     onClick = {
                                                         if (newEventName.isNotBlank()) {
-                                                            viewModel.addEvent(
+                                                            transactionViewModel.addEvent(
                                                                 name = newEventName,
                                                                 description = newEventDesc,
                                                                 startDate = System.currentTimeMillis(),
                                                                 endDate = null,
                                                                 limitAmount = null
                                                             )
-                                                            viewModel.showSuccessNotification("Đã tạo $newEventName")
+                                                            settingsViewModel.showSuccessNotification("Đã tạo $newEventName")
                                                             showQuickCreate = false
                                                         } else {
-                                                            viewModel.showWarningNotification("Vui lòng nhập tên")
+                                                            settingsViewModel.showWarningNotification("Vui lòng nhập tên")
                                                         }
                                                     }
                                                 ) { Text("Lưu") }
@@ -1243,7 +1242,7 @@ fun AddTransactionScreen(
                             val finalSourceId = if (selectedType == "EXPENSE") walletId else targetId
                             val finalDestId = if (selectedType == "EXPENSE") targetId else walletId
                             
-                            viewModel.addTransaction(
+                            transactionViewModel.addTransaction(
                                 walletId = finalSourceId,
                                 type = "TRANSFER",
                                 amount = amount,
@@ -1254,7 +1253,7 @@ fun AddTransactionScreen(
                                 recurrencePeriod = "NONE",
                                 destinationWalletId = finalDestId
                             )
-                            viewModel.showSuccessNotification("Thực hiện chuyển khoản liên ví thành công!")
+                            settingsViewModel.showSuccessNotification("Thực hiện chuyển khoản liên ví thành công!")
                             
                             // Reset state fields & stay on screen
                             rawExpression = ""
@@ -1264,15 +1263,15 @@ fun AddTransactionScreen(
                             transferWalletId = null
                             scope.launch { scrollState.animateScrollTo(0) }
                         } else {
-                            viewModel.showWarningNotification("Vui lòng chọn ví nhận khác nhau!")
+                            settingsViewModel.showWarningNotification("Vui lòng chọn ví nhận khác nhau!")
                         }
                     } else {
                         // Normal manual transaction
                         if (selectedCategoryName.isEmpty()) {
-                            viewModel.showWarningNotification("Vui lòng chọn hạng mục giao dịch!")
+                            settingsViewModel.showWarningNotification("Vui lòng chọn hạng mục giao dịch!")
                             return@Button
                         }
-                        viewModel.addTransaction(
+                        transactionViewModel.addTransaction(
                             walletId = walletId,
                             type = selectedType,
                             amount = amount,
@@ -1283,7 +1282,7 @@ fun AddTransactionScreen(
                             recurrencePeriod = "NONE",
                             eventId = if (isEventTransaction) selectedEventId else null
                         )
-                        viewModel.showSuccessNotification("Thêm giao dịch mới thành công!")
+                        settingsViewModel.showSuccessNotification("Thêm giao dịch mới thành công!")
                         
                         onSuccess()
                     }

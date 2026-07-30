@@ -39,7 +39,6 @@ import com.app.data.Budget
 import com.app.data.Categories
 import com.app.data.FinanceCategory
 import com.app.data.SavingsGoal
-import com.app.ui.FinanceViewModel
 import com.app.ui.FormatHelper
 import com.app.ui.IconMapper
 import com.app.ui.components.AppModalBottomSheet
@@ -58,11 +57,11 @@ import androidx.compose.ui.text.withStyle
 
 @Composable
 fun BudgetGoalScreen(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    BudgetsSection(viewModel = viewModel, onNavigateBack = onNavigateBack, modifier = modifier)
+    BudgetsSection(transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel, onNavigateBack = onNavigateBack, modifier = modifier)
 }
 
 private fun isTimestampInMonth(timestamp: Long, monthStr: String): Boolean {
@@ -75,20 +74,20 @@ private fun isTimestampInMonth(timestamp: Long, monthStr: String): Boolean {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BudgetsSection(
-    viewModel: FinanceViewModel,
+    transactionViewModel: com.app.ui.viewmodels.TransactionViewModel, walletViewModel: com.app.ui.viewmodels.WalletViewModel, settingsViewModel: com.app.ui.viewmodels.SettingsViewModel, syncViewModel: com.app.ui.viewmodels.SyncViewModel, aiAdvisorViewModel: com.app.ui.viewmodels.AiAdvisorViewModel,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val budgets by viewModel.allBudgets.collectAsState()
+    val budgets by transactionViewModel.allBudgets.collectAsState()
     val currentRealMonthStr = remember {
         Calendar.getInstance().let { cal ->
             String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
         }
     }
     var selectedBudgetMonth by remember { mutableStateOf(currentRealMonthStr) }
-    val categoriesList by viewModel.categoriesList.collectAsState()
-    val allTransactions by viewModel.allTransactions.collectAsState()
-    val savingsWallets by viewModel.savingsWallets.collectAsState()
+    val categoriesList by transactionViewModel.categoriesList.collectAsState()
+    val allTransactions by transactionViewModel.allTransactions.collectAsState()
+    val savingsWallets by walletViewModel.savingsWallets.collectAsState()
     val savingsWalletIds = remember(savingsWallets) { savingsWallets.map { it.id }.toSet() }
 
     val context = LocalContext.current
@@ -368,7 +367,7 @@ fun BudgetsSection(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         OutlinedButton(
-                            onClick = { viewModel.copyBudgetsFromPreviousMonth(selectedBudgetMonth) },
+                            onClick = { transactionViewModel.copyBudgetsFromPreviousMonth(selectedBudgetMonth) },
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(
@@ -432,7 +431,7 @@ fun BudgetsSection(
                             BudgetItemCard(
                                 budget = budget,
                                 onDelete = { budgetToDelete = budget },
-                                onToggleRecurring = { viewModel.toggleBudgetRecurring(budget) },
+                                onToggleRecurring = { transactionViewModel.toggleBudgetRecurring(budget) },
                                 onClick = { selectedCategoryForHistory = budget.categoryName },
                                 seenKeys = seenKeys
                             )
@@ -447,9 +446,9 @@ fun BudgetsSection(
                 categoriesList = categoriesList,
                 onDismiss = { showAddDialog = false },
                 onAddBudget = { category, limit, isRecurring ->
-                    viewModel.addBudget(category, limit, selectedBudgetMonth, isRecurring)
+                    transactionViewModel.addBudget(category, limit, selectedBudgetMonth, isRecurring)
                     showAddDialog = false
-                    viewModel.showSuccessNotification("Thêm ngân sách thành công!")
+                    settingsViewModel.showSuccessNotification("Thêm ngân sách thành công!")
                 }
             )
         }
@@ -473,9 +472,9 @@ fun BudgetsSection(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            viewModel.deleteBudget(budget)
+                            transactionViewModel.deleteBudget(budget)
                             budgetToDelete = null
-                            viewModel.showSuccessNotification("Xóa ngân sách thành công!")
+                            settingsViewModel.showSuccessNotification("Xóa ngân sách thành công!")
                         }
                     ) {
                         Text("Xóa", color = Color.Red)
@@ -493,7 +492,7 @@ fun BudgetsSection(
             com.app.ui.components.CategoryTransactionsDialog(
                 categoryName = selectedCategoryForHistory!!,
                 monthKey = selectedBudgetMonth,
-                viewModel = viewModel,
+                transactionViewModel = transactionViewModel, walletViewModel = walletViewModel, settingsViewModel = settingsViewModel, syncViewModel = syncViewModel, aiAdvisorViewModel = aiAdvisorViewModel,
                 onDismiss = { selectedCategoryForHistory = null }
             )
         }

@@ -21,8 +21,11 @@ interface FinanceDao {
     @Delete
     suspend fun deleteWallet(wallet: Wallet)
 
+    @Query("UPDATE wallets SET balance = balance + :amount WHERE id = :walletId")
+    suspend fun adjustWalletBalance(walletId: Int, amount: Double)
+
     // ---- Transactions ----
-    @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
+    @Query("SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 3000")
     fun getAllTransactions(): Flow<List<Transaction>>
 
     @Query("SELECT * FROM transactions WHERE walletId = :walletId ORDER BY timestamp DESC")
@@ -141,4 +144,20 @@ interface FinanceDao {
 
     @Query("DELETE FROM settings")
     suspend fun deleteAllSettings()
+
+    // ---- Categories ----
+    @Query("SELECT * FROM categories ORDER BY displayOrder ASC, id ASC")
+    fun getAllCategories(): Flow<List<CategoryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCategory(category: CategoryEntity): Long
+
+    @Update
+    suspend fun updateCategory(category: CategoryEntity)
+
+    @Delete
+    suspend fun deleteCategory(category: CategoryEntity)
+
+    @Query("SELECT * FROM categories WHERE name = :name LIMIT 1")
+    suspend fun getCategoryByName(name: String): CategoryEntity?
 }
