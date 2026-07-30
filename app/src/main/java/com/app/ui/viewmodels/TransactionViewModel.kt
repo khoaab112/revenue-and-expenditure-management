@@ -1368,7 +1368,8 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
 
     fun triggerSilentCloudSync() {
         if (_isCloudSyncEnabled.value) {
-            val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(getApplication())?.account
+            val email = repository.getSetting("google_account_email")
+                val account = if (email != null) android.accounts.Account(email, "com.google") else null
             if (account != null) {
                 com.app.service.CloudSyncWorker.triggerOneTimeSync(getApplication())
             }
@@ -2719,7 +2720,8 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
             }
             try {
                 addLog("Bắt đầu hợp nhất dữ liệu từ Google Drive...")
-                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
+                val email = repository.getSetting("google_account_email")
+                val account = if (email != null) android.accounts.Account(email, "com.google") else null
                 if (account == null) {
                     addLog("Lỗi: Bạn chưa đăng nhập tài khoản Google.")
                     _syncStatus.value = "ERROR"
@@ -3003,7 +3005,8 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
             }
             try {
                 addLog("Bắt đầu sao lưu thủ công lên Google Drive...")
-                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
+                val email = repository.getSetting("google_account_email")
+                val account = if (email != null) android.accounts.Account(email, "com.google") else null
                 if (account == null) {
                     addLog("Lỗi: Bạn chưa đăng nhập tài khoản Google.")
                     _syncStatus.value = "ERROR"
@@ -3134,7 +3137,8 @@ val folderName = "[APP_FINANCE]"
     fun checkDriveBackupConflict(context: android.content.Context, callback: (Boolean) -> Unit) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
+                val email = repository.getSetting("google_account_email")
+                val account = if (email != null) android.accounts.Account(email, "com.google") else null
                 if (account == null) {
                     callback(false)
                     return@launch
@@ -3207,7 +3211,8 @@ val folderName = "[APP_FINANCE]"
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _syncStatus.value = "SYNCING"
             try {
-                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
+                val email = repository.getSetting("google_account_email")
+                val account = if (email != null) android.accounts.Account(email, "com.google") else null
                 if (account == null) {
                     _syncStatus.value = "ERROR"
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -3356,7 +3361,8 @@ val folderName = "[APP_FINANCE]"
             }
             try {
                 addLog("Bắt đầu khôi phục từ Google Drive...")
-                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)?.account
+                val email = repository.getSetting("google_account_email")
+                val account = if (email != null) android.accounts.Account(email, "com.google") else null
                 if (account == null) {
                     addLog("Lỗi: Bạn chưa đăng nhập tài khoản Google.")
                     _syncStatus.value = "ERROR"
